@@ -19,19 +19,6 @@ from examples.voxelizer import SparseVoxelizer
 import examples.transforms as t
 from examples.str2bool import str2bool
 
-# def cache(func):
-#   def wrapper(self, *args, **kwargs):
-#     # Assume that args[0] is index
-#     index = args[0]
-#     if self.cache:
-#       if index not in self.cache_dict[func.__name__]:
-#         results = func(self, *args, **kwargs)
-#         self.cache_dict[func.__name__][index] = results
-#       return self.cache_dict[func.__name__][index]
-#     else:
-#       return func(self, *args, **kwargs)
-#   return wrapper
-
 class ScanNet(LightningDataModule):
     def __init__(self, **kwargs):
         super().__init__()
@@ -94,23 +81,23 @@ class ScanNet(LightningDataModule):
         # self.cache_dict = defaultdict(dict)
 
         # Augmentation arguments
-        self.SCALE_AUGMENTATION_BOUND = (0.9, 1.1)
-        self.ROTATION_AUGMENTATION_BOUND = ((-np.pi / 64, np.pi / 64), (-np.pi / 64, np.pi / 64), (-np.pi, np.pi))
-        self.TRANSLATION_AUGMENTATION_RATIO_BOUND = ((-0.2, 0.2), (-0.2, 0.2), (0, 0))
-        self.ELASTIC_DISTORT_PARAMS = ((0.2, 0.4), (0.8, 1.6))
-        self.sparse_voxelizer = SparseVoxelizer(
-            voxel_size=self.voxel_size,
-            clip_bound=self.clip_bound,
-            use_augmentation=self.augment_data,
-            scale_augmentation_bound=self.SCALE_AUGMENTATION_BOUND,
-            rotation_augmentation_bound=self.ROTATION_AUGMENTATION_BOUND,
-            translation_augmentation_ratio_bound=self.TRANSLATION_AUGMENTATION_RATIO_BOUND,
-            rotation_axis=self.locfeat_idx,
-            ignore_label=self.ignore_label)
+        # self.SCALE_AUGMENTATION_BOUND = (0.9, 1.1)
+        # self.ROTATION_AUGMENTATION_BOUND = ((-np.pi / 64, np.pi / 64), (-np.pi / 64, np.pi / 64), (-np.pi, np.pi))
+        # self.TRANSLATION_AUGMENTATION_RATIO_BOUND = ((-0.2, 0.2), (-0.2, 0.2), (0, 0))
+        # self.ELASTIC_DISTORT_PARAMS = ((0.2, 0.4), (0.8, 1.6))
+        # self.sparse_voxelizer = SparseVoxelizer(
+        #     voxel_size=self.voxel_size,
+        #     clip_bound=self.clip_bound,
+        #     use_augmentation=self.augment_data,
+        #     scale_augmentation_bound=self.SCALE_AUGMENTATION_BOUND,
+        #     rotation_augmentation_bound=self.ROTATION_AUGMENTATION_BOUND,
+        #     translation_augmentation_ratio_bound=self.TRANSLATION_AUGMENTATION_RATIO_BOUND,
+        #     rotation_axis=self.locfeat_idx,
+        #     ignore_label=self.ignore_label)
 
 
-        self.NUM_LABELS = 41  # Will be converted to 20 as defined in IGNORE_LABELS.
-        self.IGNORE_LABELS = tuple(set(range(41)) - set(self.valid_class_ids))
+        self.NUM_LABELS = 150  # Will be converted to 20 as defined in IGNORE_LABELS.
+        self.IGNORE_LABELS = tuple(set(range(self.NUM_LABELS)) - set(self.valid_class_ids))
         # map labels not evaluated to ignore_label
         label_map = {}
         n_used = 0
@@ -124,33 +111,33 @@ class ScanNet(LightningDataModule):
         self.label_map = label_map
         self.NUM_LABELS -= len(self.IGNORE_LABELS)
 
-        input_transforms = []
-        if self.augment_data:
-            input_transforms += [
-                t.RandomDropout(0.2),
-                t.RandomHorizontalFlip(self.rotation_axis, False),
-                t.ChromaticAutoContrast(),
-                t.ChromaticTranslation(self.data_aug_color_trans_ratio),
-                t.ChromaticJitter(self.data_aug_color_jitter_std),
-            ]
+        # input_transforms = []
+        # if self.augment_data:
+        #     input_transforms += [
+        #         t.RandomDropout(0.2),
+        #         t.RandomHorizontalFlip(self.rotation_axis, False),
+        #         t.ChromaticAutoContrast(),
+        #         t.ChromaticTranslation(self.data_aug_color_trans_ratio),
+        #         t.ChromaticJitter(self.data_aug_color_jitter_std),
+        #     ]
 
-        if len(input_transforms) > 0:
-            self.input_transforms = t.Compose(input_transforms)
-        else:
-            self.input_transforms = None
+        # if len(input_transforms) > 0:
+        #     self.input_transforms = t.Compose(input_transforms)
+        # else:
+        #     self.input_transforms = None
 
-        if self.return_transformation:
-            self.collate_fn = t.cflt_collate_fn_factory(self.limit_numpoints)
-        else:
-            self.collate_fn = t.cfl_collate_fn_factory(self.limit_numpoints)
+        # if self.return_transformation:
+        #     self.collate_fn = t.cflt_collate_fn_factory(self.limit_numpoints)
+        # else:
+        #     self.collate_fn = t.cfl_collate_fn_factory(self.limit_numpoints)
 
 
-    def _augment_elastic_distortion(self, pointcloud):
-        if self.ELASTIC_DISTORT_PARAMS is not None:
-          if random.random() < 0.95:
-            for granularity, magnitude in self.ELASTIC_DISTORT_PARAMS:
-              pointcloud = t.elastic_distortion(pointcloud, granularity, magnitude)
-        return pointcloud
+    # def _augment_elastic_distortion(self, pointcloud):
+    #     if self.ELASTIC_DISTORT_PARAMS is not None:
+    #       if random.random() < 0.95:
+    #         for granularity, magnitude in self.ELASTIC_DISTORT_PARAMS:
+    #           pointcloud = t.elastic_distortion(pointcloud, granularity, magnitude)
+    #     return pointcloud
 
     def prepare_data(self):
         if self.save_preds:
@@ -183,7 +170,7 @@ class ScanNet(LightningDataModule):
             print('Reading dataset...', end=' ', flush=True)
             # print(self.scan_files)
             self.coords, self.colors, self.labels = self.load_scan_files(np.arange(len(self.scan_files)))
-            print(self.coords)
+            # print(self.coords)
             print(f'Done! [{time.perf_counter() - t:.2f}s]')
         self.loaded = np.zeros(len(self.scan_files), dtype=np.bool)
     
@@ -194,7 +181,7 @@ class ScanNet(LightningDataModule):
 
     def val_dataloader(self):
         return DataLoader(self.val_idx, collate_fn=self.convert_batch,
-                          batch_size=self.val_batch_size, shuffle=True,
+                          batch_size=self.val_batch_size, shuffle=False,
                           num_workers=self.num_workers)
 
     def test_dataloader(self):  # Test best validation model once again.
@@ -202,25 +189,18 @@ class ScanNet(LightningDataModule):
                           batch_size=self.test_batch_size, shuffle=False,
                           num_workers=self.num_workers)
 
-    # def convert_batch(self, idx):
-    #     if self.in_memory:
-    #         coords = [self.coords[i] for i in idx]
-    #         colors = [self.colors[i] for i in idx]
-    #         labels = [self.labels[i] for i in idx]
-    #     else:
-    #         scan_files = [self.scan_files[i] for i in idx]
-    #         coords, colors, labels = self.load_scan_files(scan_files, training=self.trainer.training)
-    #     feat_dict = {'coords': coords, 'colors': colors}
-    #     feats = self.get_features(feat_dict)
-    #     coords_batch, feats_batch, labels_batch = ME.utils.sparse_collate(coords, feats, labels,
-    #                                                                       dtype=torch.float32)
-    #     return {"coords": coords_batch,
-    #             "feats": feats_batch,
-    #             "labels": labels_batch,
-    #             }
-    def convert_batch(self, idx):
-        batch = [self.getitem(i) for i in idx]
-        return self.collate_fn(batch)
+    def convert_batch(self, idxs):
+        coords, colors, labels = self.load_scan_files(idxs)
+        feat_dict = {'coords': coords, 'colors': colors}
+        feats = self.get_features(feat_dict)
+        coords_batch, feats_batch, labels_batch = ME.utils.sparse_collate(coords, feats, labels,
+                                                                          dtype=torch.float32)
+        # print(coords_batch.shape, feats_batch.shape, labels_batch.shape)
+        # print(coords_batch, feats_batch, labels_batch)
+        return {"coords": coords_batch,
+                "feats": feats_batch,
+                "labels": labels_batch,
+                }
 
     def load_scan_files(self, idxs):
         coords = []
@@ -242,12 +222,18 @@ class ScanNet(LightningDataModule):
         colors = np.stack((plydata['vertex']['red'],
                            plydata['vertex']['green'],
                            plydata['vertex']['blue'])).T
+        coords /= self.voxel_size 
+        colors = (colors / 255.) - 0.5
         return coords, colors
 
     def load_ply_label_file(self, file_name):
         with open(file_name, 'rb') as f:
             plydata = PlyData.read(f)
-        labels = np.array(plydata['vertex']['label'])
+        labels = np.array(plydata['vertex']['label'], dtype=np.uint8)
+        if self.IGNORE_LABELS is not None:
+            # print(labels.max(), labels.min())
+            labels = np.array([self.label_map[x] for x in labels], dtype=np.int)
+        # print(labels.max(), labels.min())
         return labels
 
     def load_ply(self, idx):
@@ -266,50 +252,50 @@ class ScanNet(LightningDataModule):
             self.loaded[idx] = True
         return coords, colors, labels
 
-    def getitem(self, idx):
-        if self.explicit_rotation > 1:
-            rotation_space = np.linspace(-np.pi, np.pi, self.explicit_rotation + 1)
-            rotation_angle = rotation_space[index % self.explicit_rotation]
-            index //= self.explicit_rotation
-        else:
-            rotation_angle = None
-        coords, feats, labels = self.load_ply(idx)
-        if self.prevoxelize_voxel_size is not None:
-            inds = ME.SparseVoxelize(coords[:, :3] / self.prevoxelize_voxel_size, return_index=True)
-            coords = coords[inds]
-            feats = feats[inds]
-            labels = labels[inds]
-
-        if self.elastic_distortion:
-            pointcloud = self._augment_elastic_distortion(pointcloud)
-
-        outs = self.sparse_voxelizer.voxelize(
-            coords,
-            feats,
-            labels,
-            center=np.array([0,0,0]),
-            rotation_angle=rotation_angle,
-            return_transformation=self.return_transformation)
-
-        if self.return_transformation:
-            coords, feats, labels, transformation = outs
-            transformation = np.expand_dims(transformation, 0)
-        else:
-            coords, feats, labels = outs
-
-        # map labels not used for evaluation to ignore_label
-        if self.input_transforms is not None:
-            coords, feats, labels = self.input_transforms(coords, feats, labels)
-        if self.IGNORE_LABELS is not None:
-            labels = np.array([self.label_map[x] for x in labels], dtype=np.int)
-
-        return_args = [coords, feats, labels]
-        if self.return_transformation:
-            return_args.extend([pointcloud.astype(np.float32), transformation.astype(np.float32)])
-        return tuple(return_args)
-
     def get_features(self, input_dict):
         return input_dict['colors']
+
+    # def getitem(self, idx):
+    #     if self.explicit_rotation > 1:
+    #         rotation_space = np.linspace(-np.pi, np.pi, self.explicit_rotation + 1)
+    #         rotation_angle = rotation_space[index % self.explicit_rotation]
+    #         index //= self.explicit_rotation
+    #     else:
+    #         rotation_angle = None
+    #     coords, feats, labels = self.load_ply(idx)
+    #     if self.prevoxelize_voxel_size is not None:
+    #         inds = ME.SparseVoxelize(coords[:, :3] / self.prevoxelize_voxel_size, return_index=True)
+    #         coords = coords[inds]
+    #         feats = feats[inds]
+    #         labels = labels[inds]
+
+    #     if self.elastic_distortion:
+    #         pointcloud = self._augment_elastic_distortion(pointcloud)
+
+    #     outs = self.sparse_voxelizer.voxelize(
+    #         coords,
+    #         feats,
+    #         labels,
+    #         center=np.array([0,0,0]),
+    #         rotation_angle=rotation_angle,
+    #         return_transformation=self.return_transformation)
+
+    #     if self.return_transformation:
+    #         coords, feats, labels, transformation = outs
+    #         transformation = np.expand_dims(transformation, 0)
+    #     else:
+    #         coords, feats, labels = outs
+
+    #     # map labels not used for evaluation to ignore_label
+    #     if self.input_transforms is not None:
+    #         coords, feats, labels = self.input_transforms(coords, feats, labels)
+    #     if self.IGNORE_LABELS is not None:
+    #         labels = np.array([self.label_map[x] for x in labels], dtype=np.int)
+
+    #     return_args = [coords, feats, labels]
+    #     if self.return_transformation:
+    #         return_args.extend([pointcloud.astype(np.float32), transformation.astype(np.float32)])
+    #     return tuple(return_args)
 
     @staticmethod
     def add_argparse_args(parent_parser):
@@ -322,20 +308,20 @@ class ScanNet(LightningDataModule):
         parser.add_argument("--in_memory", type=str2bool, nargs='?', const=True, default=True)
         parser.add_argument("--save_preds", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument("--preload", type=str2bool, nargs='?', const=True, default=False)
-        parser.add_argument("--augment_data", type=str2bool, nargs='?', const=True, default=True)
-        parser.add_argument("--return_transformation", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument("--train_percent", type=float, default=0.8)
+        parser.add_argument("--ignore_label", type=int, default=-100)
+        # parser.add_argument("--augment_data", type=str2bool, nargs='?', const=True, default=True)
+        # parser.add_argument("--return_transformation", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument("--voxel_size", type=float, default=0.02)
-        parser.add_argument("--rotation_axis", type=str, default='z')
-        parser.add_argument("--locfeat_idx", type=int, default=2)
-        parser.add_argument("--prevoxelize_voxel_size", type=float, default=None)
-        parser.add_argument("--clip_bound", type=float, default=None)
-        parser.add_argument("--ignore_label", type=int, default=255)
-        parser.add_argument("--data_aug_color_trans_ratio", type=float, default=0.10)
-        parser.add_argument("--data_aug_color_jitter_std", type=float, default=0.05)
-        parser.add_argument("--limit_numpoints", type=int, default=0)
-        parser.add_argument("--explicit_rotation", type=int, default=-1)
-        parser.add_argument("--elastic_distortion", type=str2bool, nargs='?', const=True, default=False)
+        # parser.add_argument("--rotation_axis", type=str, default='z')
+        # parser.add_argument("--locfeat_idx", type=int, default=2)
+        # parser.add_argument("--prevoxelize_voxel_size", type=float, default=None)
+        # parser.add_argument("--clip_bound", type=float, default=None)
+        # parser.add_argument("--data_aug_color_trans_ratio", type=float, default=0.10)
+        # parser.add_argument("--data_aug_color_jitter_std", type=float, default=0.05)
+        # parser.add_argument("--limit_numpoints", type=int, default=0)
+        # parser.add_argument("--explicit_rotation", type=int, default=-1)
+        # parser.add_argument("--elastic_distortion", type=str2bool, nargs='?', const=True, default=False)
         return parent_parser
 
     def cleanup(self):
