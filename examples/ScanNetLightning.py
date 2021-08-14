@@ -2,6 +2,7 @@ import os
 import glob
 import time
 import math
+import inspect
 from typing import Any, Optional, List, NamedTuple
 
 import torch
@@ -103,11 +104,11 @@ class ScanNet(LightningDataModule):
         n_used = 0
         for l in range(self.NUM_LABELS):
             if l in self.IGNORE_LABELS:
-                label_map[l] = self.ignore_label
+                label_map[l] = -100
             else:
                 label_map[l] = n_used
                 n_used += 1
-        label_map[self.ignore_label] = self.ignore_label
+        label_map[-100] = -100
         self.label_map = label_map
         self.NUM_LABELS -= len(self.IGNORE_LABELS)
 
@@ -156,14 +157,14 @@ class ScanNet(LightningDataModule):
     def setup(self, stage: Optional[str] = None):
         if stage == 'fit':
             self.scan_files = glob.glob(os.path.join(self.scans_dir, '*', '*_vh_clean_2.ply'))
-            self.scan_files.sort()
-            self.train_idx = np.load(os.path.join(self.data_dir, 'train_idx.npy'))
-            self.val_idx = np.load(os.path.join(self.data_dir, 'val_idx.npy'))
         else:
             assert(True == False)
             self.scan_files = glob.glob(os.path.join(self.scans_test_dir, '*', '_vh_clean_2.ply'))
-            self.scan_files.sort()
-            self.test_idx = np.arange(len(self.scan_files))
+        self.scan_files.sort()
+
+        self.train_idx = torch.from_numpy(np.load(os.path.join(self.data_dir, 'train_idx.npy')))
+        self.val_idx = torch.from_numpy(np.load(os.path.join(self.data_dir, 'val_idx.npy')))
+        self.test_idx = torch.from_numpy(np.arange(len(self.scan_files)))
 
         if self.preload and self.in_memory:
             t = time.perf_counter()
@@ -175,14 +176,24 @@ class ScanNet(LightningDataModule):
         self.loaded = np.zeros(len(self.scan_files), dtype=np.bool)
     
     def train_dataloader(self):
-        return DataLoader(self.train_idx, collate_fn=self.convert_batch,
+        train_dataloader = DataLoader(self.train_idx, collate_fn=self.convert_batch,
                           batch_size=self.batch_size, shuffle=True,
                           num_workers=self.num_workers)
+        return train_dataloader
 
     def val_dataloader(self):
-        return DataLoader(self.val_idx, collate_fn=self.convert_batch,
+        val_dataloader = DataLoader(self.val_idx, collate_fn=self.convert_batch,
                           batch_size=self.val_batch_size, shuffle=False,
                           num_workers=self.num_workers)
+        # params = dict(inspect.signature(val_dataloader.__init__).parameters)
+        # attrs = {k: v for k, v in vars(val_dataloader).items() if not k.startswith("_")}
+        # attrs["multiprocessing_context"] = val_dataloader.multiprocessing_context
+        # print(attrs)
+        # for name, p in params.items():
+        #     print(name, p)
+        #     print(name in attrs, p.default != attrs[name])
+        # print("val params: ", params)
+        return val_dataloader
 
     def test_dataloader(self):  # Test best validation model once again.
         return DataLoader(self.test_idx, collate_fn=self.convert_batch,
@@ -309,7 +320,6 @@ class ScanNet(LightningDataModule):
         parser.add_argument("--save_preds", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument("--preload", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument("--train_percent", type=float, default=0.8)
-        parser.add_argument("--ignore_label", type=int, default=-100)
         # parser.add_argument("--augment_data", type=str2bool, nargs='?', const=True, default=True)
         # parser.add_argument("--return_transformation", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument("--voxel_size", type=float, default=0.02)
