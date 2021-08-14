@@ -31,6 +31,7 @@ from pytorch_lightning import Trainer
 
 from examples.MinkLightning import MinkowskiSegmentationModule
 from examples.ScanNetLightning import ScanNet
+import MinkowskiEngine as ME
 
 def init_module_from_args(module, args=None):
     parser = argparse.ArgumentParser()
