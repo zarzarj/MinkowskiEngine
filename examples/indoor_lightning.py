@@ -66,15 +66,15 @@ if __name__ == "__main__":
     callbacks = []
     callbacks.append(ConfusionMatrixPlotCallback())
     callbacks.append(ModelCheckpoint(monitor='val_miou', mode = 'max', save_top_k=1))
-    lightning_root_dir = f'logs/{main_args.exp_name}/'
+    lightning_root_dir = os.path.join('logs', main_args.exp_name, main_args.run_mode)
     pl_trainer, args = init_module_from_args(Trainer, args, callbacks=callbacks,
                                              default_root_dir=lightning_root_dir,
                                              plugins=DDPPlugin(find_unused_parameters=False))
 
-    dirs = glob.glob(os.path.join(lightning_root_dir, 'lightning_logs', '*'))
+    dirs = glob.glob(os.path.join(lightning_root_dir, 'train', 'lightning_logs', '*'))
     if len(dirs) > 0:
         version = max([int(x.split(os.sep)[-1].split('_')[-1]) for x in dirs])
-        logdir = os.path.join(lightning_root_dir, 'lightning_logs', f'version_{version}')
+        logdir = os.path.join(lightning_root_dir, 'train', 'lightning_logs', f'version_{version}')
         print(f'Loading saved model in {logdir}...')
         ckptdirs = glob.glob(f'{logdir}/checkpoints/*')
         if len(ckptdirs) > 0:
@@ -86,6 +86,9 @@ if __name__ == "__main__":
         else:
             print('No model found!')
             print('Starting from scratch...')
+    else:
+        print('No model found!')
+        print('Starting from scratch...')
 
     if pl_trainer.gpus > 1:
         pl_module.model = ME.MinkowskiSyncBatchNorm.convert_sync_batchnorm(pl_module.model)
