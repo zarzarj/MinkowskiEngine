@@ -140,11 +140,6 @@ class MinkowskiSegmentationModule(LightningModule):
         parser = parent_parser.add_argument_group("MinkSegModel")
         parser.add_argument("--in_channels", type=int, default=3)
         parser.add_argument("--out_channels", type=int, default=20)
-        parser.add_argument("--optimizer_name", type=str, default='SGD')
-        parser.add_argument("--lr", type=float, default=1e-3)
-        parser.add_argument("--weight_decay", type=float, default=1e-5)
-        # parser.add_argument("--voxel_size", type=float, default=0.02)
-
 
         # Optimizer arguments
         parser.add_argument('--optimizer', type=str, default='SGD')
