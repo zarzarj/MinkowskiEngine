@@ -6,7 +6,7 @@ import glob
 import numpy as np
 from urllib.request import urlretrieve
 
-from pytorch_lightning import Trainer
+from pytorch_lightning import Trainer, seed_everything
 
 from examples.MinkLightning import MinkowskiSegmentationModule
 from examples.ScanNetLightning import ScanNet
@@ -55,6 +55,7 @@ def init_module_from_args(module, args=None, **kwargs):
     return module(**args_dict), args
 
 if __name__ == "__main__":
+    seed_everything(42)
     parser = argparse.ArgumentParser()
     parser.add_argument("--exp_name", type=str, default='default')
     parser.add_argument('--run_mode', type=str, default='train', choices=['train','validate','test'])
