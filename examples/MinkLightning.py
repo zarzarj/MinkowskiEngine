@@ -25,7 +25,10 @@ class MinkowskiSegmentationModule(LightningModule):
         self.save_hyperparameters()
         for name, value in kwargs.items():
             if name != "self":
-                setattr(self, name, value)
+                try:
+                    setattr(self, name, value)
+                except:
+                    print(name, value)
         self.criterion = nn.CrossEntropyLoss()
         self.model = MinkUNet34C(self.in_channels, self.out_channels)
         metrics = MetricCollection({'acc': Accuracy(),
@@ -55,10 +58,15 @@ class MinkowskiSegmentationModule(LightningModule):
             torch.cuda.empty_cache()
         logits = self(sinput).slice(in_field).F
         train_loss = self.criterion(logits, target)
-        self.log('train_loss', train_loss, prog_bar=True, on_step=True,
-                 on_epoch=True)
+        self.log('train_loss', train_loss, sync_dist=True, prog_bar=True, on_step=True, on_epoch=True)
         self.log_metrics(logits, target, self.train_metrics)
         return train_loss
+
+    def on_train_epoch_end(self, unused=None):
+        metrics_dict = self.train_metrics.compute()
+        metrics_dict = self.remove_conf_matrices(metrics_dict)
+        self.log_dict(metrics_dict, sync_dist=True, prog_bar=False)
+        self.train_metrics.reset()
 
     def validation_step(self, batch, batch_idx):
         coords, feats, target = batch['coords'], batch['feats'], batch['labels']
@@ -74,18 +82,33 @@ class MinkowskiSegmentationModule(LightningModule):
         sinput = in_field.sparse()
         logits = self(sinput).slice(in_field).F
         val_loss = self.criterion(logits, target)
-        self.log('val_loss', val_loss, prog_bar=True, on_step=True,
-                 on_epoch=True)
+        self.log('val_loss', val_loss, sync_dist=True, prog_bar=True, on_step=True, on_epoch=True)
         self.log_metrics(logits, target, self.val_metrics)
         return val_loss
+
+    def on_validation_epoch_end(self, unused=None):
+        metrics_dict = self.val_metrics.compute()
+        metrics_dict = self.remove_conf_matrices(metrics_dict)
+        self.log_dict(metrics_dict, sync_dist=True, prog_bar=True)
+        self.val_metrics.reset()
+
+    def configure_optimizers(self):
+        return SGD(self.model.parameters(), lr=self.lr, weight_decay=self.weight_decay)
 
     def log_metrics(self, logits, target, metrics_fn):
         valid_idx = target != -100
         preds = logits.argmax(dim=-1)
         metrics_fn.update(preds[valid_idx], target[valid_idx])
 
-    def configure_optimizers(self):
-        return SGD(self.model.parameters(), lr=self.lr, weight_decay=self.weight_decay)
+    def remove_conf_matrices(self, metrics_dict):
+        new_metrics_dict = dict(metrics_dict)
+        conf_matrices = []
+        for key in new_metrics_dict.keys():
+            if "ConfusionMatrix" in key:
+                conf_matrices.append(key)
+        for key in conf_matrices:
+            new_metrics_dict.pop(key)
+        return new_metrics_dict
 
     @staticmethod
     def add_argparse_args(parent_parser):

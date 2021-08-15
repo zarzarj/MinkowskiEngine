@@ -17,6 +17,7 @@ from PIL import Image
 import matplotlib.pyplot as plt
 from sklearn.metrics import ConfusionMatrixDisplay
 from pytorch_lightning.callbacks import ModelCheckpoint, Callback
+from pytorch_lightning.plugins import DDPPlugin
 
 
 
@@ -65,7 +66,8 @@ if __name__ == "__main__":
     callbacks.append(ModelCheckpoint(monitor='val_miou', mode = 'max', save_top_k=1))
     lightning_root_dir = f'logs/{main_args.exp_name}/'
     pl_trainer, args = init_module_from_args(Trainer, args, callbacks=callbacks,
-                                             default_root_dir=lightning_root_dir)
+                                             default_root_dir=lightning_root_dir,
+                                             plugins=DDPPlugin(find_unused_parameters=False))
 
     dirs = glob.glob(os.path.join(lightning_root_dir, 'lightning_logs', '*'))
     if len(dirs) > 0:
