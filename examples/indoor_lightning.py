@@ -68,20 +68,20 @@ if __name__ == "__main__":
     callbacks.append(ModelCheckpoint(monitor='val_miou', mode = 'max', save_top_k=1))
     lightning_root_dir = os.path.join('logs', main_args.exp_name, main_args.run_mode)
     pl_trainer, args = init_module_from_args(Trainer, args, callbacks=callbacks,
-                                             default_root_dir=lightning_root_dir,
+                                             default_root_dir=os.path.join(lightning_root_dir),
                                              plugins=DDPPlugin(find_unused_parameters=False))
-
-    dirs = glob.glob(os.path.join(lightning_root_dir, 'train', 'lightning_logs', '*'))
-    if len(dirs) > 0:
-        version = max([int(x.split(os.sep)[-1].split('_')[-1]) for x in dirs])
-        logdir = os.path.join(lightning_root_dir, 'train', 'lightning_logs', f'version_{version}')
-        print(f'Loading saved model in {logdir}...')
-        ckptdirs = glob.glob(f'{logdir}/checkpoints/*')
+    train_dir = os.path.join(lightning_root_dir, '..', 'train', 'lightning_logs')
+    train_versions = glob.glob(os.path.join(base_train_dir, '*'))
+    if len(train_versions) > 0:
+        most_recent_train_version = max([int(x.split(os.sep)[-1].split('_')[-1]) for x in train_versions])
+        most_recent_train_logdir = os.path.join(base_train_dir, f'version_{most_recent_train_version}')
+        print(f'Loading saved model in {most_recent_train_logdir}...')
+        ckptdirs = glob.glob(f'{most_recent_train_logdir}/checkpoints/*')
         if len(ckptdirs) > 0:
             ckpt = ckptdirs[0]
             pl_module = pl_module.load_from_checkpoint(
                         checkpoint_path=ckpt,
-                        hparams_file=f'{logdir}/hparams.yaml')
+                        hparams_file=f'{most_recent_train_logdir}/hparams.yaml')
             print(f'Restored {ckpt}')
         else:
             print('No model found!')
