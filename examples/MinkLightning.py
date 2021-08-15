@@ -150,7 +150,7 @@ class MinkowskiSegmentationModule(LightningModule):
         parser.add_argument('--adam_beta2', type=float, default=0.999)
         parser.add_argument('--weight_decay', type=float, default=1e-4)
         parser.add_argument('--param_histogram_freq', type=int, default=100)
-        parser.add_argument('--save_param_histogram', type=str2bool, default=False)
+        # parser.add_argument('--save_param_histogram', type=str2bool, default=False)
         parser.add_argument('--iter_size', type=int, default=1, help='accumulate gradient')
         parser.add_argument('--bn_momentum', type=float, default=0.02)
 
