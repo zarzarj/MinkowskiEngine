@@ -18,6 +18,7 @@ import matplotlib.pyplot as plt
 from sklearn.metrics import ConfusionMatrixDisplay
 from pytorch_lightning.callbacks import ModelCheckpoint, Callback
 from pytorch_lightning.plugins import DDPPlugin
+from examples.str2bool import str2bool
 
 
 
@@ -56,6 +57,7 @@ def init_module_from_args(module, args=None, **kwargs):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--exp_name", type=str, default='default')
+    parser.add_argument('--run_mode', type=str, default='train', choices=['train','validate','test'])
     main_args, args = parser.parse_known_args()
 
     pl_module, args = init_module_from_args(MinkowskiSegmentationModule)
@@ -83,8 +85,14 @@ if __name__ == "__main__":
             print(f'Restored {ckpt}')
         else:
             print('No model found!')
-            print('Training from scratch...')
+            print('Starting from scratch...')
 
     if pl_trainer.gpus > 1:
         pl_module.model = ME.MinkowskiSyncBatchNorm.convert_sync_batchnorm(pl_module.model)
-    pl_trainer.fit(pl_module, pl_datamodule)
+
+    if main_args.run_mode == 'train':
+        pl_trainer.fit(pl_module, pl_datamodule) 
+    elif main_args.run_mode == 'validate':
+        pl_trainer.validate(pl_module, pl_datamodule)
+    elif main_args.run_mode == 'test':
+        pl_trainer.test(pl_module, pl_datamodule)

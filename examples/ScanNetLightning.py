@@ -155,16 +155,14 @@ class ScanNet(LightningDataModule):
         # scan_test_filenames = glob.glob(os.path.join(self.scans_test_dir, '*'))
 
     def setup(self, stage: Optional[str] = None):
-        if stage == 'fit':
+        if stage == 'fit' or stage =='validate':
             self.scan_files = glob.glob(os.path.join(self.scans_dir, '*', '*_vh_clean_2.ply'))
+            self.train_idx = torch.from_numpy(np.load(os.path.join(self.data_dir, 'train_idx.npy')))
+            self.val_idx = torch.from_numpy(np.load(os.path.join(self.data_dir, 'val_idx.npy')))
         else:
-            assert(True == False)
             self.scan_files = glob.glob(os.path.join(self.scans_test_dir, '*', '_vh_clean_2.ply'))
+            self.test_idx = torch.from_numpy(np.arange(len(self.scan_files)))
         self.scan_files.sort()
-
-        self.train_idx = torch.from_numpy(np.load(os.path.join(self.data_dir, 'train_idx.npy')))
-        self.val_idx = torch.from_numpy(np.load(os.path.join(self.data_dir, 'val_idx.npy')))
-        self.test_idx = torch.from_numpy(np.arange(len(self.scan_files)))
 
         if self.preload and self.in_memory:
             t = time.perf_counter()
@@ -185,14 +183,6 @@ class ScanNet(LightningDataModule):
         val_dataloader = DataLoader(self.val_idx, collate_fn=self.convert_batch,
                           batch_size=self.val_batch_size, shuffle=False,
                           num_workers=self.num_workers)
-        # params = dict(inspect.signature(val_dataloader.__init__).parameters)
-        # attrs = {k: v for k, v in vars(val_dataloader).items() if not k.startswith("_")}
-        # attrs["multiprocessing_context"] = val_dataloader.multiprocessing_context
-        # print(attrs)
-        # for name, p in params.items():
-        #     print(name, p)
-        #     print(name in attrs, p.default != attrs[name])
-        # print("val params: ", params)
         return val_dataloader
 
     def test_dataloader(self):  # Test best validation model once again.
