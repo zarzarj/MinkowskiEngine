@@ -212,6 +212,7 @@ class ScanNet(LightningDataModule):
             coords.append(cur_coords)
             colors.append(cur_colors)
             labels.append(cur_labels)
+        # if self.implicit
         return coords, colors, labels
 
     def load_ply_file(self, file_name):
@@ -322,6 +323,7 @@ class ScanNet(LightningDataModule):
         # parser.add_argument("--limit_numpoints", type=int, default=0)
         # parser.add_argument("--explicit_rotation", type=int, default=-1)
         # parser.add_argument("--elastic_distortion", type=str2bool, nargs='?', const=True, default=False)
+        parser.add_argument("--implicit_feats", type=str2bool, nargs='?', const=True, default=False)
         return parent_parser
 
     def cleanup(self):
