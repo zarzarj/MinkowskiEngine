@@ -288,9 +288,19 @@ class ScanNet(LightningDataModule):
         return out_dict
 
     def get_features(self, input_dict):
+        feats = []
+        if self.use_colors:
+            feats.append(input_dict['colors'])
+        if self.use_coords:
+            feats.append(input_dict['coords'])
         if self.use_implicit_feats:
-            return input_dict['implicit_feats']
-        return input_dict['colors']
+            feats.append(input_dict['implicit_feats'])
+        out_feats = []
+        for i in range(len(feats[0])):
+            cur_all_feats = [feat[i] for feat in feats]
+            # print(cur_all_feats, cur_a)
+            out_feats.append(torch.cat(cur_all_feats, dim=-1))
+        return out_feats
 
 
     def load_impicit_feats(self, file_name, pts):
@@ -375,6 +385,8 @@ class ScanNet(LightningDataModule):
         # parser.add_argument("--explicit_rotation", type=int, default=-1)
         # parser.add_argument("--elastic_distortion", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument("--use_implicit_feats", type=str2bool, nargs='?', const=True, default=False)
+        parser.add_argument("--use_coords", type=str2bool, nargs='?', const=True, default=False)
+        parser.add_argument("--use_colors", type=str2bool, nargs='?', const=True, default=True)
         return parent_parser
 
     def cleanup(self):
