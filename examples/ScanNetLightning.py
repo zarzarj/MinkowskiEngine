@@ -252,6 +252,7 @@ class ScanNet(LightningDataModule):
             plydata = PlyData.read(f)
         labels = np.array(plydata['vertex']['label'], dtype=np.uint8)
         labels = np.array([self.label_map[x] for x in labels], dtype=np.int)
+        # print(labels)
         # print(labels.max(), labels.min())
         return torch.from_numpy(labels)
 
@@ -265,7 +266,8 @@ class ScanNet(LightningDataModule):
         else:
             scan_file = self.scan_files[idx]
             coords, colors = self.load_ply_file(scan_file)
-            if self.trainer.training:
+            # print(self.trainer.training, self.trainer.validating)
+            if self.trainer.training or self.trainer.validating:
                 label_file = scan_file[:-4] + '.labels.ply'
                 labels = self.load_ply_label_file(label_file)
             else:

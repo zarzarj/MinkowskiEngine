@@ -10,6 +10,8 @@ class MeanIoU(Metric):
         self.num_classes = num_classes
 
     def update(self, preds: torch.Tensor, target: torch.Tensor):
+        # print(preds, target)
+        # print(preds.shape, target.shape)
         assert preds.shape == target.shape
         for cl in range(self.num_classes):
             gt_mask = (target == cl)
@@ -20,4 +22,5 @@ class MeanIoU(Metric):
     def compute(self):
         ious = self.intersection.float() / self.union
         ious = ious[~ious.isnan()]
+        # print(ious)
         return torch.mean(ious)

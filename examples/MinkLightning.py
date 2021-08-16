@@ -90,6 +90,7 @@ class MinkowskiSegmentationModule(LightningModule):
         coords, feats, target = batch['coords'], batch['feats'], batch['labels']
         coords, feats, target = to_precision((coords, feats, target), self.trainer.precision)
         target = target.long()
+        # print(target.min(), target.max(), target)
         in_field = ME.TensorField(
             features=feats,
             coordinates=coords,
