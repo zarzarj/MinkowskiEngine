@@ -100,16 +100,15 @@ class ScanNet(LightningDataModule):
         self.NUM_LABELS = 150  # Will be converted to 20 as defined in IGNORE_LABELS.
         self.IGNORE_LABELS = tuple(set(range(self.NUM_LABELS)) - set(self.valid_class_ids))
         # map labels not evaluated to ignore_label
-        label_map = {}
+        self.label_map = {}
         n_used = 0
         for l in range(self.NUM_LABELS):
             if l in self.IGNORE_LABELS:
-                label_map[l] = -100
+                self.label_map[l] = -100
             else:
-                label_map[l] = n_used
+                self.label_map[l] = n_used
                 n_used += 1
-        label_map[-100] = -100
-        self.label_map = label_map
+        self.label_map[-100] = -100
         self.NUM_LABELS -= len(self.IGNORE_LABELS)
 
         # input_transforms = []
@@ -168,10 +167,21 @@ class ScanNet(LightningDataModule):
             t = time.perf_counter()
             print('Reading dataset...', end=' ', flush=True)
             # print(self.scan_files)
-            self.coords, self.colors, self.labels = self.load_scan_files(np.arange(len(self.scan_files)))
+            input_dict = self.load_scan_files(np.arange(len(self.scan_files)))
+            self.coords = input_dict['coords']
+            self.colors = input_dict['colors']
+            self.labels = input_dict['labels']
+            if self.use_implicit_feats:
+                self.implicit_feats = input_dict['implicit_feats']
             # print(self.coords)
             print(f'Done! [{time.perf_counter() - t:.2f}s]')
-        self.loaded = np.zeros(len(self.scan_files), dtype=np.bool)
+        else:
+            self.loaded = np.zeros(len(self.scan_files), dtype=np.bool)
+            self.coords = [None]*len(self.scan_files)
+            self.colors = [None]*len(self.scan_files)
+            self.labels = [None]*len(self.scan_files)
+            if self.use_implicit_feats:
+                self.implicit_feats = [None]*len(self.scan_files)
     
     def train_dataloader(self):
         train_dataloader = DataLoader(self.train_idx, collate_fn=self.convert_batch,
@@ -191,10 +201,10 @@ class ScanNet(LightningDataModule):
                           num_workers=self.num_workers)
 
     def convert_batch(self, idxs):
-        coords, colors, labels = self.load_scan_files(idxs)
-        feat_dict = {'coords': coords, 'colors': colors}
-        feats = self.get_features(feat_dict)
-        coords_batch, feats_batch, labels_batch = ME.utils.sparse_collate(coords, feats, labels,
+        input_dict = self.load_scan_files(idxs)
+        feats = self.get_features(input_dict)
+        coords_batch, feats_batch, labels_batch = ME.utils.sparse_collate(input_dict['coords'],
+                                                                          feats, input_dict['labels'],
                                                                           dtype=torch.float32)
         # print(coords_batch.shape, feats_batch.shape, labels_batch.shape)
         # print(coords_batch, feats_batch, labels_batch)
@@ -207,13 +217,22 @@ class ScanNet(LightningDataModule):
         coords = []
         colors = []
         labels = []
+        if self.use_implicit_feats:
+            implicit_feats = []
         for i in idxs:
-            cur_coords, cur_colors, cur_labels = self.load_ply(i)
-            coords.append(cur_coords)
-            colors.append(cur_colors)
-            labels.append(cur_labels)
-        # if self.implicit
-        return coords, colors, labels
+            input_dict = self.load_ply(i)
+            if self.use_implicit_feats:
+                implicit_feats.append(input_dict['implicit_feats'])
+            coords.append(input_dict['coords'])
+            colors.append(input_dict['colors'])
+            labels.append(input_dict['labels'])
+        out_dict = {'coords': coords,
+                    'colors': colors,
+                    'labels': labels,
+                    }
+        if self.use_implicit_feats:
+            out_dict['implicit_feats'] = implicit_feats
+        return out_dict
 
     def load_ply_file(self, file_name):
         with open(file_name, 'rb') as f:
@@ -226,23 +245,23 @@ class ScanNet(LightningDataModule):
                            plydata['vertex']['blue'])).T
         coords /= self.voxel_size 
         colors = (colors / 255.) - 0.5
-        return coords, colors
+        return torch.from_numpy(coords), torch.from_numpy(colors)
 
     def load_ply_label_file(self, file_name):
         with open(file_name, 'rb') as f:
             plydata = PlyData.read(f)
         labels = np.array(plydata['vertex']['label'], dtype=np.uint8)
-        if self.IGNORE_LABELS is not None:
-            # print(labels.max(), labels.min())
-            labels = np.array([self.label_map[x] for x in labels], dtype=np.int)
+        labels = np.array([self.label_map[x] for x in labels], dtype=np.int)
         # print(labels.max(), labels.min())
-        return labels
+        return torch.from_numpy(labels)
 
     def load_ply(self, idx):
         if self.in_memory and self.loaded[idx]:
             coords = self.coords[idx]
             colors = self.colors[idx]
             labels = self.labels[idx]
+            if self.use_implicit_feats:
+                implicit_feats = self.implicit_feats[idx]
         else:
             scan_file = self.scan_files[idx]
             coords, colors = self.load_ply_file(scan_file)
@@ -251,11 +270,41 @@ class ScanNet(LightningDataModule):
                 labels = self.load_ply_label_file(label_file)
             else:
                 labels = np.zeros(coords.shape[0])
+            self.coords[idx] = coords
+            self.colors[idx] = colors
+            self.labels[idx] = labels
+            if self.use_implicit_feats:
+                implicit_feats = self.load_impicit_feats(scan_file, coords)
+                self.implicit_feats[idx] = implicit_feats
             self.loaded[idx] = True
-        return coords, colors, labels
+        out_dict = {'coords': coords,
+                    'colors': colors,
+                    'labels': labels,
+                    }
+        if self.use_implicit_feats:
+            out_dict['implicit_feats'] = implicit_feats
+        return out_dict
 
     def get_features(self, input_dict):
+        if self.use_implicit_feats:
+            return input_dict['implicit_feats']
         return input_dict['colors']
+
+
+    def load_impicit_feats(self, file_name, pts):
+        scene_name = file_name.split('/')[-2]
+        implicit_feat_file = os.path.join(self.data_dir, 'implicit_feats', scene_name+'-d1e-05-ps0.pt')
+        if not os.path.exists(implicit_feat_file):
+            os.makedirs(os.path.join(self.data_dir, 'implicit_feats'), exist_ok=True)
+            mask_file = os.path.join(self.data_dir, 'masks', scene_name+'-d1e-05-ps0.npy')
+            lats_file = os.path.join(self.data_dir, 'lats', scene_name+'-d1e-05-ps0.npy')
+            mask = np.load(mask_file)
+            lats = np.load(lats_file)
+            implicit_feats = get_implicit_feats(pts, lats, mask)
+            torch.save(implicit_feats, implicit_feat_file)
+        else:
+            implicit_feats = torch.load(implicit_feat_file)
+        return implicit_feats
 
     # def getitem(self, idx):
     #     if self.explicit_rotation > 1:
@@ -323,8 +372,96 @@ class ScanNet(LightningDataModule):
         # parser.add_argument("--limit_numpoints", type=int, default=0)
         # parser.add_argument("--explicit_rotation", type=int, default=-1)
         # parser.add_argument("--elastic_distortion", type=str2bool, nargs='?', const=True, default=False)
-        parser.add_argument("--implicit_feats", type=str2bool, nargs='?', const=True, default=False)
+        parser.add_argument("--use_implicit_feats", type=str2bool, nargs='?', const=True, default=False)
         return parent_parser
 
     def cleanup(self):
         self.sparse_voxelizer.cleanup()
+
+
+
+def get_implicit_feats(pts, lats, mask, part_size=0.25):
+    """Regular grid interpolator, returns inpterpolation coefficients.
+    Args:
+    pts: `[num_points, dim]` tensor, coordinates of points
+    lats: `[num_nonempty_lats, dim]` sparse tensor of latents
+    mask: `[*size]` mask for nonempty latents
+
+    Returns:
+    implicit feats: `[num_points, 2**dim * ( features + dim )]` tensor, neighbor
+    latent codes and relative locations for each input point .
+    """
+    # get dimensions
+    size = torch.from_numpy(np.array(mask.shape))
+    xmin = torch.min(pts[:, :3], 0)[0]
+    xmin -= part_size
+    true_shape = (size - 1) / 2.0
+    xmax = xmin + true_shape * part_size
+
+    grid = torch.zeros(mask.shape + (lats.shape[-1],), dtype=torch.float32)
+    # print(grid.shape)
+    mask = torch.from_numpy(mask).bool()
+    grid[mask] = torch.from_numpy(lats)
+
+    npts = pts.shape[0]
+    cubesize = 1.0/(size-1.0)
+    dim = len(size)
+
+    # normalize coords for interpolation
+    bbox = xmax - xmin
+    pts = (pts - xmin) / bbox
+    pts = torch.clip(pts, 1e-6, 1-1e-6)  # clip to boundary of the bbox
+
+    # find neighbor indices
+    ind0 = torch.floor(pts / cubesize)  # `[num_points, dim]`
+    ind1 = torch.ceil(pts / cubesize)  # `[num_points, dim]`
+    ind01 = torch.stack([ind0, ind1], dim=0)  # `[2, num_points, dim]`
+    ind01 = torch.transpose(ind01, 1, 2)  # `[2, dim, num_points]`
+
+    # generate combinations for enumerating neighbors
+    com_ = torch.stack(torch.meshgrid(*tuple(torch.tensor([[0,1]] * dim))), dim=-1)
+    com_ = torch.reshape(com_, [-1, dim])  # `[2**dim, dim]`
+    # print(com_, com_.shape)
+    dim_ = torch.reshape(torch.arange(0,dim), [1, -1])
+    dim_ = torch.tile(dim_, [2**dim, 1])  # `[2**dim, dim]`
+    # print(dim_, dim_.shape)
+    gather_ind = torch.stack([com_, dim_], dim=-1)  # `[2**dim, dim, 2]`
+    # print(gather_ind, gather_ind.shape)
+    ind_ = gather_nd(ind01, gather_ind)  # [2**dim, dim, num_pts]
+    # print(ind_, ind_.shape)
+    ind_n = torch.transpose(ind_, 0,2).transpose(1,2)  # neighbor indices `[num_pts, 2**dim, dim]`
+    # print(ind_n, ind_n.shape)
+    lat = gather_nd(grid, ind_n) # `[num_points, 2**dim, in_features]`
+    # print(lat, lat.shape)
+
+    # weights of neighboring nodes
+    xyz0 = ind0 * cubesize  # `[num_points, dim]`
+    xyz1 = (ind0 + 1) * cubesize  # `[num_points, dim]`
+    xyz01 = torch.stack([xyz0, xyz1], dim=-1)  # [num_points, dim, 2]`
+    xyz01 = torch.transpose(xyz01, 0,2)  # [2, dim, num_points]
+    pos = gather_nd(xyz01, gather_ind)  # `[2**dim, dim, num_points]`
+    pos = torch.transpose(pos, 0,2).transpose(1,2) # `[num_points, 2**dim, dim]`
+    xloc = (torch.unsqueeze(pts, -2) - pos) / cubesize # `[num_points, 2**dim, dim]`
+
+    xloc = xloc.contiguous().reshape(npts, -1)
+    lat = lat.contiguous().reshape(npts, -1)
+    implicit_feats = torch.cat([lat, xloc], dim=-1) # `[num_points, 2**dim * (in_features + dim)]`
+    # print(implicit_feats, implicit_feats.shape)
+    return implicit_feats
+
+
+def gather_nd(params, indices):
+    orig_shape = list(indices.shape)
+    num_samples = np.prod(orig_shape[:-1])
+    m = orig_shape[-1]
+    n = len(params.shape)
+    if m <= n:
+        out_shape = orig_shape[:-1] + list(params.shape)[m:]
+    else:
+        raise ValueError(
+            f'the last dimension of indices must less or equal to the rank of params. Got indices:{indices.shape}, params:{params.shape}. {m} > {n}'
+        )
+
+    indices = indices.reshape((num_samples, m)).transpose(0, 1).tolist()
+    output = params[indices] 
+    return output.reshape(out_shape).contiguous()

@@ -10,6 +10,23 @@ from examples.MeanAccuracy import MeanAccuracy
 from examples.MeanIoU import MeanIoU
 from pytorch_lightning.metrics import Accuracy, ConfusionMatrix, MetricCollection
 
+class LambdaStepLR(LambdaLR):
+  def __init__(self, optimizer, lr_lambda, last_step=-1):
+    super(LambdaStepLR, self).__init__(optimizer, lr_lambda, last_step)
+
+  @property
+  def last_step(self):
+    """Use last_epoch for the step counter"""
+    return self.last_epoch
+
+  @last_step.setter
+  def last_step(self, v):
+    self.last_epoch = v
+
+class SquaredLR(LambdaStepLR):
+  """ Used for SGD Lars"""
+  def __init__(self, optimizer, max_iter, last_step=-1):
+    super(SquaredLR, self).__init__(optimizer, lambda s: (1 - s / (max_iter + 1))**2, last_step)
 
 def to_precision(inputs, precision):
     if precision == 16:
@@ -58,7 +75,6 @@ class MinkowskiSegmentationModule(LightningModule):
         if self.global_step % 10 == 0:
             torch.cuda.empty_cache()
         logits = self(sinput).slice(in_field).F
-        print(logits.shape)
         train_loss = self.criterion(logits, target)
         self.log('train_loss', train_loss, sync_dist=True, prog_bar=True, on_step=True, on_epoch=True)
         self.log_metrics(logits, target, self.train_metrics)
@@ -115,8 +131,11 @@ class MinkowskiSegmentationModule(LightningModule):
         if self.scheduler == 'StepLR':
             scheduler = StepLR(
                 optimizer, step_size=self.step_size, gamma=self.step_gamma, last_epoch=-1)
+        elif self.scheduler == 'SquaredLR':
+            scheduler = SquaredLR(optimizer, max_iter=self.max_iter, last_step=-1)
         else:
             logging.error('Scheduler not supported')
+            raise ValueError('Scheduler not supported')
 
         return [optimizer], [scheduler]
 
@@ -143,7 +162,7 @@ class MinkowskiSegmentationModule(LightningModule):
 
         # Optimizer arguments
         parser.add_argument('--optimizer', type=str, default='SGD')
-        parser.add_argument('--lr', type=float, default=1e-2)
+        parser.add_argument('--lr', type=float, default=1e-1)
         parser.add_argument('--sgd_momentum', type=float, default=0.9)
         parser.add_argument('--sgd_dampening', type=float, default=0.1)
         parser.add_argument('--adam_beta1', type=float, default=0.9)
@@ -155,7 +174,7 @@ class MinkowskiSegmentationModule(LightningModule):
         parser.add_argument('--bn_momentum', type=float, default=0.02)
 
         # Scheduler
-        parser.add_argument('--scheduler', type=str, default='StepLR')
+        parser.add_argument('--scheduler', type=str, default='SquaredLR')
         parser.add_argument('--max_iter', type=int, default=6e4)
         parser.add_argument('--step_size', type=int, default=2e4)
         parser.add_argument('--step_gamma', type=float, default=0.1)
