@@ -50,12 +50,15 @@ class MinkowskiSegmentationModule(LightningModule):
         self.criterion = nn.CrossEntropyLoss(ignore_index=-100)
         self.model = MinkUNet34C(self.in_channels, self.out_channels)
         metrics = MetricCollection({'acc': Accuracy(),
-                                    'ConfusionMatrix': ConfusionMatrix(num_classes=self.out_channels),
-                                    'NormalizedConfusionMatrix': ConfusionMatrix(num_classes=self.out_channels, normalize='true'),
                                     'macc': MeanAccuracy(num_classes=self.out_channels),
                                     'miou': MeanIoU(num_classes=self.out_channels)})
         self.train_metrics = metrics.clone(prefix='train_')
         self.val_metrics = metrics.clone(prefix='val_')
+        conf_metrics = MetricCollection({'ConfusionMatrix': ConfusionMatrix(num_classes=self.out_channels),
+                                         'NormalizedConfusionMatrix': ConfusionMatrix(num_classes=self.out_channels, normalize='true')
+                                        })
+        self.train_conf_metrics = conf_metrics.clone(prefix='train_')
+        self.val_conf_metrics = conf_metrics.clone(prefix='val_')
 
     def forward(self, x):
         return self.model(x)
@@ -77,15 +80,17 @@ class MinkowskiSegmentationModule(LightningModule):
             torch.cuda.empty_cache()
         logits = self(sinput).slice(in_field).F
         train_loss = self.criterion(logits, target)
-        self.log('train_loss', train_loss, sync_dist=True, prog_bar=True, on_step=True, on_epoch=True)
-        self.log_metrics(logits, target, self.train_metrics)
-        return train_loss
+        self.log('train_loss', train_loss, sync_dist=True, prog_bar=True, on_step=False, on_epoch=True)
+        preds = logits.argmax(dim=-1)
+        valid_targets = target != -100
+        return {'loss': train_loss, 'preds': preds[valid_targets], 'target': target[valid_targets]}
 
-    def on_train_epoch_end(self, unused=None):
-        metrics_dict = self.train_metrics.compute()
-        metrics_dict = self.remove_conf_matrices(metrics_dict)
-        self.log_dict(metrics_dict, sync_dist=True, prog_bar=False)
-        self.train_metrics.reset()
+    def training_step_end(self, outputs):
+        #update and log
+        self.train_metrics(outputs['preds'], outputs['target'])
+        self.log_dict(self.train_metrics, prog_bar=False, on_epoch=True)
+        self.train_conf_metrics(outputs['preds'], outputs['target'])
+        self.log_dict(self.train_conf_metrics, prog_bar=False, on_step=False, on_epoch=False)
 
     def validation_step(self, batch, batch_idx):
         coords, feats, target = batch['coords'], batch['feats'], batch['labels']
@@ -102,15 +107,17 @@ class MinkowskiSegmentationModule(LightningModule):
         sinput = in_field.sparse()
         logits = self(sinput).slice(in_field).F
         val_loss = self.criterion(logits, target)
-        self.log('val_loss', val_loss, sync_dist=True, prog_bar=True, on_step=True, on_epoch=True)
-        self.log_metrics(logits, target, self.val_metrics)
-        return val_loss
+        self.log('val_loss', val_loss, sync_dist=True, prog_bar=True, on_step=False, on_epoch=True)
+        preds = logits.argmax(dim=-1)
+        valid_targets = target != -100
+        return {'loss': val_loss, 'preds': preds[valid_targets], 'target': target[valid_targets]}
 
-    def on_validation_epoch_end(self, unused=None):
-        metrics_dict = self.val_metrics.compute()
-        metrics_dict = self.remove_conf_matrices(metrics_dict)
-        self.log_dict(metrics_dict, sync_dist=True, prog_bar=True)
-        self.val_metrics.reset()
+    def validation_step_end(self, outputs):
+        #update and log
+        self.val_metrics(outputs['preds'], outputs['target'])
+        self.log_dict(self.val_metrics, prog_bar=True, on_epoch=True)
+        self.val_conf_metrics(outputs['preds'], outputs['target'])
+        self.log_dict(self.val_conf_metrics, prog_bar=False, on_step=False, on_epoch=False)
 
     def configure_optimizers(self):
         if self.optimizer == 'SGD':
@@ -140,11 +147,6 @@ class MinkowskiSegmentationModule(LightningModule):
             raise ValueError('Scheduler not supported')
 
         return [optimizer], [scheduler]
-
-    def log_metrics(self, logits, target, metrics_fn):
-        valid_idx = target != -100
-        preds = logits.argmax(dim=-1)
-        metrics_fn.update(preds[valid_idx], target[valid_idx])
 
     def remove_conf_matrices(self, metrics_dict):
         new_metrics_dict = dict(metrics_dict)
@@ -184,3 +186,13 @@ class MinkowskiSegmentationModule(LightningModule):
         parser.add_argument('--exp_gamma', type=float, default=0.95)
         parser.add_argument('--exp_step_size', type=float, default=445)
         return parent_parser
+
+
+def fast_hist(pred, label, n):
+  k = (label >= 0) & (label < n)
+  return np.bincount(n * label[k].astype(int) + pred[k], minlength=n**2).reshape(n, n)
+
+
+def per_class_iu(hist):
+  with np.errstate(divide='ignore', invalid='ignore'):
+    return np.diag(hist) / (hist.sum(1) + hist.sum(0) - np.diag(hist))

@@ -39,12 +39,14 @@ def plot_confusion_matrix(trainer, pl_module, confusion_metric, plot_title):
 
 class ConfusionMatrixPlotCallback(Callback):
     def on_train_epoch_end(self, trainer, pl_module, unused=None):
-        plot_confusion_matrix(trainer, pl_module, pl_module.train_metrics["ConfusionMatrix"], "train_confusion_matrix")
-        plot_confusion_matrix(trainer, pl_module, pl_module.train_metrics["NormalizedConfusionMatrix"], "train_normalized_confusion_matrix")
+        plot_confusion_matrix(trainer, pl_module, pl_module.train_conf_metrics["ConfusionMatrix"], "train_confusion_matrix")
+        plot_confusion_matrix(trainer, pl_module, pl_module.train_conf_metrics["NormalizedConfusionMatrix"], "train_normalized_confusion_matrix")
+        pl_module.train_conf_metrics.reset()
         
     def on_validation_epoch_end(self, trainer, pl_module):
-        plot_confusion_matrix(trainer, pl_module, pl_module.val_metrics["ConfusionMatrix"], "val_confusion_matrix")
-        plot_confusion_matrix(trainer, pl_module, pl_module.val_metrics["NormalizedConfusionMatrix"], "val_normalized_confusion_matrix")
+        plot_confusion_matrix(trainer, pl_module, pl_module.val_conf_metrics["ConfusionMatrix"], "val_confusion_matrix")
+        plot_confusion_matrix(trainer, pl_module, pl_module.val_conf_metrics["NormalizedConfusionMatrix"], "val_normalized_confusion_matrix")
+        pl_module.val_conf_metrics.reset()
 
 def init_module_from_args(module, args=None, **kwargs):
     parser = argparse.ArgumentParser()
