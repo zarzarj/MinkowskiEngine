@@ -145,8 +145,13 @@ class MinkowskiSegmentationModule(LightningModule):
         else:
             logging.error('Scheduler not supported')
             raise ValueError('Scheduler not supported')
+            
+        lr_sched = {
+                    'scheduler': scheduler,
+                    'interval': 'step'  # called after each training step
+                    }
 
-        return [optimizer], [scheduler]
+        return [optimizer], [lr_sched]
 
     def remove_conf_matrices(self, metrics_dict):
         new_metrics_dict = dict(metrics_dict)
