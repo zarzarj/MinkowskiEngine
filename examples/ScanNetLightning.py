@@ -278,7 +278,7 @@ class ScanNet(LightningDataModule):
                 label_file = scan_file[:-4] + '.labels.ply'
                 labels = self.load_ply_label_file(label_file)
             else:
-                labels = np.zeros(coords.shape[0])
+                labels = torch.zeros(coords.shape[0])
             self.coords[idx] = coords
             self.colors[idx] = colors
             self.labels[idx] = labels
@@ -286,12 +286,18 @@ class ScanNet(LightningDataModule):
                 implicit_feats = self.load_impicit_feats(scan_file, coords)
                 self.implicit_feats[idx] = implicit_feats
             self.loaded[idx] = True
+
         out_dict = {'coords': coords,
                     'colors': colors,
                     'labels': labels,
                     }
         if self.use_implicit_feats:
             out_dict['implicit_feats'] = implicit_feats
+
+        if self.permute_points:
+            perm = torch.randperm(coords.shape[0])
+            for k, v in out_dict.items():
+                out_dict[k] = v[perm]
         return out_dict
 
     def get_features(self, input_dict):
@@ -399,6 +405,7 @@ class ScanNet(LightningDataModule):
         parser.add_argument("--use_coord_pos_encoding", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument("--coord_pos_encoding_multires", type=int, default=10)
         parser.add_argument("--shift_coords", type=str2bool, nargs='?', const=True, default=False)
+        parser.add_argument("--permute_points", type=str2bool, nargs='?', const=True, default=False)
         return parent_parser
 
     def cleanup(self):
