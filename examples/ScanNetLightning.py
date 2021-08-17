@@ -246,9 +246,13 @@ class ScanNet(LightningDataModule):
         colors = np.stack((plydata['vertex']['red'],
                            plydata['vertex']['green'],
                            plydata['vertex']['blue'])).T
-        coords /= self.voxel_size 
+        coords = torch.from_numpy(coords)
+        coords /= self.voxel_size
+        if self.shift_coords:
+            coords += (torch.rand(3) * 100).type_as(coords)
+        colors = torch.from_numpy(colors)
         colors = (colors / 255.) - 0.5
-        return torch.from_numpy(coords), torch.from_numpy(colors)
+        return coords, colors
 
     def load_ply_label_file(self, file_name):
         with open(file_name, 'rb') as f:
@@ -394,6 +398,7 @@ class ScanNet(LightningDataModule):
         parser.add_argument("--use_colors", type=str2bool, nargs='?', const=True, default=True)
         parser.add_argument("--use_coord_pos_encoding", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument("--coord_pos_encoding_multires", type=int, default=10)
+        parser.add_argument("--shift_coords", type=str2bool, nargs='?', const=True, default=False)
         return parent_parser
 
     def cleanup(self):

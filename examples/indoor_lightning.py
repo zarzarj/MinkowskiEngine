@@ -16,7 +16,7 @@ import torchvision
 from PIL import Image
 import matplotlib.pyplot as plt
 from sklearn.metrics import ConfusionMatrixDisplay
-from pytorch_lightning.callbacks import ModelCheckpoint, Callback
+from pytorch_lightning.callbacks import ModelCheckpoint, LearningRateMonitor, Callback
 from pytorch_lightning.plugins import DDPPlugin
 from examples.str2bool import str2bool
 
@@ -67,6 +67,7 @@ if __name__ == "__main__":
     callbacks = []
     callbacks.append(ConfusionMatrixPlotCallback())
     callbacks.append(ModelCheckpoint(monitor='val_miou', mode = 'max', save_top_k=1))
+    callbacks.append(LearningRateMonitor(logging_interval='step'))
     lightning_root_dir = os.path.join('logs', main_args.exp_name, main_args.run_mode)
     pl_trainer, args = init_module_from_args(Trainer, args, callbacks=callbacks,
                                              default_root_dir=os.path.join(lightning_root_dir),
