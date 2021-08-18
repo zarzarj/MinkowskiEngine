@@ -71,11 +71,11 @@ class MainArgs():
         parser = parent_parser.add_argument_group("MinkSegModel")
         parser.add_argument("--exp_name", type=str, default='default')
         parser.add_argument('--run_mode', type=str, default='train', choices=['train','validate','test'])
+        parser.add_argument('--seed', type=int, default=42)
         return parent_parser
 
 
 if __name__ == "__main__":
-    seed_everything(42)
     main_args, args = init_module_from_args(MainArgs)
     pl_module, args = init_module_from_args(MinkowskiSegmentationModule, args)
     pl_datamodule, args = init_module_from_args(ScanNet, args)
@@ -88,6 +88,9 @@ if __name__ == "__main__":
     pl_trainer, args = init_module_from_args(Trainer, args, callbacks=callbacks,
                                              default_root_dir=os.path.join(lightning_root_dir),
                                              plugins=DDPPlugin(find_unused_parameters=False))
+
+    seed_everything(main_args.seed)
+
     train_dir = os.path.join(lightning_root_dir, '..', 'train', 'lightning_logs')
     train_versions = glob.glob(os.path.join(train_dir, '*'))
     if len(train_versions) > 0:
