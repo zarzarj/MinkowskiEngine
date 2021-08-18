@@ -217,24 +217,15 @@ class ScanNet(LightningDataModule):
                 }
 
     def load_scan_files(self, idxs):
-        coords = []
-        colors = []
-        labels = []
-        if self.use_implicit_feats:
-            implicit_feats = []
+        out_dict = {}
         for i in idxs:
             input_dict = self.load_ply(i)
-            if self.use_implicit_feats:
-                implicit_feats.append(input_dict['implicit_feats'])
-            coords.append(input_dict['coords'])
-            colors.append(input_dict['colors'])
-            labels.append(input_dict['labels'])
-        out_dict = {'coords': coords,
-                    'colors': colors,
-                    'labels': labels,
-                    }
-        if self.use_implicit_feats:
-            out_dict['implicit_feats'] = implicit_feats
+            input_dict = self.process_input(input_dict)
+            for k, v in input_dict.items():
+                if i == idxs[0]:
+                    out_dict[k] = [v]
+                else:
+                    out_dict[k].append(v)
         return out_dict
 
     def load_ply_file(self, file_name):
@@ -248,7 +239,7 @@ class ScanNet(LightningDataModule):
                            plydata['vertex']['blue'])).T
         coords = torch.from_numpy(coords)
         coords /= self.voxel_size
-        if self.shift_coords:
+        if self.shift_coords and self.trainer.training:
             coords += (torch.rand(3) * 100).type_as(coords)
         colors = torch.from_numpy(colors)
         colors = (colors / 255.) - 0.5
@@ -259,8 +250,6 @@ class ScanNet(LightningDataModule):
             plydata = PlyData.read(f)
         labels = np.array(plydata['vertex']['label'], dtype=np.uint8)
         labels = np.array([self.label_map[x] for x in labels], dtype=np.int)
-        # print(labels)
-        # print(labels.max(), labels.min())
         return torch.from_numpy(labels)
 
     def load_ply(self, idx):
@@ -283,7 +272,7 @@ class ScanNet(LightningDataModule):
             self.colors[idx] = colors
             self.labels[idx] = labels
             if self.use_implicit_feats:
-                implicit_feats = self.load_impicit_feats(scan_file, coords)
+                implicit_feats = self.load_implicit_feats(scan_file, coords)
                 self.implicit_feats[idx] = implicit_feats
             self.loaded[idx] = True
 
@@ -293,12 +282,14 @@ class ScanNet(LightningDataModule):
                     }
         if self.use_implicit_feats:
             out_dict['implicit_feats'] = implicit_feats
-
-        if self.permute_points:
-            perm = torch.randperm(coords.shape[0])
-            for k, v in out_dict.items():
-                out_dict[k] = v[perm]
         return out_dict
+
+    def process_input(self, input_dict):
+        if self.permute_points:
+            perm = torch.randperm(input_dict['coords'].shape[0])
+            for k, v in input_dict.items():
+                input_dict[k] = v[perm]
+        return input_dict
 
     def get_features(self, input_dict):
         feats = []
@@ -318,7 +309,7 @@ class ScanNet(LightningDataModule):
         return out_feats
 
 
-    def load_impicit_feats(self, file_name, pts):
+    def load_implicit_feats(self, file_name, pts):
         scene_name = file_name.split('/')[-2]
         implicit_feat_file = os.path.join(self.data_dir, 'implicit_feats', scene_name+'-d1e-05-ps0.pt')
         if not os.path.exists(implicit_feat_file):
@@ -549,4 +540,3 @@ def get_embedder(multires=10):
     embedder_obj = Embedder(**embed_kwargs)
     embed = lambda x, eo=embedder_obj : eo.embed(x)
     return embed, embedder_obj.out_dim
-    

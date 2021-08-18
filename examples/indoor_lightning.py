@@ -10,6 +10,7 @@ from pytorch_lightning import Trainer, seed_everything
 
 from examples.MinkLightning import MinkowskiSegmentationModule
 from examples.ScanNetLightning import ScanNet
+from examples.ScanNetLightningLIG import ScanNetLIG
 import MinkowskiEngine as ME
 
 import torchvision
