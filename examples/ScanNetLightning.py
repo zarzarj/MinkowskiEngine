@@ -549,3 +549,4 @@ def get_embedder(multires=10):
     embedder_obj = Embedder(**embed_kwargs)
     embed = lambda x, eo=embedder_obj : eo.embed(x)
     return embed, embedder_obj.out_dim
+    

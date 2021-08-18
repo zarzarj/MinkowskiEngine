@@ -56,14 +56,28 @@ def init_module_from_args(module, args=None, **kwargs):
     args_dict.update(kwargs)
     return module(**args_dict), args
 
+class MainArgs():
+    def __init__(self, **kwargs):
+        super().__init__()
+        for name, value in kwargs.items():
+            if name != "self":
+                try:
+                    setattr(self, name, value)
+                except:
+                    print(name, value)
+
+    @staticmethod
+    def add_argparse_args(parent_parser):
+        parser = parent_parser.add_argument_group("MinkSegModel")
+        parser.add_argument("--exp_name", type=str, default='default')
+        parser.add_argument('--run_mode', type=str, default='train', choices=['train','validate','test'])
+        return parent_parser
+
+
 if __name__ == "__main__":
     seed_everything(42)
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--exp_name", type=str, default='default')
-    parser.add_argument('--run_mode', type=str, default='train', choices=['train','validate','test'])
-    main_args, args = parser.parse_known_args()
-
-    pl_module, args = init_module_from_args(MinkowskiSegmentationModule)
+    main_args, args = init_module_from_args(MainArgs)
+    pl_module, args = init_module_from_args(MinkowskiSegmentationModule, args)
     pl_datamodule, args = init_module_from_args(ScanNet, args)
 
     callbacks = []

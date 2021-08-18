@@ -145,7 +145,7 @@ class MinkowskiSegmentationModule(LightningModule):
         else:
             logging.error('Scheduler not supported')
             raise ValueError('Scheduler not supported')
-            
+
         lr_sched = {
                     'scheduler': scheduler,
                     'interval': 'step'  # called after each training step
@@ -191,13 +191,4 @@ class MinkowskiSegmentationModule(LightningModule):
         parser.add_argument('--exp_gamma', type=float, default=0.95)
         parser.add_argument('--exp_step_size', type=float, default=445)
         return parent_parser
-
-
-def fast_hist(pred, label, n):
-  k = (label >= 0) & (label < n)
-  return np.bincount(n * label[k].astype(int) + pred[k], minlength=n**2).reshape(n, n)
-
-
-def per_class_iu(hist):
-  with np.errstate(divide='ignore', invalid='ignore'):
-    return np.diag(hist) / (hist.sum(1) + hist.sum(0) - np.diag(hist))
+        
