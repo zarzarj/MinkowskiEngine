@@ -5,68 +5,120 @@ from torch.optim.lr_scheduler import LambdaLR, StepLR
 
 from pytorch_lightning.core import LightningModule
 import MinkowskiEngine as ME
-from examples.minkunet import MinkUNet34C
+from examples.minkunet import MinkUNet34C, MinkUNet14A
 from examples.MeanAccuracy import MeanAccuracy
 from examples.MeanIoU import MeanIoU
 from pytorch_lightning.metrics import Accuracy, ConfusionMatrix, MetricCollection
+from examples.MinkLightning import MinkowskiSegmentationModule
 
-class LambdaStepLR(LambdaLR):
-  def __init__(self, optimizer, lr_lambda, last_step=-1):
-    super(LambdaStepLR, self).__init__(optimizer, lr_lambda, last_step)
+def act_layer(act, inplace=False, neg_slope=0.2, n_prelu=1):
+    # activation layer
+    act = act.lower()
+    if act == 'relu':
+        layer = nn.ReLU(inplace)
+    elif act == 'leakyrelu':
+        layer = nn.LeakyReLU(neg_slope, inplace)
+    elif act == 'prelu':
+        layer = nn.PReLU(num_parameters=n_prelu, init=neg_slope)
+    else:
+        raise NotImplementedError('activation layer [%s] is not found' % act)
+    return layer
 
-  @property
-  def last_step(self):
-    """Use last_epoch for the step counter"""
-    return self.last_epoch
+def norm_layer(norm_type, nc, track_running_stats=True):
+    # normalization layer 1d
+    norm = norm_type.lower()
+    if norm == 'batch':
+        layer = nn.BatchNorm1d(nc, affine=True, track_running_stats=track_running_stats)
+    elif norm == 'layer':
+        layer = nn.LayerNorm(nc, elementwise_affine=True)
+    elif norm == 'instance':
+        layer = nn.InstanceNorm1d(nc, affine=False)
+    elif norm == 'none':
+        layer = nn.Identity()
+    else:
+        raise NotImplementedError('normalization layer [%s] is not found' % norm)
+    return layer
 
-  @last_step.setter
-  def last_step(self, v):
-    self.last_epoch = v
+class MLP(nn.Sequential):
+    def __init__(self, mlp_channels, act='relu', norm='batch', bias=True, dropout=0.0):
+        m = []
+        in_channels = mlp_channels[0]
+        for hidden_channels in mlp_channels[1:]:
+            m.append(nn.Conv1d(in_channels, hidden_channels, kernel_size=1, bias=bias))
+            if act is not None and act.lower() != 'none':
+                m.append(act_layer(act))
+            if norm is not None and norm.lower() != 'none':
+                m.append(norm_layer(norm, hidden_channels))
+            if dropout > 0:
+                m.append(nn.Dropout2d(dropout, inplace=True))
+            in_channels = hidden_channels
+        super(MLP, self).__init__(*m)
 
-class SquaredLR(LambdaStepLR):
-  """ Used for SGD Lars"""
-  def __init__(self, optimizer, max_iter, last_step=-1):
-    super(SquaredLR, self).__init__(optimizer, lambda s: (1 - s / (max_iter + 1))**2, last_step)
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        for m in self.modules():
+            if isinstance(m, nn.Linear):
+                nn.init.kaiming_normal_(m.weight)
+                if m.bias is not None:
+                    nn.init.zeros_(m.bias)
+            elif isinstance(m, nn.BatchNorm1d) or isinstance(m, nn.InstanceNorm1d):
+                m.weight.data.fill_(1)
+                m.bias.data.zero_()
 
 def to_precision(inputs, precision):
-    if precision == 16:
+    # print(precision)
+    if precision == 'mixed':
         dtype = torch.float16
     elif precision == 32:
         dtype = torch.float32
     elif precision == 64:
         dtype = torch.float64
-    return tuple([input.to(dtype) for input in inputs])
+    outputs = []
+    for input in inputs:
+        if isinstance(input, list):
+            outputs.append([linput.to(dtype) for linput in input])
+        else:
+            outputs.append(input.to(dtype))
+    return tuple(outputs)
 
-class MinkowskiSegmentationModule(LightningModule):
+class MinkowskiSegmentationModuleLIG(MinkowskiSegmentationModule):
     def __init__(self, **kwargs):
-        super().__init__()
+        super().__init__(**kwargs)
         self.save_hyperparameters()
-        for name, value in kwargs.items():
-            if name != "self":
-                try:
-                    setattr(self, name, value)
-                except:
-                    print(name, value)
-        self.criterion = nn.CrossEntropyLoss(ignore_index=-100)
-        self.model = MinkUNet34C(self.in_channels, self.out_channels)
-        metrics = MetricCollection({'acc': Accuracy(),
-                                    'macc': MeanAccuracy(num_classes=self.out_channels),
-                                    'miou': MeanIoU(num_classes=self.out_channels)})
-        self.train_metrics = metrics.clone(prefix='train_')
-        self.val_metrics = metrics.clone(prefix='val_')
-        conf_metrics = MetricCollection({'ConfusionMatrix': ConfusionMatrix(num_classes=self.out_channels),
-                                         'NormalizedConfusionMatrix': ConfusionMatrix(num_classes=self.out_channels, normalize='true')
-                                        })
-        self.train_conf_metrics = conf_metrics.clone(prefix='train_')
-        self.val_conf_metrics = conf_metrics.clone(prefix='val_')
+        self.mlp_channels = (self.in_channels + 3) * torch.tensor([1,2,4,2])
+        self.model = MinkUNet34C(self.in_channels, self.mlp_channels[0] - 3)
+        self.seg_head = nn.Sequential(MLP(self.mlp_channels),
+                                      nn.Conv1d(self.mlp_channels[-1], self.out_channels, kernel_size=1, bias=True)
+                                      # nn.Linear(self.mlp_channels[-1], self.out_channels)
+                                      )
+        # print(self)
 
-    def forward(self, x):
-        return self.model(x)
+    def forward(self, x, pts):
+        # print(x)
+        # print(x)
+        seg_lats, _, _ = self.model(x).dense() # (b, *sizes, c)
+        # print(seg_lats)
+        bs = seg_lats.shape[0]
+        seg_occ_in_list = []
+        weights_list = []
+        for i in range(bs):
+            cur_seg_occ_in, cur_weights = get_implicit_feats(pts[i], seg_lats[i].permute([1,2,3,0])) # (num_pts, 2**dim, c + 3), (num_pts, 2**dim)
+            seg_occ_in_list.append(cur_seg_occ_in)
+            weights_list.append(cur_weights)
+        seg_occ_in = torch.cat(seg_occ_in_list, dim=0).transpose(1,2) # (b x num_pts, c + 3, 2**dim)
+        weights = torch.cat(weights_list, dim=0) # (b x num_pts, 2**dim)
+        # print(weights.shape, seg_occ_in.shape, weights, seg_occ_in)
+        seg_probs = self.seg_head(seg_occ_in) # (b x num_pts, out_c, 2**dim)
+        weights = weights.unsqueeze(dim=-1) # (b x num_pts, 2**dim, 1)
+        # print(weights.shape, seg_probs.shape)
+        seg_weighted_probs = torch.bmm(seg_probs, weights).squeeze(dim=-1) # (b x num_pts, out_c)
+        return seg_weighted_probs
 
     def training_step(self, batch, batch_idx):
-        coords, feats, target = batch['coords'], batch['feats'], batch['labels']
-        coords, feats, target = to_precision((coords, feats, target), self.trainer.precision)     
-        target = target.long()
+        coords, feats, pts, target = batch['coords'], batch['feats'], batch['pts'], batch['labels']
+        coords, feats, pts = to_precision((coords, feats, pts), self.trainer.precision)  
+        target = torch.cat(target, dim=0)  
         in_field = ME.TensorField(
             features=feats,
             coordinates=coords,
@@ -78,25 +130,19 @@ class MinkowskiSegmentationModule(LightningModule):
         
         if self.global_step % 10 == 0:
             torch.cuda.empty_cache()
-        logits = self(sinput).slice(in_field).F
+        logits = self(sinput, pts)
+        # print(logits, target, logits.shape, target.shape)
+        # print(logits, logits.argmax(-1))
         train_loss = self.criterion(logits, target)
         self.log('train_loss', train_loss, sync_dist=True, prog_bar=True, on_step=False, on_epoch=True)
         preds = logits.argmax(dim=-1)
         valid_targets = target != -100
         return {'loss': train_loss, 'preds': preds[valid_targets], 'target': target[valid_targets]}
 
-    def training_step_end(self, outputs):
-        #update and log
-        self.train_metrics(outputs['preds'], outputs['target'])
-        self.log_dict(self.train_metrics, prog_bar=False, on_epoch=True)
-        self.train_conf_metrics(outputs['preds'], outputs['target'])
-        self.log_dict(self.train_conf_metrics, prog_bar=False, on_step=False, on_epoch=False)
-
     def validation_step(self, batch, batch_idx):
-        coords, feats, target = batch['coords'], batch['feats'], batch['labels']
-        coords, feats, target = to_precision((coords, feats, target), self.trainer.precision)
-        target = target.long()
-        # print(target.min(), target.max(), target)
+        coords, feats, pts, target = batch['coords'], batch['feats'], batch['pts'], batch['labels']
+        coords, feats, pts = to_precision((coords, feats, pts), self.trainer.precision)
+        target = torch.cat(target, dim=0) 
         in_field = ME.TensorField(
             features=feats,
             coordinates=coords,
@@ -105,129 +151,45 @@ class MinkowskiSegmentationModule(LightningModule):
             device=self.device,
         )
         sinput = in_field.sparse()
-        logits = self(sinput).slice(in_field).F
+        
+        if self.global_step % 10 == 0:
+            torch.cuda.empty_cache()
+        logits = self(sinput, pts)
         val_loss = self.criterion(logits, target)
         self.log('val_loss', val_loss, sync_dist=True, prog_bar=True, on_step=False, on_epoch=True)
         preds = logits.argmax(dim=-1)
         valid_targets = target != -100
         return {'loss': val_loss, 'preds': preds[valid_targets], 'target': target[valid_targets]}
 
-    def validation_step_end(self, outputs):
-        #update and log
-        self.val_metrics(outputs['preds'], outputs['target'])
-        self.log_dict(self.val_metrics, prog_bar=True, on_epoch=True)
-        self.val_conf_metrics(outputs['preds'], outputs['target'])
-        self.log_dict(self.val_conf_metrics, prog_bar=False, on_step=False, on_epoch=False)
-
-    def configure_optimizers(self):
-        if self.optimizer == 'SGD':
-            optimizer = SGD(
-                self.model.parameters(),
-                lr=self.lr,
-                momentum=self.sgd_momentum,
-                dampening=self.sgd_dampening,
-                weight_decay=self.weight_decay)
-        elif self.optimizer == 'Adam':
-            optimizer = Adam(
-                self.model.parameters(),
-                lr=self.lr,
-                betas=(self.adam_beta1, self.adam_beta2),
-                weight_decay=self.weight_decay)
-        else:
-            logging.error('Optimizer type not supported')
-            raise ValueError('Optimizer type not supported')
-
-        if self.scheduler == 'StepLR':
-            scheduler = StepLR(
-                optimizer, step_size=self.step_size, gamma=self.step_gamma, last_epoch=-1)
-        elif self.scheduler == 'SquaredLR':
-            scheduler = SquaredLR(optimizer, max_iter=self.max_iter, last_step=-1)
-        else:
-            logging.error('Scheduler not supported')
-            raise ValueError('Scheduler not supported')
-
-        lr_sched = {
-                    'scheduler': scheduler,
-                    'interval': 'step'  # called after each training step
-                    }
-
-        return [optimizer], [lr_sched]
-
-    def remove_conf_matrices(self, metrics_dict):
-        new_metrics_dict = dict(metrics_dict)
-        conf_matrices = []
-        for key in new_metrics_dict.keys():
-            if "ConfusionMatrix" in key:
-                conf_matrices.append(key)
-        for key in conf_matrices:
-            new_metrics_dict.pop(key)
-        return new_metrics_dict
-
     @staticmethod
     def add_argparse_args(parent_parser):
-        parser = parent_parser.add_argument_group("MinkSegModel")
-        parser.add_argument("--in_channels", type=int, default=3)
-        parser.add_argument("--out_channels", type=int, default=20)
-
-        # Optimizer arguments
-        parser.add_argument('--optimizer', type=str, default='SGD')
-        parser.add_argument('--lr', type=float, default=1e-1)
-        parser.add_argument('--sgd_momentum', type=float, default=0.9)
-        parser.add_argument('--sgd_dampening', type=float, default=0.1)
-        parser.add_argument('--adam_beta1', type=float, default=0.9)
-        parser.add_argument('--adam_beta2', type=float, default=0.999)
-        parser.add_argument('--weight_decay', type=float, default=1e-4)
-        parser.add_argument('--param_histogram_freq', type=int, default=100)
-        # parser.add_argument('--save_param_histogram', type=str2bool, default=False)
-        parser.add_argument('--iter_size', type=int, default=1, help='accumulate gradient')
-        parser.add_argument('--bn_momentum', type=float, default=0.02)
-
-        # Scheduler
-        parser.add_argument('--scheduler', type=str, default='SquaredLR')
-        parser.add_argument('--max_iter', type=int, default=6e4)
-        parser.add_argument('--step_size', type=int, default=2e4)
-        parser.add_argument('--step_gamma', type=float, default=0.1)
-        parser.add_argument('--poly_power', type=float, default=0.9)
-        parser.add_argument('--exp_gamma', type=float, default=0.95)
-        parser.add_argument('--exp_step_size', type=float, default=445)
+        parent_parser = MinkowskiSegmentationModule.add_argparse_args(parent_parser)
+        parser = parent_parser.add_argument_group("MinkSegModelLIG")
         return parent_parser
-        
 
-def get_implicit_feats(pts, lats, mask, part_size=0.25):
+def get_implicit_feats(pts, grid, part_size=0.25):
     """Regular grid interpolator, returns inpterpolation coefficients.
     Args:
     pts: `[num_points, dim]` tensor, coordinates of points
-    lats: `[num_nonempty_lats, dim]` sparse tensor of latents
-    mask: `[*size]` mask for nonempty latents
+    grid: `[b, *sizes, dim]` tensor of latents
 
     Returns:
     implicit feats: `[num_points, 2**dim * ( features + dim )]` tensor, neighbor
     latent codes and relative locations for each input point .
     """
     # get dimensions
-    size = torch.from_numpy(np.array(mask.shape))
-    xmin = torch.min(pts[:, :3], 0)[0]
-    xmin -= part_size
-    true_shape = (size - 1) / 2.0
-    xmax = xmin + true_shape * part_size
-
-    grid = torch.zeros(mask.shape + (lats.shape[-1],), dtype=torch.float32)
-    # print(grid.shape)
-    mask = torch.from_numpy(mask).bool()
-    grid[mask] = torch.from_numpy(lats)
-
     npts = pts.shape[0]
-    cubesize = 1.0/(size-1.0)
-    dim = len(size)
-
+    dim = pts.shape[1]
+    xmin = torch.min(pts, dim=0)[0] - part_size
     # normalize coords for interpolation
-    bbox = xmax - xmin
-    pts = (pts - xmin) / bbox
-    pts = torch.clip(pts, 1e-6, 1-1e-6)  # clip to boundary of the bbox
+    pts -= xmin
 
     # find neighbor indices
-    ind0 = torch.floor(pts / cubesize)  # `[num_points, dim]`
-    ind1 = torch.ceil(pts / cubesize)  # `[num_points, dim]`
+    ind0 = torch.floor(2 * pts / part_size)-1  # `[num_points, dim]`
+    # print(grid.shape, ind0.max(), ind0.min(), pts.max(dim=0), pts.min(dim=0))
+    ind1 = torch.ceil(2 * pts / part_size)-1  # `[num_points, dim]`
+    # print(ind0.max(dim=0), ind0.min(dim=0))
+    # print(ind1.max(dim=0), ind1.min(dim=0))
     ind01 = torch.stack([ind0, ind1], dim=0)  # `[2, num_points, dim]`
     ind01 = torch.transpose(ind01, 1, 2)  # `[2, dim, num_points]`
 
@@ -244,28 +206,29 @@ def get_implicit_feats(pts, lats, mask, part_size=0.25):
     # print(ind_, ind_.shape)
     ind_n = torch.transpose(ind_, 0,2).transpose(1,2)  # neighbor indices `[num_pts, 2**dim, dim]`
     # print(ind_n, ind_n.shape)
+    # print(ind_n[...,0].max(), ind_n[...,1].max(), ind_n[...,2].max(), grid.shape)
     lat = gather_nd(grid, ind_n) # `[num_points, 2**dim, in_features]`
     # print(lat, lat.shape)
 
     # weights of neighboring nodes
-    xyz0 = ind0 * cubesize  # `[num_points, dim]`
-    xyz1 = (ind0 + 1) * cubesize  # `[num_points, dim]`
+    xyz0 = (ind0+1) * (part_size / 2)  # `[num_points, dim]`
+    xyz1 = (ind0 + 2) * (part_size / 2)  # `[num_points, dim]`
     xyz01 = torch.stack([xyz0, xyz1], dim=-1)  # [num_points, dim, 2]`
     xyz01 = torch.transpose(xyz01, 0,2)  # [2, dim, num_points]
+    # print(gather_ind.max(), gather_ind.min(), xyz01.shape)
     pos = gather_nd(xyz01, gather_ind)  # `[2**dim, dim, num_points]`
     pos = torch.transpose(pos, 0,2).transpose(1,2) # `[num_points, 2**dim, dim]`
-    xloc = (torch.unsqueeze(pts, -2) - pos) / cubesize # `[num_points, 2**dim, dim]`
 
-    xloc = xloc.contiguous().reshape(npts, -1)
-    lat = lat.contiguous().reshape(npts, -1)
+    xloc = (torch.unsqueeze(pts, -2) - pos) # `[num_points, 2**dim, dim]`
     implicit_feats = torch.cat([lat, xloc], dim=-1) # `[num_points, 2**dim * (in_features + dim)]`
-    # print(implicit_feats, implicit_feats.shape)
-    return implicit_feats
 
+    dxyz_ = torch.abs(xloc) # `[num_points, 2**dim, dim]`
+    weights = torch.prod(dxyz_, axis=-1)
+    return implicit_feats, weights
 
 def gather_nd(params, indices):
     orig_shape = list(indices.shape)
-    num_samples = np.prod(orig_shape[:-1])
+    num_samples = torch.prod(torch.tensor(orig_shape[:-1]))
     m = orig_shape[-1]
     n = len(params.shape)
     if m <= n:
@@ -275,6 +238,8 @@ def gather_nd(params, indices):
             f'the last dimension of indices must less or equal to the rank of params. Got indices:{indices.shape}, params:{params.shape}. {m} > {n}'
         )
 
+    # print(indices.shape, params.shape, indices.max(), indices.min())
     indices = indices.reshape((num_samples, m)).transpose(0, 1).tolist()
+    # print(indices.shape, params.shape, indices.max(), indices.min())
     output = params[indices] 
     return output.reshape(out_shape).contiguous()

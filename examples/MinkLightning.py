@@ -66,7 +66,6 @@ class MinkowskiSegmentationModule(LightningModule):
     def training_step(self, batch, batch_idx):
         coords, feats, target = batch['coords'], batch['feats'], batch['labels']
         coords, feats, target = to_precision((coords, feats, target), self.trainer.precision)     
-        target = target.long()
         in_field = ME.TensorField(
             features=feats,
             coordinates=coords,
@@ -95,7 +94,6 @@ class MinkowskiSegmentationModule(LightningModule):
     def validation_step(self, batch, batch_idx):
         coords, feats, target = batch['coords'], batch['feats'], batch['labels']
         coords, feats, target = to_precision((coords, feats, target), self.trainer.precision)
-        target = target.long()
         # print(target.min(), target.max(), target)
         in_field = ME.TensorField(
             features=feats,
@@ -122,14 +120,14 @@ class MinkowskiSegmentationModule(LightningModule):
     def configure_optimizers(self):
         if self.optimizer == 'SGD':
             optimizer = SGD(
-                self.model.parameters(),
+                self.parameters(),
                 lr=self.lr,
                 momentum=self.sgd_momentum,
                 dampening=self.sgd_dampening,
                 weight_decay=self.weight_decay)
         elif self.optimizer == 'Adam':
             optimizer = Adam(
-                self.model.parameters(),
+                self.parameters(),
                 lr=self.lr,
                 betas=(self.adam_beta1, self.adam_beta2),
                 weight_decay=self.weight_decay)
@@ -191,4 +189,3 @@ class MinkowskiSegmentationModule(LightningModule):
         parser.add_argument('--exp_gamma', type=float, default=0.95)
         parser.add_argument('--exp_step_size', type=float, default=445)
         return parent_parser
-        

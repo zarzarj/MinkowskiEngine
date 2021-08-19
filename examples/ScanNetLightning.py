@@ -2,6 +2,7 @@ import os
 import glob
 import time
 import math
+import copy
 import inspect
 from typing import Any, Optional, List, NamedTuple
 
@@ -162,27 +163,8 @@ class ScanNet(LightningDataModule):
             self.scan_files = glob.glob(os.path.join(self.scans_test_dir, '*', '_vh_clean_2.ply'))
             self.test_idx = torch.from_numpy(np.arange(len(self.scan_files)))
         self.scan_files.sort()
-
-        if self.preload and self.in_memory:
-            t = time.perf_counter()
-            print('Reading dataset...', end=' ', flush=True)
-            # print(self.scan_files)
-            input_dict = self.load_scan_files(np.arange(len(self.scan_files)))
-            self.coords = input_dict['coords']
-            self.colors = input_dict['colors']
-            self.labels = input_dict['labels']
-            if self.use_implicit_feats:
-                self.implicit_feats = input_dict['implicit_feats']
-            # print(self.coords)
-            print(f'Done! [{time.perf_counter() - t:.2f}s]')
-        else:
-            self.loaded = np.zeros(len(self.scan_files), dtype=np.bool)
-            self.coords = [None]*len(self.scan_files)
-            self.colors = [None]*len(self.scan_files)
-            self.labels = [None]*len(self.scan_files)
-            if self.use_implicit_feats:
-                self.implicit_feats = [None]*len(self.scan_files)
-
+        self.loaded = np.zeros(len(self.scan_files), dtype=np.bool)
+        self.samples = [None]*len(self.scan_files)
         if self.use_coord_pos_encoding:
             self.embedder, _ = get_embedder(self.coord_pos_encoding_multires)
     
@@ -238,11 +220,7 @@ class ScanNet(LightningDataModule):
                            plydata['vertex']['green'],
                            plydata['vertex']['blue'])).T
         coords = torch.from_numpy(coords)
-        coords /= self.voxel_size
-        if self.shift_coords and self.trainer.training:
-            coords += (torch.rand(3) * 100).type_as(coords)
         colors = torch.from_numpy(colors)
-        colors = (colors / 255.) - 0.5
         return coords, colors
 
     def load_ply_label_file(self, file_name):
@@ -250,15 +228,11 @@ class ScanNet(LightningDataModule):
             plydata = PlyData.read(f)
         labels = np.array(plydata['vertex']['label'], dtype=np.uint8)
         labels = np.array([self.label_map[x] for x in labels], dtype=np.int)
-        return torch.from_numpy(labels)
+        return torch.from_numpy(labels).long()
 
     def load_ply(self, idx):
-        if self.in_memory and self.loaded[idx]:
-            coords = self.coords[idx]
-            colors = self.colors[idx]
-            labels = self.labels[idx]
-            if self.use_implicit_feats:
-                implicit_feats = self.implicit_feats[idx]
+        if self.loaded[idx]:
+            out_dict = self.samples[idx]
         else:
             scan_file = self.scan_files[idx]
             coords, colors = self.load_ply_file(scan_file)
@@ -268,20 +242,16 @@ class ScanNet(LightningDataModule):
                 labels = self.load_ply_label_file(label_file)
             else:
                 labels = torch.zeros(coords.shape[0])
-            self.coords[idx] = coords
-            self.colors[idx] = colors
-            self.labels[idx] = labels
+            out_dict = {'pts': coords,
+                        'colors': colors,
+                        'labels': labels,
+                        }
             if self.use_implicit_feats:
                 implicit_feats = self.load_implicit_feats(scan_file, coords)
-                self.implicit_feats[idx] = implicit_feats
+                out_dict['implicit_feats'] = implicit_feats
+            # self.samples[idx] = copy.deepcopy(out_dict)
+            self.samples[idx] = out_dict
             self.loaded[idx] = True
-
-        out_dict = {'coords': coords,
-                    'colors': colors,
-                    'labels': labels,
-                    }
-        if self.use_implicit_feats:
-            out_dict['implicit_feats'] = implicit_feats
         return out_dict
 
     def process_input(self, input_dict):
@@ -289,6 +259,12 @@ class ScanNet(LightningDataModule):
             perm = torch.randperm(input_dict['coords'].shape[0])
             for k, v in input_dict.items():
                 input_dict[k] = v[perm]
+
+        input_dict['coords'] = input_dict['pts'] / self.voxel_size
+        if self.shift_coords and self.trainer.training:
+            input_dict['coords'] += (torch.rand(3) * 100).type_as(input_dict['coords'])
+        input_dict['colors'] = (input_dict['colors'] / 255.) - 0.5
+        del input_dict['pts']
         return input_dict
 
     def get_features(self, input_dict):
@@ -401,8 +377,6 @@ class ScanNet(LightningDataModule):
 
     def cleanup(self):
         self.sparse_voxelizer.cleanup()
-
-
 
 def get_implicit_feats(pts, lats, mask, part_size=0.25):
     """Regular grid interpolator, returns inpterpolation coefficients.

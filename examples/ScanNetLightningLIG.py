@@ -32,7 +32,8 @@ class ScanNetLIG(ScanNet):
         return parent_parser
 
     def process_input(self, input_dict):
-        mask, lats = input_dict['implicit_feats']
+        # print(input_dict)
+        input_dict['coords'], input_dict['lats'] = input_dict['implicit_feats']
         del input_dict['implicit_feats']
         return input_dict
 
@@ -42,19 +43,26 @@ class ScanNetLIG(ScanNet):
         lats_file = os.path.join(self.data_dir, 'lats', scene_name+'-d1e-05-ps0.npy')
         mask = torch.from_numpy(np.load(mask_file))
         lats = torch.from_numpy(np.load(lats_file))
-        return (mask, lats)
+        grid_range = [torch.arange(s) for s in mask.shape]
+        grid =  torch.stack(torch.meshgrid(grid_range), dim=-1)
+        coords = grid[mask]
+        # sptensor = ME.SparseTensor(features=lats, coordinates=mask)
+        return (coords, lats)
 
     def convert_batch(self, idxs):
         input_dict = self.load_scan_files(idxs)
-        feats = self.get_features(input_dict)
-        coords_batch, feats_batch, labels_batch = ME.utils.sparse_collate(input_dict['coords'],
-                                                                          feats, input_dict['labels'],
-                                                                          dtype=torch.float32)
+        coords_batch, feats_batch = ME.utils.sparse_collate(input_dict['coords'],
+                                                            input_dict['lats'],
+                                                            dtype=torch.float32)
+        # pts_batch, labels_batch = ME.utils.sparse_collate(input_dict['pts'],
+        #                                                     input_dict['labels'],
+        #                                                     dtype=torch.float32)
         # print(coords_batch.shape, feats_batch.shape, labels_batch.shape)
         # print(coords_batch, feats_batch, labels_batch)
         return {"coords": coords_batch,
                 "feats": feats_batch,
-                "labels": labels_batch,
+                "pts": input_dict['pts'],
+                "labels": input_dict['labels'],
                 }
 
 class Embedder:

@@ -9,6 +9,7 @@ from urllib.request import urlretrieve
 from pytorch_lightning import Trainer, seed_everything
 
 from examples.MinkLightning import MinkowskiSegmentationModule
+from examples.MinkLightningLIG import MinkowskiSegmentationModuleLIG
 from examples.ScanNetLightning import ScanNet
 from examples.ScanNetLightningLIG import ScanNetLIG
 import MinkowskiEngine as ME
@@ -73,13 +74,19 @@ class MainArgs():
         parser.add_argument("--exp_name", type=str, default='default')
         parser.add_argument('--run_mode', type=str, default='train', choices=['train','validate','test'])
         parser.add_argument('--seed', type=int, default=42)
+        parser.add_argument("--pipeline", type=str, default='default', choices=['default', 'implicit'])
         return parent_parser
 
 
 if __name__ == "__main__":
     main_args, args = init_module_from_args(MainArgs)
-    pl_module, args = init_module_from_args(MinkowskiSegmentationModule, args)
-    pl_datamodule, args = init_module_from_args(ScanNet, args)
+    if main_args.pipeline == 'implicit':
+        datamodule, module = ScanNetLIG, MinkowskiSegmentationModuleLIG
+    else:
+        datamodule, module = ScanNet, MinkowskiSegmentationModule
+
+    pl_module, args = init_module_from_args(module, args)
+    pl_datamodule, args = init_module_from_args(datamodule, args)
 
     callbacks = []
     callbacks.append(ConfusionMatrixPlotCallback())
