@@ -10,6 +10,7 @@ from examples.MeanAccuracy import MeanAccuracy
 from examples.MeanIoU import MeanIoU
 from pytorch_lightning.metrics import Accuracy, ConfusionMatrix, MetricCollection
 from examples.MinkLightning import MinkowskiSegmentationModule
+from examples.str2bool import str2bool
 
 def act_layer(act, inplace=False, neg_slope=0.2, n_prelu=1):
     # activation layer
@@ -86,9 +87,9 @@ class MinkowskiSegmentationModuleLIG(MinkowskiSegmentationModule):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.save_hyperparameters()
-        self.mlp_channels = (self.in_channels + 3) * torch.tensor([1,2,4,2])
+        self.mlp_channels = (self.in_channels + 3) * torch.tensor([1,4,8,4])
         self.model = MinkUNet34C(self.in_channels, self.mlp_channels[0] - 3)
-        self.seg_head = nn.Sequential(MLP(self.mlp_channels),
+        self.seg_head = nn.Sequential(MLP(self.mlp_channels, dropout=0.3),
                                       nn.Conv1d(self.mlp_channels[-1], self.out_channels, kernel_size=1, bias=True)
                                       # nn.Linear(self.mlp_channels[-1], self.out_channels)
                                       )
@@ -108,12 +109,18 @@ class MinkowskiSegmentationModuleLIG(MinkowskiSegmentationModule):
             weights_list.append(cur_weights)
         seg_occ_in = torch.cat(seg_occ_in_list, dim=0).transpose(1,2) # (b x num_pts, c + 3, 2**dim)
         weights = torch.cat(weights_list, dim=0) # (b x num_pts, 2**dim)
-        # print(weights.shape, seg_occ_in.shape, weights, seg_occ_in)
-        seg_probs = self.seg_head(seg_occ_in) # (b x num_pts, out_c, 2**dim)
         weights = weights.unsqueeze(dim=-1) # (b x num_pts, 2**dim, 1)
-        # print(weights.shape, seg_probs.shape)
-        seg_weighted_probs = torch.bmm(seg_probs, weights).squeeze(dim=-1) # (b x num_pts, out_c)
-        return seg_weighted_probs
+        if self.interpolate_grid_feats:
+            weighted_feats = torch.bmm(seg_occ_in, weights) # (b x num_pts, c + 3, 1)
+            logits = self.seg_head(weighted_feats).squeeze(dim=-1) # (b x num_pts, out_c, 1)
+        else:
+            seg_probs = self.seg_head(seg_occ_in) # (b x num_pts, out_c, 2**dim)
+            logits = torch.bmm(seg_probs, weights).squeeze(dim=-1) # (b x num_pts, out_c)
+        return logits
+
+    # def on_after_backward(self):
+    #     for k, v in self.named_parameters():
+    #         print(k, v.grad)
 
     def training_step(self, batch, batch_idx):
         coords, feats, pts, target = batch['coords'], batch['feats'], batch['pts'], batch['labels']
@@ -165,6 +172,7 @@ class MinkowskiSegmentationModuleLIG(MinkowskiSegmentationModule):
     def add_argparse_args(parent_parser):
         parent_parser = MinkowskiSegmentationModule.add_argparse_args(parent_parser)
         parser = parent_parser.add_argument_group("MinkSegModelLIG")
+        parser.add_argument("--interpolate_grid_feats", type=str2bool, nargs='?', const=True, default=False)
         return parent_parser
 
 def get_implicit_feats(pts, grid, part_size=0.25):
@@ -178,48 +186,51 @@ def get_implicit_feats(pts, grid, part_size=0.25):
     latent codes and relative locations for each input point .
     """
     # get dimensions
-    npts = pts.shape[0]
-    dim = pts.shape[1]
-    xmin = torch.min(pts, dim=0)[0] - part_size
-    # normalize coords for interpolation
-    pts -= xmin
+    with torch.no_grad():
+        npts = pts.shape[0]
+        dim = pts.shape[1]
+        xmin = torch.min(pts, dim=0)[0] - part_size
+        # normalize coords for interpolation
+        pts -= xmin
 
-    # find neighbor indices
-    ind0 = torch.floor(2 * pts / part_size)-1  # `[num_points, dim]`
-    # print(grid.shape, ind0.max(), ind0.min(), pts.max(dim=0), pts.min(dim=0))
-    ind1 = torch.ceil(2 * pts / part_size)-1  # `[num_points, dim]`
-    # print(ind0.max(dim=0), ind0.min(dim=0))
-    # print(ind1.max(dim=0), ind1.min(dim=0))
-    ind01 = torch.stack([ind0, ind1], dim=0)  # `[2, num_points, dim]`
-    ind01 = torch.transpose(ind01, 1, 2)  # `[2, dim, num_points]`
+        # find neighbor indices
+        ind0 = torch.floor(2 * pts / part_size)-1  # `[num_points, dim]`
+        # print(grid.shape, ind0.max(), ind0.min(), pts.max(dim=0), pts.min(dim=0))
+        ind1 = torch.ceil(2 * pts / part_size)-1  # `[num_points, dim]`
+        # print(ind0.max(dim=0), ind0.min(dim=0))
+        # print(ind1.max(dim=0), ind1.min(dim=0))
+        ind01 = torch.stack([ind0, ind1], dim=0)  # `[2, num_points, dim]`
+        ind01 = torch.transpose(ind01, 1, 2)  # `[2, dim, num_points]`
 
-    # generate combinations for enumerating neighbors
-    com_ = torch.stack(torch.meshgrid(*tuple(torch.tensor([[0,1]] * dim))), dim=-1)
-    com_ = torch.reshape(com_, [-1, dim])  # `[2**dim, dim]`
-    # print(com_, com_.shape)
-    dim_ = torch.reshape(torch.arange(0,dim), [1, -1])
-    dim_ = torch.tile(dim_, [2**dim, 1])  # `[2**dim, dim]`
-    # print(dim_, dim_.shape)
-    gather_ind = torch.stack([com_, dim_], dim=-1)  # `[2**dim, dim, 2]`
-    # print(gather_ind, gather_ind.shape)
-    ind_ = gather_nd(ind01, gather_ind)  # [2**dim, dim, num_pts]
-    # print(ind_, ind_.shape)
-    ind_n = torch.transpose(ind_, 0,2).transpose(1,2)  # neighbor indices `[num_pts, 2**dim, dim]`
-    # print(ind_n, ind_n.shape)
-    # print(ind_n[...,0].max(), ind_n[...,1].max(), ind_n[...,2].max(), grid.shape)
+        # generate combinations for enumerating neighbors
+        com_ = torch.stack(torch.meshgrid(*tuple(torch.tensor([[0,1]] * dim))), dim=-1)
+        com_ = torch.reshape(com_, [-1, dim])  # `[2**dim, dim]`
+        # print(com_, com_.shape)
+        dim_ = torch.reshape(torch.arange(0,dim), [1, -1])
+        dim_ = torch.tile(dim_, [2**dim, 1])  # `[2**dim, dim]`
+        # print(dim_, dim_.shape)
+        gather_ind = torch.stack([com_, dim_], dim=-1)  # `[2**dim, dim, 2]`
+        # print(gather_ind, gather_ind.shape)
+        ind_ = gather_nd(ind01, gather_ind)  # [2**dim, dim, num_pts]
+        # print(ind_, ind_.shape)
+        ind_n = torch.transpose(ind_, 0,2).transpose(1,2)  # neighbor indices `[num_pts, 2**dim, dim]`
+        # print(ind_n, ind_n.shape)
+        # print(ind_n[...,0].max(), ind_n[...,1].max(), ind_n[...,2].max(), grid.shape)
+        
+        # print(lat, lat.shape)
+
+        # weights of neighboring nodes
+        xyz0 = (ind0+1) * (part_size / 2)  # `[num_points, dim]`
+        xyz1 = (ind0 + 2) * (part_size / 2)  # `[num_points, dim]`
+        xyz01 = torch.stack([xyz0, xyz1], dim=-1)  # [num_points, dim, 2]`
+        xyz01 = torch.transpose(xyz01, 0,2)  # [2, dim, num_points]
+        # print(gather_ind.max(), gather_ind.min(), xyz01.shape)
+        pos = gather_nd(xyz01, gather_ind)  # `[2**dim, dim, num_points]`
+        pos = torch.transpose(pos, 0,2).transpose(1,2) # `[num_points, 2**dim, dim]`
+
+        xloc = (torch.unsqueeze(pts, -2) - pos) # `[num_points, 2**dim, dim]`
+
     lat = gather_nd(grid, ind_n) # `[num_points, 2**dim, in_features]`
-    # print(lat, lat.shape)
-
-    # weights of neighboring nodes
-    xyz0 = (ind0+1) * (part_size / 2)  # `[num_points, dim]`
-    xyz1 = (ind0 + 2) * (part_size / 2)  # `[num_points, dim]`
-    xyz01 = torch.stack([xyz0, xyz1], dim=-1)  # [num_points, dim, 2]`
-    xyz01 = torch.transpose(xyz01, 0,2)  # [2, dim, num_points]
-    # print(gather_ind.max(), gather_ind.min(), xyz01.shape)
-    pos = gather_nd(xyz01, gather_ind)  # `[2**dim, dim, num_points]`
-    pos = torch.transpose(pos, 0,2).transpose(1,2) # `[num_points, 2**dim, dim]`
-
-    xloc = (torch.unsqueeze(pts, -2) - pos) # `[num_points, 2**dim, dim]`
     implicit_feats = torch.cat([lat, xloc], dim=-1) # `[num_points, 2**dim * (in_features + dim)]`
 
     dxyz_ = torch.abs(xloc) # `[num_points, 2**dim, dim]`
