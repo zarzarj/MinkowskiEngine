@@ -34,6 +34,8 @@ class ScanNetLIG(ScanNet):
     def process_input(self, input_dict):
         # print(input_dict)
         input_dict['coords'], input_dict['lats'] = input_dict['implicit_feats']
+        if self.shift_coords and self.trainer.training:
+            input_dict['coords'] += (torch.rand(3) * 100).type_as(input_dict['coords'])
         del input_dict['implicit_feats']
         return input_dict
 
