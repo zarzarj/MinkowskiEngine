@@ -118,7 +118,7 @@ class MinkowskiSegmentationModuleLIG(MinkowskiSegmentationModule):
     def training_step(self, batch, batch_idx):
         coords, feats, pts, target = batch['coords'], batch['feats'], batch['pts'], batch['labels']
         coords, feats, pts = to_precision((coords, feats, pts), self.trainer.precision)  
-        target = torch.cat(target, dim=0)
+        target = torch.cat(target, dim=0).long()
         in_field = ME.TensorField(
             features=feats,
             coordinates=coords,
@@ -142,7 +142,7 @@ class MinkowskiSegmentationModuleLIG(MinkowskiSegmentationModule):
     def validation_step(self, batch, batch_idx):
         coords, feats, pts, target = batch['coords'], batch['feats'], batch['pts'], batch['labels']
         coords, feats, pts = to_precision((coords, feats, pts), self.trainer.precision)
-        target = torch.cat(target, dim=0)
+        target = torch.cat(target, dim=0).long()
         in_field = ME.TensorField(
             features=feats,
             coordinates=coords,
