@@ -195,7 +195,7 @@ class ScanNet(LightningDataModule):
         # print(coords_batch, feats_batch, labels_batch)
         return {"coords": coords_batch,
                 "feats": feats_batch,
-                "labels": labels_batch,
+                "labels": labels_batch.long(),
                 }
 
     def load_scan_files(self, idxs):

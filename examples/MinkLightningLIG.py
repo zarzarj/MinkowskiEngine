@@ -118,7 +118,7 @@ class MinkowskiSegmentationModuleLIG(MinkowskiSegmentationModule):
     def training_step(self, batch, batch_idx):
         coords, feats, pts, target = batch['coords'], batch['feats'], batch['pts'], batch['labels']
         coords, feats, pts = to_precision((coords, feats, pts), self.trainer.precision)  
-        target = torch.cat(target, dim=0)  
+        target = torch.cat(target, dim=0)
         in_field = ME.TensorField(
             features=feats,
             coordinates=coords,
@@ -142,7 +142,7 @@ class MinkowskiSegmentationModuleLIG(MinkowskiSegmentationModule):
     def validation_step(self, batch, batch_idx):
         coords, feats, pts, target = batch['coords'], batch['feats'], batch['pts'], batch['labels']
         coords, feats, pts = to_precision((coords, feats, pts), self.trainer.precision)
-        target = torch.cat(target, dim=0).long()
+        target = torch.cat(target, dim=0)
         in_field = ME.TensorField(
             features=feats,
             coordinates=coords,
@@ -155,6 +155,7 @@ class MinkowskiSegmentationModuleLIG(MinkowskiSegmentationModule):
         if self.global_step % 10 == 0:
             torch.cuda.empty_cache()
         logits = self(sinput, pts)
+        print(target)
         val_loss = self.criterion(logits, target)
         self.log('val_loss', val_loss, sync_dist=True, prog_bar=True, on_step=False, on_epoch=True)
         preds = logits.argmax(dim=-1)
