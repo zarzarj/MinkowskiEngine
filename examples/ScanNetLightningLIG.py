@@ -35,7 +35,8 @@ class ScanNetLIG(ScanNet):
         # print(input_dict)
         input_dict['coords'], input_dict['lats'] = input_dict['implicit_feats']
         if self.shift_coords and self.trainer.training:
-            input_dict['coords'] += (torch.rand(3) * 100).type_as(input_dict['coords'])
+            input_dict['rand_shift'] = (torch.rand(3) * 100).type_as(input_dict['coords'])
+            input_dict['coords'] += input_dict['rand_shift']
         del input_dict['implicit_feats']
         return input_dict
 
@@ -56,16 +57,15 @@ class ScanNetLIG(ScanNet):
         coords_batch, feats_batch = ME.utils.sparse_collate(input_dict['coords'],
                                                             input_dict['lats'],
                                                             dtype=torch.float32)
-        # pts_batch, labels_batch = ME.utils.sparse_collate(input_dict['pts'],
-        #                                                     input_dict['labels'],
-        #                                                     dtype=torch.float32)
-        # print(coords_batch.shape, feats_batch.shape, labels_batch.shape)
-        # print(coords_batch, feats_batch, labels_batch)
-        return {"coords": coords_batch,
-                "feats": feats_batch,
-                "pts": input_dict['pts'],
-                "labels": input_dict['labels'],
-                }
+        out_dict = {"coords": coords_batch,
+                    "feats": feats_batch,
+                    "pts": input_dict['pts'],
+                    "labels": input_dict['labels'],
+                    }
+        if self.shift_coords and self.trainer.training:
+            out_dict["rand_shift"] = input_dict['rand_shift']
+
+        return out_dict
 
 class Embedder:
     def __init__(self, **kwargs):

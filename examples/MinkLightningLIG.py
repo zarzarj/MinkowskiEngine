@@ -95,12 +95,26 @@ class MinkowskiSegmentationModuleLIG(MinkowskiSegmentationModule):
                                       )
         # print(self)
 
-    def forward(self, x, pts):
+    def forward(self, x, pts, rand_shift=None):
         # print(x)
         # print(x)
-        seg_lats, _, _ = self.model(x).dense() # (b, *sizes, c)
+        bs = len(pts)
+        sparse_lats = self.model(x)
+        if rand_shift is not None:
+            list_of_coords, list_of_feats = sparse_lats.decomposed_coordinates_and_features
+            for i in range(bs):
+                list_of_coords[i] -= rand_shift[i]
+            collated_coords, collated_feats = ME.utils.sparse_collate(list_of_coords,
+                                                            list_of_feats,
+                                                            dtype=x.dtype)
+            new_sparse_lats = ME.SparseTensor(features=collated_feats.to(self.device), coordinates=collated_coords.to(self.device))
+            seg_lats, _, _ = new_sparse_lats.dense() # (b, *sizes, c)
+            
+        else:
+            seg_lats, _, _ = sparse_lats.dense() # (b, *sizes, c)
+        # print(seg_lats.shape)
         # print(seg_lats)
-        bs = seg_lats.shape[0]
+        
         seg_occ_in_list = []
         weights_list = []
         for i in range(bs):
@@ -124,7 +138,11 @@ class MinkowskiSegmentationModuleLIG(MinkowskiSegmentationModule):
 
     def training_step(self, batch, batch_idx):
         coords, feats, pts, target = batch['coords'], batch['feats'], batch['pts'], batch['labels']
-        coords, feats, pts = to_precision((coords, feats, pts), self.trainer.precision)  
+        coords, feats, pts = to_precision((coords, feats, pts), self.trainer.precision)
+        if self.trainer.datamodule.shift_coords:
+            rand_shift = batch['rand_shift']
+        else:
+            rand_shift = None
         target = torch.cat(target, dim=0).long()
         in_field = ME.TensorField(
             features=feats,
@@ -137,7 +155,7 @@ class MinkowskiSegmentationModuleLIG(MinkowskiSegmentationModule):
         
         if self.global_step % 10 == 0:
             torch.cuda.empty_cache()
-        logits = self(sinput, pts)
+        logits = self(sinput, pts, rand_shift)
         # print(logits, target, logits.shape, target.shape)
         # print(logits, logits.argmax(-1))
         train_loss = self.criterion(logits, target)
