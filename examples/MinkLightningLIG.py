@@ -155,7 +155,6 @@ class MinkowskiSegmentationModuleLIG(MinkowskiSegmentationModule):
         if self.global_step % 10 == 0:
             torch.cuda.empty_cache()
         logits = self(sinput, pts)
-        print(target)
         val_loss = self.criterion(logits, target)
         self.log('val_loss', val_loss, sync_dist=True, prog_bar=True, on_step=False, on_epoch=True)
         preds = logits.argmax(dim=-1)
