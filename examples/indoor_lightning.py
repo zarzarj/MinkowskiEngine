@@ -98,6 +98,8 @@ if __name__ == "__main__":
                                              plugins=DDPPlugin(find_unused_parameters=False))
 
     seed_everything(main_args.seed)
+    if pl_trainer.gpus > 1:
+        pl_module.model = ME.MinkowskiSyncBatchNorm.convert_sync_batchnorm(pl_module.model)
 
     train_dir = os.path.join(lightning_root_dir, '..', 'train', 'lightning_logs')
     train_versions = glob.glob(os.path.join(train_dir, '*'))
@@ -106,25 +108,29 @@ if __name__ == "__main__":
         most_recent_train_logdir = os.path.join(train_dir, f'version_{most_recent_train_version}')
         print(f'Loading saved model in {most_recent_train_logdir}...')
         ckptdirs = glob.glob(f'{most_recent_train_logdir}/checkpoints/*')
-        if len(ckptdirs) > 0:
-            ckpt = ckptdirs[0]
-            pl_module = pl_module.load_from_checkpoint(
-                        checkpoint_path=ckpt,
-                        hparams_file=f'{most_recent_train_logdir}/hparams.yaml')
-            print(f'Restored {ckpt}')
-        else:
-            print('No model found!')
-            print('Starting from scratch...')
-    else:
-        print('No model found!')
-        print('Starting from scratch...')
-
-    if pl_trainer.gpus > 1:
-        pl_module.model = ME.MinkowskiSyncBatchNorm.convert_sync_batchnorm(pl_module.model)
 
     if main_args.run_mode == 'train':
+        if len(train_versions) > 0 and len(ckptdirs) > 0:
+            pl_trainer = Trainer(resume_from_checkpoint=ckptdirs[0])
+            print(f'Restored {ckptdirs[0]}')
+        else:
+            print('No model found!')
+            print('Training from scratch...')
         pl_trainer.fit(pl_module, pl_datamodule) 
     elif main_args.run_mode == 'validate':
-        pl_trainer.validate(pl_module, pl_datamodule)
+        if len(train_versions) > 0 and len(ckptdirs) > 0:
+            pl_module = pl_module.load_from_checkpoint(
+                        checkpoint_path=ckptdirs[0])
+            print(f'Restored {ckptdirs[0]}')
+            pl_trainer.validate(pl_module, pl_datamodule)
+        else:
+            print('No model found!')
     elif main_args.run_mode == 'test':
-        pl_trainer.test(pl_module, pl_datamodule)
+        if len(train_versions) > 0 and len(ckptdirs) > 0:
+            pl_module = pl_module.load_from_checkpoint(
+                        checkpoint_path=ckptdirs[0])
+            print(f'Restored {ckptdirs[0]}')
+            pl_trainer.test(pl_module, pl_datamodule)
+        else:
+            print('No model found!')
+        
