@@ -155,11 +155,25 @@ class MinkowskiSegmentationModuleLIG(MinkowskiSegmentationModule):
         
         if self.global_step % 10 == 0:
             torch.cuda.empty_cache()
+
         logits = self(sinput, pts, rand_shift)
-        # print(logits, target, logits.shape, target.shape)
-        # print(logits, logits.argmax(-1))
         train_loss = self.criterion(logits, target)
-        self.log('train_loss', train_loss, sync_dist=True, prog_bar=True, on_step=True, on_epoch=True)
+        if self.use_sam:
+            optimizer = self.optimizers()
+            # first backward pass
+            optimizer.zero_grad()
+            self.manual_backward(train_loss)
+            optimizer.first_step()
+            self.disable_bn()
+            # second forward-backward pass
+            logits2 = self(sinput, pts, rand_shift)
+            loss2 = self.criterion(logits2, target)
+            optimizer.zero_grad()
+            self.manual_backward(loss2)
+            optimizer.second_step()
+            self.enable_bn()
+
+        self.log('train_loss', train_loss, sync_dist=True, prog_bar=True, on_step=True, on_epoch=False)
         preds = logits.argmax(dim=-1)
         valid_targets = target != -100
         return {'loss': train_loss, 'preds': preds[valid_targets], 'target': target[valid_targets]}
@@ -181,7 +195,7 @@ class MinkowskiSegmentationModuleLIG(MinkowskiSegmentationModule):
             torch.cuda.empty_cache()
         logits = self(sinput, pts)
         val_loss = self.criterion(logits, target)
-        self.log('val_loss', val_loss, sync_dist=True, prog_bar=True, on_step=False, on_epoch=True)
+        self.log('val_loss', val_loss, sync_dist=True, prog_bar=True, on_step=True, on_epoch=False)
         preds = logits.argmax(dim=-1)
         valid_targets = target != -100
         return {'loss': val_loss, 'preds': preds[valid_targets], 'target': target[valid_targets]}

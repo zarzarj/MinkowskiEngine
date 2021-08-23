@@ -89,8 +89,8 @@ class MinkowskiSegmentationModule(LightningModule):
 
         if self.use_sam:
             optimizer = self.optimizers()
-            # first forward-backward pass
-            self.manual_backward(loss_1, optimizer)
+            # first backward pass
+            self.manual_backward(train_loss, optimizer)
             optimizer.first_step(zero_grad=True)
 
             self.disable_bn()
@@ -101,7 +101,7 @@ class MinkowskiSegmentationModule(LightningModule):
             optimizer.second_step(zero_grad=True)
             self.enable_bn()
 
-        self.log('train_loss', train_loss, sync_dist=True, prog_bar=True, on_step=False, on_epoch=True)
+        self.log('train_loss', train_loss, sync_dist=True, prog_bar=True, on_step=True, on_epoch=False)
         preds = logits.argmax(dim=-1)
         valid_targets = target != -100
         return {'loss': train_loss, 'preds': preds[valid_targets], 'target': target[valid_targets]}
@@ -109,9 +109,9 @@ class MinkowskiSegmentationModule(LightningModule):
     def training_step_end(self, outputs):
         #update and log
         self.train_metrics(outputs['preds'], outputs['target'])
-        self.log_dict(self.train_metrics, prog_bar=False, on_epoch=True)
+        self.log_dict(self.train_metrics, prog_bar=False, on_step=False, on_epoch=True)
         self.train_conf_metrics(outputs['preds'], outputs['target'])
-        self.log_dict(self.train_conf_metrics, prog_bar=False, on_step=False, on_epoch=False)
+        self.log_dict(self.train_conf_metrics, prog_bar=False, on_step=False, on_epoch=True)
 
     def validation_step(self, batch, batch_idx):
         coords, feats, target = batch['coords'], batch['feats'], batch['labels']
@@ -127,7 +127,7 @@ class MinkowskiSegmentationModule(LightningModule):
         sinput = in_field.sparse()
         logits = self(sinput).slice(in_field).F
         val_loss = self.criterion(logits, target)
-        self.log('val_loss', val_loss, sync_dist=True, prog_bar=True, on_step=False, on_epoch=True)
+        self.log('val_loss', val_loss, sync_dist=True, prog_bar=True, on_step=True, on_epoch=False)
         preds = logits.argmax(dim=-1)
         valid_targets = target != -100
         return {'loss': val_loss, 'preds': preds[valid_targets], 'target': target[valid_targets]}
@@ -135,15 +135,17 @@ class MinkowskiSegmentationModule(LightningModule):
     def validation_step_end(self, outputs):
         #update and log
         self.val_metrics(outputs['preds'], outputs['target'])
-        self.log_dict(self.val_metrics, prog_bar=True, on_epoch=True)
+        self.log_dict(self.val_metrics, prog_bar=True, on_step=False, on_epoch=True)
         self.val_conf_metrics(outputs['preds'], outputs['target'])
-        self.log_dict(self.val_conf_metrics, prog_bar=False, on_step=False, on_epoch=False)
+        self.log_dict(self.val_conf_metrics, prog_bar=False, on_step=False, on_epoch=True)
 
     def configure_optimizers(self):
         if self.optimizer == 'SGD':
             if self.use_sam:
                 optimizer = SAM(self.parameters(),
                                 SGD, lr=self.lr,
+                                adaptive=self.sam_adaptive,
+                                rho=self.sam_rho,
                                 momentum=self.sgd_momentum,
                                 dampening=self.sgd_dampening,
                                 weight_decay=self.weight_decay)
@@ -158,6 +160,8 @@ class MinkowskiSegmentationModule(LightningModule):
             if self.use_sam:
                 optimizer = SAM(self.parameters(),
                                 Adam, lr=self.lr,
+                                adaptive=self.sam_adaptive,
+                                rho=self.sam_rho,
                                 betas=(self.adam_beta1, self.adam_beta2),
                                 weight_decay=self.weight_decay)
             else:
@@ -199,7 +203,7 @@ class MinkowskiSegmentationModule(LightningModule):
 
     def disable_bn(self):
         for module in self.modules():
-            if isinstance(module, nn.BatchNorm):
+            if isinstance(module, nn.BatchNorm1d) or isinstance(module, ME.MinkowskiBatchNorm):
                 module.eval()
 
     def enable_bn(self):
@@ -224,6 +228,8 @@ class MinkowskiSegmentationModule(LightningModule):
         parser.add_argument('--iter_size', type=int, default=1, help='accumulate gradient')
         parser.add_argument('--bn_momentum', type=float, default=0.02)
         parser.add_argument("--use_sam", type=str2bool, nargs='?', const=True, default=False)
+        parser.add_argument("--sam_adaptive", type=str2bool, nargs='?', const=True, default=False)
+        parser.add_argument('--sam_rho', type=float, default=0.05)
 
         # Scheduler
         parser.add_argument('--scheduler', type=str, default='SquaredLR')

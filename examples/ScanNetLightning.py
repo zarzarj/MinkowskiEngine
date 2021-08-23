@@ -277,6 +277,8 @@ class ScanNet(LightningDataModule):
             feats.append(input_dict['implicit_feats'])
         if self.use_coord_pos_encoding:
             feats.append([self.embedder(coord) for coord in input_dict['coords']])
+        if len(feats) == 0:
+            feats.append([torch.ones((coords.shape[0], 1)) for coords in input_dict['coords']])
         out_feats = []
         for i in range(len(feats[0])):
             cur_all_feats = [feat[i] for feat in feats]
