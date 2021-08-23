@@ -111,7 +111,7 @@ class MinkowskiSegmentationModule(LightningModule):
         self.train_metrics(outputs['preds'], outputs['target'])
         self.log_dict(self.train_metrics, prog_bar=False, on_step=False, on_epoch=True)
         self.train_conf_metrics(outputs['preds'], outputs['target'])
-        self.log_dict(self.train_conf_metrics, prog_bar=False, on_step=False, on_epoch=True)
+        self.log_dict(self.train_conf_metrics, prog_bar=False, on_step=False, on_epoch=False)
 
     def validation_step(self, batch, batch_idx):
         coords, feats, target = batch['coords'], batch['feats'], batch['labels']
@@ -137,7 +137,7 @@ class MinkowskiSegmentationModule(LightningModule):
         self.val_metrics(outputs['preds'], outputs['target'])
         self.log_dict(self.val_metrics, prog_bar=True, on_step=False, on_epoch=True)
         self.val_conf_metrics(outputs['preds'], outputs['target'])
-        self.log_dict(self.val_conf_metrics, prog_bar=False, on_step=False, on_epoch=True)
+        self.log_dict(self.val_conf_metrics, prog_bar=False, on_step=False, on_epoch=False)
 
     def configure_optimizers(self):
         if self.optimizer == 'SGD':

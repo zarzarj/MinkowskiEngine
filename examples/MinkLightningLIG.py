@@ -87,9 +87,10 @@ class MinkowskiSegmentationModuleLIG(MinkowskiSegmentationModule):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.save_hyperparameters()
+        self.mlp_channels = [int(i) for i in self.mlp_channels.split(',')]
         self.mlp_channels = (self.in_channels + 3) * torch.tensor([1,4,8,4])
         self.model = MinkUNet34C(self.in_channels, self.mlp_channels[0] - 3)
-        self.seg_head = nn.Sequential(MLP(self.mlp_channels, dropout=0.3),
+        self.seg_head = nn.Sequential(MLP(self.mlp_channels, dropout=self.seg_head_dropout),
                                       nn.Conv1d(self.mlp_channels[-1], self.out_channels, kernel_size=1, bias=True)
                                       # nn.Linear(self.mlp_channels[-1], self.out_channels)
                                       )
@@ -205,6 +206,8 @@ class MinkowskiSegmentationModuleLIG(MinkowskiSegmentationModule):
         parent_parser = MinkowskiSegmentationModule.add_argparse_args(parent_parser)
         parser = parent_parser.add_argument_group("MinkSegModelLIG")
         parser.add_argument("--interpolate_grid_feats", type=str2bool, nargs='?', const=True, default=False)
+        parser.add_argument('--seg_head_dropout', type=float, default=0.3)
+        parser.add_argument("--mlp_channels", type=str, default='1,4,8,4')
         return parent_parser
 
 def get_implicit_feats(pts, grid, part_size=0.25):
