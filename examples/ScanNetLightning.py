@@ -239,7 +239,7 @@ class ScanNet(LightningDataModule):
                 label_file = scan_file[:-4] + '.labels.ply'
                 labels = self.load_ply_label_file(label_file)
             else:
-                labels = np.zeros(coords.shape[0])
+                labels = torch.zeros(coords.shape[0])
             out_dict = {'pts': coords,
                         'colors': colors,
                         'labels': labels,
