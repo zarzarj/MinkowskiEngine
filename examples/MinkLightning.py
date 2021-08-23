@@ -8,7 +8,11 @@ import MinkowskiEngine as ME
 from examples.minkunet import MinkUNet34C
 from examples.MeanAccuracy import MeanAccuracy
 from examples.MeanIoU import MeanIoU
+from examples.sam import SAM
+from examples.str2bool import str2bool
+
 from pytorch_lightning.metrics import Accuracy, ConfusionMatrix, MetricCollection
+
 
 class LambdaStepLR(LambdaLR):
   def __init__(self, optimizer, lr_lambda, last_step=-1):
@@ -60,6 +64,8 @@ class MinkowskiSegmentationModule(LightningModule):
         self.train_conf_metrics = conf_metrics.clone(prefix='train_')
         self.val_conf_metrics = conf_metrics.clone(prefix='val_')
 
+        self.automatic_optimization = not self.use_sam
+
     def forward(self, x):
         return self.model(x)
 
@@ -77,8 +83,24 @@ class MinkowskiSegmentationModule(LightningModule):
         
         if self.global_step % 10 == 0:
             torch.cuda.empty_cache()
+
         logits = self(sinput).slice(in_field).F
         train_loss = self.criterion(logits, target)
+
+        if self.use_sam:
+            optimizer = self.optimizers()
+            # first forward-backward pass
+            self.manual_backward(loss_1, optimizer)
+            optimizer.first_step(zero_grad=True)
+
+            self.disable_bn()
+            # second forward-backward pass
+            logits2 = self(sinput).slice(in_field).F
+            loss2 = self.criterion(logits2, target)
+            self.manual_backward(loss_2, optimizer)
+            optimizer.second_step(zero_grad=True)
+            self.enable_bn()
+
         self.log('train_loss', train_loss, sync_dist=True, prog_bar=True, on_step=False, on_epoch=True)
         preds = logits.argmax(dim=-1)
         valid_targets = target != -100
@@ -119,21 +141,35 @@ class MinkowskiSegmentationModule(LightningModule):
 
     def configure_optimizers(self):
         if self.optimizer == 'SGD':
-            optimizer = SGD(
-                self.parameters(),
-                lr=self.lr,
-                momentum=self.sgd_momentum,
-                dampening=self.sgd_dampening,
-                weight_decay=self.weight_decay)
+            if self.use_sam:
+                optimizer = SAM(self.parameters(),
+                                SGD, lr=self.lr,
+                                momentum=self.sgd_momentum,
+                                dampening=self.sgd_dampening,
+                                weight_decay=self.weight_decay)
+            else:
+                optimizer = SGD(
+                    self.parameters(),
+                    lr=self.lr,
+                    momentum=self.sgd_momentum,
+                    dampening=self.sgd_dampening,
+                    weight_decay=self.weight_decay)
         elif self.optimizer == 'Adam':
-            optimizer = Adam(
-                self.parameters(),
-                lr=self.lr,
-                betas=(self.adam_beta1, self.adam_beta2),
-                weight_decay=self.weight_decay)
+            if self.use_sam:
+                optimizer = SAM(self.parameters(),
+                                Adam, lr=self.lr,
+                                betas=(self.adam_beta1, self.adam_beta2),
+                                weight_decay=self.weight_decay)
+            else:
+                optimizer = Adam(
+                    self.parameters(),
+                    lr=self.lr,
+                    betas=(self.adam_beta1, self.adam_beta2),
+                    weight_decay=self.weight_decay)
         else:
             logging.error('Optimizer type not supported')
             raise ValueError('Optimizer type not supported')
+
 
         if self.scheduler == 'StepLR':
             scheduler = StepLR(
@@ -161,6 +197,14 @@ class MinkowskiSegmentationModule(LightningModule):
             new_metrics_dict.pop(key)
         return new_metrics_dict
 
+    def disable_bn(self):
+        for module in self.modules():
+            if isinstance(module, nn.BatchNorm):
+                module.eval()
+
+    def enable_bn(self):
+        self.train()
+
     @staticmethod
     def add_argparse_args(parent_parser):
         parser = parent_parser.add_argument_group("MinkSegModel")
@@ -168,7 +212,7 @@ class MinkowskiSegmentationModule(LightningModule):
         parser.add_argument("--out_channels", type=int, default=20)
 
         # Optimizer arguments
-        parser.add_argument('--optimizer', type=str, default='SGD')
+        parser.add_argument('--optimizer', type=str, default='SGD', choices=['SGD', 'Adam'])
         parser.add_argument('--lr', type=float, default=1e-1)
         parser.add_argument('--sgd_momentum', type=float, default=0.9)
         parser.add_argument('--sgd_dampening', type=float, default=0.1)
@@ -179,6 +223,7 @@ class MinkowskiSegmentationModule(LightningModule):
         # parser.add_argument('--save_param_histogram', type=str2bool, default=False)
         parser.add_argument('--iter_size', type=int, default=1, help='accumulate gradient')
         parser.add_argument('--bn_momentum', type=float, default=0.02)
+        parser.add_argument("--use_sam", type=str2bool, nargs='?', const=True, default=False)
 
         # Scheduler
         parser.add_argument('--scheduler', type=str, default='SquaredLR')
@@ -189,3 +234,5 @@ class MinkowskiSegmentationModule(LightningModule):
         parser.add_argument('--exp_gamma', type=float, default=0.95)
         parser.add_argument('--exp_step_size', type=float, default=445)
         return parent_parser
+
+

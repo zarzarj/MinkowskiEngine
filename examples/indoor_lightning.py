@@ -95,7 +95,8 @@ if __name__ == "__main__":
     lightning_root_dir = os.path.join('logs', main_args.exp_name, main_args.run_mode)
     pl_trainer, args = init_module_from_args(Trainer, args, callbacks=callbacks,
                                              default_root_dir=os.path.join(lightning_root_dir),
-                                             plugins=DDPPlugin(find_unused_parameters=False))
+                                             # plugins=DDPPlugin(find_unused_parameters=False),
+                                             )
 
     seed_everything(main_args.seed)
     if pl_trainer.gpus > 1:

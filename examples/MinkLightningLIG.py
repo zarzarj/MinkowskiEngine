@@ -107,7 +107,7 @@ class MinkowskiSegmentationModuleLIG(MinkowskiSegmentationModule):
             collated_coords, collated_feats = ME.utils.sparse_collate(list_of_coords,
                                                             list_of_feats,
                                                             dtype=x.dtype)
-            new_sparse_lats = ME.SparseTensor(features=collated_feats.to(self.device), coordinates=collated_coords.to(self.device))
+            new_sparse_lats = ME.SparseTensor(features=collated_feats.to(self.device), coordinates=collated_coords.int().to(self.device))
             seg_lats, _, _ = new_sparse_lats.dense() # (b, *sizes, c)
             
         else:
@@ -159,7 +159,7 @@ class MinkowskiSegmentationModuleLIG(MinkowskiSegmentationModule):
         # print(logits, target, logits.shape, target.shape)
         # print(logits, logits.argmax(-1))
         train_loss = self.criterion(logits, target)
-        self.log('train_loss', train_loss, sync_dist=True, prog_bar=True, on_step=False, on_epoch=True)
+        self.log('train_loss', train_loss, sync_dist=True, prog_bar=True, on_step=True, on_epoch=True)
         preds = logits.argmax(dim=-1)
         valid_targets = target != -100
         return {'loss': train_loss, 'preds': preds[valid_targets], 'target': target[valid_targets]}
