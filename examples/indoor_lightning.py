@@ -112,7 +112,7 @@ if __name__ == "__main__":
 
     if main_args.run_mode == 'train':
         if len(train_versions) > 0 and len(ckptdirs) > 0:
-            pl_trainer = Trainer(resume_from_checkpoint=ckptdirs[0])
+            pl_trainer = pl_trainer.resume_from_checkpoint(ckptdirs[0])
             print(f'Restored {ckptdirs[0]}')
         else:
             print('No model found!')

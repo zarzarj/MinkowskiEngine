@@ -70,6 +70,7 @@ class MinkowskiSegmentationModule(LightningModule):
         return self.model(x)
 
     def training_step(self, batch, batch_idx):
+        print("Train ", batch)
         coords, feats, target = batch['coords'], batch['feats'], batch['labels']
         coords, feats = to_precision((coords, feats), self.trainer.precision)     
         in_field = ME.TensorField(
@@ -81,8 +82,8 @@ class MinkowskiSegmentationModule(LightningModule):
         )
         sinput = in_field.sparse()
         
-        if self.global_step % 10 == 0:
-            torch.cuda.empty_cache()
+        # if self.global_step % 10 == 0:
+        #     torch.cuda.empty_cache()
 
         logits = self(sinput).slice(in_field).F
         train_loss = self.criterion(logits, target)
@@ -114,6 +115,7 @@ class MinkowskiSegmentationModule(LightningModule):
         self.log_dict(self.train_conf_metrics, prog_bar=False, on_step=False, on_epoch=False)
 
     def validation_step(self, batch, batch_idx):
+        print("Val ", batch)
         coords, feats, target = batch['coords'], batch['feats'], batch['labels']
         coords, feats = to_precision((coords, feats), self.trainer.precision)
         # print(target.min(), target.max(), target)

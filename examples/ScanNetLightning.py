@@ -171,19 +171,19 @@ class ScanNet(LightningDataModule):
     def train_dataloader(self):
         train_dataloader = DataLoader(self.train_idx, collate_fn=self.convert_batch,
                           batch_size=self.batch_size, shuffle=True,
-                          num_workers=self.num_workers)
+                          num_workers=self.num_workers, pin_memory=True)
         return train_dataloader
 
     def val_dataloader(self):
         val_dataloader = DataLoader(self.val_idx, collate_fn=self.convert_batch,
                           batch_size=self.val_batch_size, shuffle=False,
-                          num_workers=self.num_workers)
+                          num_workers=0, pin_memory=True)
         return val_dataloader
 
     def test_dataloader(self):  # Test best validation model once again.
         return DataLoader(self.test_idx, collate_fn=self.convert_batch,
                           batch_size=self.test_batch_size, shuffle=False,
-                          num_workers=self.num_workers)
+                          num_workers=self.num_workers, pin_memory=True)
 
     def convert_batch(self, idxs):
         input_dict = self.load_scan_files(idxs)
@@ -219,16 +219,14 @@ class ScanNet(LightningDataModule):
         colors = np.stack((plydata['vertex']['red'],
                            plydata['vertex']['green'],
                            plydata['vertex']['blue'])).T
-        coords = torch.from_numpy(coords)
-        colors = torch.from_numpy(colors)
-        return coords, colors
+        return torch.from_numpy(coords), torch.from_numpy(colors)
 
     def load_ply_label_file(self, file_name):
         with open(file_name, 'rb') as f:
             plydata = PlyData.read(f)
         labels = np.array(plydata['vertex']['label'], dtype=np.uint8)
         labels = np.array([self.label_map[x] for x in labels], dtype=np.int)
-        return torch.from_numpy(labels).long()
+        return torch.from_numpy(labels)
 
     def load_ply(self, idx):
         if self.loaded[idx]:
@@ -241,7 +239,7 @@ class ScanNet(LightningDataModule):
                 label_file = scan_file[:-4] + '.labels.ply'
                 labels = self.load_ply_label_file(label_file)
             else:
-                labels = torch.zeros(coords.shape[0])
+                labels = np.zeros(coords.shape[0])
             out_dict = {'pts': coords,
                         'colors': colors,
                         'labels': labels,
@@ -252,7 +250,7 @@ class ScanNet(LightningDataModule):
             # self.samples[idx] = copy.deepcopy(out_dict)
             self.samples[idx] = out_dict
             self.loaded[idx] = True
-        return out_dict
+        return copy.deepcopy(out_dict)
 
     def process_input(self, input_dict):
         if self.permute_points:
@@ -516,3 +514,5 @@ def get_embedder(multires=10):
     embedder_obj = Embedder(**embed_kwargs)
     embed = lambda x, eo=embedder_obj : eo.embed(x)
     return embed, embedder_obj.out_dim
+
+
