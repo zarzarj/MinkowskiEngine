@@ -102,7 +102,7 @@ class MinkowskiSegmentationModule(LightningModule):
             optimizer.second_step(zero_grad=True)
             self.enable_bn()
 
-        self.log('train_loss', train_loss, sync_dist=True, prog_bar=True, on_step=True, on_epoch=False)
+        self.log('train_loss', train_loss, sync_dist=True, prog_bar=True, on_step=False, on_epoch=True)
         preds = logits.argmax(dim=-1)
         valid_targets = target != -100
         return {'loss': train_loss, 'preds': preds[valid_targets], 'target': target[valid_targets]}
@@ -129,7 +129,7 @@ class MinkowskiSegmentationModule(LightningModule):
         sinput = in_field.sparse()
         logits = self(sinput).slice(in_field).F
         val_loss = self.criterion(logits, target)
-        self.log('val_loss', val_loss, sync_dist=True, prog_bar=True, on_step=True, on_epoch=False)
+        self.log('val_loss', val_loss, sync_dist=True, prog_bar=True, on_step=False, on_epoch=True)
         preds = logits.argmax(dim=-1)
         valid_targets = target != -100
         return {'loss': val_loss, 'preds': preds[valid_targets], 'target': target[valid_targets]}
