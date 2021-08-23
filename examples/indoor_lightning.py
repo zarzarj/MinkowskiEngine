@@ -80,6 +80,7 @@ class MainArgs():
 
 if __name__ == "__main__":
     main_args, args = init_module_from_args(MainArgs)
+    seed_everything(main_args.seed)
     if main_args.pipeline == 'implicit':
         datamodule, module = ScanNetLIG, MinkowskiSegmentationModuleLIG
     else:
@@ -92,46 +93,35 @@ if __name__ == "__main__":
     callbacks.append(ConfusionMatrixPlotCallback())
     callbacks.append(ModelCheckpoint(monitor='val_miou', mode = 'max', save_top_k=1))
     callbacks.append(LearningRateMonitor(logging_interval='step'))
+
     lightning_root_dir = os.path.join('logs', main_args.exp_name, main_args.run_mode)
-    pl_trainer, args = init_module_from_args(Trainer, args, callbacks=callbacks,
-                                             default_root_dir=os.path.join(lightning_root_dir),
-                                             # plugins=DDPPlugin(find_unused_parameters=False),
-                                             )
-
-    seed_everything(main_args.seed)
-    if pl_trainer.gpus > 1:
-        pl_module.model = ME.MinkowskiSyncBatchNorm.convert_sync_batchnorm(pl_module.model)
-
     train_dir = os.path.join(lightning_root_dir, '..', 'train', 'lightning_logs')
     train_versions = glob.glob(os.path.join(train_dir, '*'))
+    resume_from_checkpoint = None
     if len(train_versions) > 0:
         most_recent_train_version = max([int(x.split(os.sep)[-1].split('_')[-1]) for x in train_versions])
         most_recent_train_logdir = os.path.join(train_dir, f'version_{most_recent_train_version}')
         print(f'Loading saved model in {most_recent_train_logdir}...')
         ckptdirs = glob.glob(f'{most_recent_train_logdir}/checkpoints/*')
+        if len(ckptdirs) > 0:
+            ckpt = ckptdirs[0]
+            pl_module = pl_module.load_from_checkpoint(
+                        checkpoint_path=ckpt,
+                        hparams_file=f'{most_recent_train_logdir}/hparams.yaml')
+            print(f'Restored {ckpt}')
+            resume_from_checkpoint = ckpt
+
+    pl_trainer, args = init_module_from_args(Trainer, args, callbacks=callbacks,
+                                             default_root_dir=os.path.join(lightning_root_dir),
+                                             plugins=DDPPlugin(find_unused_parameters=False),
+                                             resume_from_checkpoint=resume_from_checkpoint)
+
+    if pl_trainer.gpus > 1:
+        pl_module.model = ME.MinkowskiSyncBatchNorm.convert_sync_batchnorm(pl_module.model)
 
     if main_args.run_mode == 'train':
-        if len(train_versions) > 0 and len(ckptdirs) > 0:
-            pl_trainer = pl_trainer.resume_from_checkpoint(ckptdirs[0])
-            print(f'Restored {ckptdirs[0]}')
-        else:
-            print('No model found!')
-            print('Training from scratch...')
         pl_trainer.fit(pl_module, pl_datamodule) 
     elif main_args.run_mode == 'validate':
-        if len(train_versions) > 0 and len(ckptdirs) > 0:
-            pl_module = pl_module.load_from_checkpoint(
-                        checkpoint_path=ckptdirs[0])
-            print(f'Restored {ckptdirs[0]}')
-            pl_trainer.validate(pl_module, pl_datamodule)
-        else:
-            print('No model found!')
+        pl_trainer.validate(pl_module, pl_datamodule)
     elif main_args.run_mode == 'test':
-        if len(train_versions) > 0 and len(ckptdirs) > 0:
-            pl_module = pl_module.load_from_checkpoint(
-                        checkpoint_path=ckptdirs[0])
-            print(f'Restored {ckptdirs[0]}')
-            pl_trainer.test(pl_module, pl_datamodule)
-        else:
-            print('No model found!')
-        
+        pl_trainer.test(pl_module, pl_datamodule)

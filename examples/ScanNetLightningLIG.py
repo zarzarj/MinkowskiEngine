@@ -64,7 +64,6 @@ class ScanNetLIG(ScanNet):
                     }
         if self.shift_coords and self.trainer.training:
             out_dict["rand_shift"] = input_dict['rand_shift']
-
         return out_dict
 
 class Embedder:
