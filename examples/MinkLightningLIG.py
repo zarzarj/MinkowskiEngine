@@ -154,6 +154,7 @@ class MinkowskiSegmentationModuleLIG(MinkowskiSegmentationModule):
             coordinates=coords,
             quantization_mode=ME.SparseTensorQuantizationMode.UNWEIGHTED_AVERAGE,
             minkowski_algorithm=ME.MinkowskiAlgorithm.SPEED_OPTIMIZED,
+            # minkowski_algorithm=ME.MinkowskiAlgorithm.MEMORY_EFFICIENT,
             device=self.device,
         )
         sinput = in_field.sparse()

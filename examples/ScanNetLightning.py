@@ -223,42 +223,32 @@ class ScanNet(LightningDataModule):
             labels = torch.tensor([self.label_map[x] for x in labels], dtype=torch.long)
         else:
             labels = torch.zeros(pts.shape[0])
-        if self.resample_mesh:
+
+        if self.training and self.resample_mesh:
             faces = torch.from_numpy(np.stack(plydata['face']['vertex_indices'])).long()
             face_pts = pts[faces]
-            # print(face_pts.shape)
             bary_pts = torch.rand((faces.shape[0], 2))
             bary_pts[bary_pts.sum(axis=1) > 1] /= 2
-            # print(bary_pts.sum(axis=1).max(), bary_pts.shape)
-
-            # print(bary_pts.shape, face_pts[..., 0].shape, (face_pts[..., 1] - face_pts[..., 0]).shape)
             resampled_pts = face_pts[:, 0, :] +                                        \
                             (face_pts[:, 1, :] - face_pts[:, 0, :]) * bary_pts[:, 0].unsqueeze(1) + \
                             (face_pts[:, 2, :] - face_pts[:, 0, :]) * bary_pts[:, 1].unsqueeze(1)
             face_colors = colors[faces].float()
-            # print(face_colors, bary_pts, (face_colors[:, 1, :] - face_colors[:, 0, :]) )
             resampled_colors = face_colors[:, 0, :] +                                        \
                               (face_colors[:, 1, :] - face_colors[:, 0, :]) * bary_pts[:,0].unsqueeze(1) + \
                               (face_colors[:, 2, :] - face_colors[:, 0, :]) * bary_pts[:,1].unsqueeze(1)
-            # resampled_colors = face_colors[..., 0] +                                        \
-            #                   (face_colors[..., 1] - face_colors[..., 0]) * bary_pts[:,0].unsqueeze(1) + \
-            #                   (face_colors[..., 2] - face_colors[..., 0]) * bary_pts[:,1].unsqueeze(1)
             face_labels = labels[faces]
             valid_face_labels = torch.all(face_labels == face_labels[:,0].unsqueeze(1), axis=1)
-            # pts_norm = torch.norm(face_pts[:, 1, :] - face_pts[:, 0, :], dim=1) + \
-            #             torch.norm(face_pts[:, 2, :] - face_pts[:, 0, :], dim=1) + \
-            #             torch.norm(face_pts[:, 1, :] - face_pts[:, 2, :], dim=1) 
-            # print(pts_norm.max(), pts_norm.min(), pts_norm.mean(), pts_norm.shape)
-            # print(face_pts)
-            # print(valid_face_labels.shape)
             resampled_labels = face_labels[:, 0]
 
             pts = resampled_pts[valid_face_labels]
             colors = resampled_colors[valid_face_labels]
             labels = resampled_labels[valid_face_labels]
-            # print(colors)
-            # save_pc(pts, colors.long(), 'test_pc.ply')
-            # assert(True==False)
+
+        if self.training and self.max_num_pts > 0 and self.max_num_pts < pts.shape[0]:
+            subsample_idx = torch.randperm(pts.shape[0])[:self.max_num_pts]
+            pts = pts[subsample_idx]
+            colors = colors[subsample_idx]
+            labels = labels[subsample_idx]
         return pts, colors, labels
 
     def load_ply(self, idx):
@@ -397,6 +387,7 @@ class ScanNet(LightningDataModule):
         parser.add_argument("--shift_coords", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument("--permute_points", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument("--resample_mesh", type=str2bool, nargs='?', const=True, default=False)
+        parser.add_argument("--max_num_pts", type=int, default=-1)
         return parent_parser
 
     def cleanup(self):
