@@ -6,6 +6,7 @@ from torch.optim.lr_scheduler import LambdaLR, StepLR
 from pytorch_lightning.core import LightningModule
 import MinkowskiEngine as ME
 from examples.minkunet import MinkUNet34C, MinkUNet14A
+from examples.minkunetodd import MinkUNet34C as MinkUNet34Codd
 from examples.MeanAccuracy import MeanAccuracy
 from examples.MeanIoU import MeanIoU
 from pytorch_lightning.metrics import Accuracy, ConfusionMatrix, MetricCollection
@@ -89,7 +90,10 @@ class MinkowskiSegmentationModuleLIG(MinkowskiSegmentationModule):
         self.save_hyperparameters()
         self.mlp_channels = [int(i) for i in self.mlp_channels.split(',')]
         self.mlp_channels = (self.in_channels + 3) * torch.tensor([1,4,8,4])
-        self.model = MinkUNet34C(self.in_channels, self.mlp_channels[0] - 3)
+        if self.odd_model:
+            self.model = MinkUNet34Codd(self.in_channels, self.mlp_channels[0] - 3)
+        else:
+            self.model = MinkUNet34C(self.in_channels, self.mlp_channels[0] - 3)
         self.seg_head = nn.Sequential(MLP(self.mlp_channels, dropout=self.seg_head_dropout),
                                       nn.Conv1d(self.mlp_channels[-1], self.out_channels, kernel_size=1, bias=True)
                                       # nn.Linear(self.mlp_channels[-1], self.out_channels)
@@ -153,9 +157,6 @@ class MinkowskiSegmentationModuleLIG(MinkowskiSegmentationModule):
             device=self.device,
         )
         sinput = in_field.sparse()
-        
-        if self.global_step % 10 == 0:
-            torch.cuda.empty_cache()
 
         logits = self(sinput, pts, rand_shift)
         train_loss = self.criterion(logits, target)
@@ -177,6 +178,10 @@ class MinkowskiSegmentationModuleLIG(MinkowskiSegmentationModule):
         self.log('train_loss', train_loss, sync_dist=True, prog_bar=True, on_step=False, on_epoch=True)
         preds = logits.argmax(dim=-1)
         valid_targets = target != -100
+
+        if self.global_step % 10 == 0:
+            torch.cuda.empty_cache()
+
         return {'loss': train_loss, 'preds': preds[valid_targets], 'target': target[valid_targets]}
 
     def validation_step(self, batch, batch_idx):
@@ -206,6 +211,7 @@ class MinkowskiSegmentationModuleLIG(MinkowskiSegmentationModule):
         parent_parser = MinkowskiSegmentationModule.add_argparse_args(parent_parser)
         parser = parent_parser.add_argument_group("MinkSegModelLIG")
         parser.add_argument("--interpolate_grid_feats", type=str2bool, nargs='?', const=True, default=False)
+        parser.add_argument("--odd_model", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument('--seg_head_dropout', type=float, default=0.3)
         parser.add_argument("--mlp_channels", type=str, default='1,4,8,4')
         return parent_parser

@@ -79,8 +79,6 @@ class ScanNet(LightningDataModule):
             39: (82., 84., 163.),
             40: (100., 85., 144.),
         }
-        # self.cache = cache
-        # self.cache_dict = defaultdict(dict)
 
         # Augmentation arguments
         # self.SCALE_AUGMENTATION_BOUND = (0.9, 1.1)
@@ -163,8 +161,6 @@ class ScanNet(LightningDataModule):
             self.scan_files = glob.glob(os.path.join(self.scans_test_dir, '*', '_vh_clean_2.ply'))
             self.test_idx = torch.from_numpy(np.arange(len(self.scan_files)))
         self.scan_files.sort()
-        self.loaded = np.zeros(len(self.scan_files), dtype=np.bool)
-        self.samples = [None]*len(self.scan_files)
         if self.use_coord_pos_encoding:
             self.embedder, _ = get_embedder(self.coord_pos_encoding_multires)
     
@@ -210,47 +206,76 @@ class ScanNet(LightningDataModule):
                     out_dict[k].append(v)
         return out_dict
 
-    def load_ply_file(self, file_name):
+    def load_ply_file(self, file_name, load_labels=False):
         with open(file_name, 'rb') as f:
             plydata = PlyData.read(f)
-        coords = np.stack((plydata['vertex']['x'],
-                           plydata['vertex']['y'],
-                           plydata['vertex']['z'])).T
-        colors = np.stack((plydata['vertex']['red'],
+        pts = torch.from_numpy(np.stack((plydata['vertex']['x'],
+                               plydata['vertex']['y'],
+                               plydata['vertex']['z'])).T)
+        colors = torch.from_numpy(np.stack((plydata['vertex']['red'],
                            plydata['vertex']['green'],
-                           plydata['vertex']['blue'])).T
-        return torch.from_numpy(coords), torch.from_numpy(colors)
+                           plydata['vertex']['blue'])).T)
+        if load_labels:
+            label_file = file_name[:-4] + '.labels.ply'
+            with open(label_file, 'rb') as f:
+                plydata = PlyData.read(f)
+            labels = np.array(plydata['vertex']['label'], dtype=np.uint8)
+            labels = torch.tensor([self.label_map[x] for x in labels], dtype=torch.long)
+        else:
+            labels = torch.zeros(pts.shape[0])
+        if self.resample_mesh:
+            faces = torch.from_numpy(np.stack(plydata['face']['vertex_indices'])).long()
+            face_pts = pts[faces]
+            # print(face_pts.shape)
+            bary_pts = torch.rand((faces.shape[0], 2))
+            bary_pts[bary_pts.sum(axis=1) > 1] /= 2
+            # print(bary_pts.sum(axis=1).max(), bary_pts.shape)
 
-    def load_ply_label_file(self, file_name):
-        with open(file_name, 'rb') as f:
-            plydata = PlyData.read(f)
-        labels = np.array(plydata['vertex']['label'], dtype=np.uint8)
-        labels = np.array([self.label_map[x] for x in labels], dtype=np.int)
-        return torch.from_numpy(labels)
+            # print(bary_pts.shape, face_pts[..., 0].shape, (face_pts[..., 1] - face_pts[..., 0]).shape)
+            resampled_pts = face_pts[:, 0, :] +                                        \
+                            (face_pts[:, 1, :] - face_pts[:, 0, :]) * bary_pts[:, 0].unsqueeze(1) + \
+                            (face_pts[:, 2, :] - face_pts[:, 0, :]) * bary_pts[:, 1].unsqueeze(1)
+            face_colors = colors[faces].float()
+            # print(face_colors, bary_pts, (face_colors[:, 1, :] - face_colors[:, 0, :]) )
+            resampled_colors = face_colors[:, 0, :] +                                        \
+                              (face_colors[:, 1, :] - face_colors[:, 0, :]) * bary_pts[:,0].unsqueeze(1) + \
+                              (face_colors[:, 2, :] - face_colors[:, 0, :]) * bary_pts[:,1].unsqueeze(1)
+            # resampled_colors = face_colors[..., 0] +                                        \
+            #                   (face_colors[..., 1] - face_colors[..., 0]) * bary_pts[:,0].unsqueeze(1) + \
+            #                   (face_colors[..., 2] - face_colors[..., 0]) * bary_pts[:,1].unsqueeze(1)
+            face_labels = labels[faces]
+            valid_face_labels = torch.all(face_labels == face_labels[:,0].unsqueeze(1), axis=1)
+            # pts_norm = torch.norm(face_pts[:, 1, :] - face_pts[:, 0, :], dim=1) + \
+            #             torch.norm(face_pts[:, 2, :] - face_pts[:, 0, :], dim=1) + \
+            #             torch.norm(face_pts[:, 1, :] - face_pts[:, 2, :], dim=1) 
+            # print(pts_norm.max(), pts_norm.min(), pts_norm.mean(), pts_norm.shape)
+            # print(face_pts)
+            # print(valid_face_labels.shape)
+            resampled_labels = face_labels[:, 0]
+
+            pts = resampled_pts[valid_face_labels]
+            colors = resampled_colors[valid_face_labels]
+            labels = resampled_labels[valid_face_labels]
+            # print(colors)
+            # save_pc(pts, colors.long(), 'test_pc.ply')
+            # assert(True==False)
+        return pts, colors, labels
 
     def load_ply(self, idx):
-        if self.loaded[idx]:
-            out_dict = self.samples[idx]
-        else:
-            scan_file = self.scan_files[idx]
-            coords, colors = self.load_ply_file(scan_file)
-            # print(self.trainer.training, self.trainer.validating)
-            if self.trainer.training or self.trainer.validating:
-                label_file = scan_file[:-4] + '.labels.ply'
-                labels = self.load_ply_label_file(label_file)
-            else:
-                labels = torch.zeros(coords.shape[0])
-            out_dict = {'pts': coords,
-                        'colors': colors,
-                        'labels': labels,
-                        }
-            if self.use_implicit_feats:
-                implicit_feats = self.load_implicit_feats(scan_file, coords)
-                out_dict['implicit_feats'] = implicit_feats
-            # self.samples[idx] = copy.deepcopy(out_dict)
-            self.samples[idx] = out_dict
-            self.loaded[idx] = True
-        return copy.deepcopy(out_dict)
+        scan_file = self.scan_files[idx]
+        pts, colors, labels = self.load_ply_file(scan_file,
+                                                    load_labels=(self.trainer.training
+                                                                 or self.trainer.validating)
+                                                    )
+        out_dict = {'pts': pts,
+                    'colors': colors,
+                    'labels': labels,
+                    }
+        if self.use_implicit_feats:
+            implicit_feats = self.load_implicit_feats(scan_file, pts)
+            out_dict['implicit_feats'] = implicit_feats
+        # self.samples[idx] = copy.deepcopy(out_dict)
+        return out_dict
 
     def process_input(self, input_dict):
         if self.permute_points:
@@ -350,9 +375,7 @@ class ScanNet(LightningDataModule):
         parser.add_argument("--val_batch_size", type=int, default=6)
         parser.add_argument("--test_batch_size", type=int, default=6)
         parser.add_argument("--num_workers", type=int, default=5)
-        parser.add_argument("--in_memory", type=str2bool, nargs='?', const=True, default=True)
         parser.add_argument("--save_preds", type=str2bool, nargs='?', const=True, default=False)
-        parser.add_argument("--preload", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument("--train_percent", type=float, default=0.8)
         # parser.add_argument("--augment_data", type=str2bool, nargs='?', const=True, default=True)
         # parser.add_argument("--return_transformation", type=str2bool, nargs='?', const=True, default=False)
@@ -373,6 +396,7 @@ class ScanNet(LightningDataModule):
         parser.add_argument("--coord_pos_encoding_multires", type=int, default=10)
         parser.add_argument("--shift_coords", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument("--permute_points", type=str2bool, nargs='?', const=True, default=False)
+        parser.add_argument("--resample_mesh", type=str2bool, nargs='?', const=True, default=False)
         return parent_parser
 
     def cleanup(self):
@@ -516,3 +540,9 @@ def get_embedder(multires=10):
     return embed, embedder_obj.out_dim
 
 
+def save_pc(PC, PC_color, filename):
+    from plyfile import PlyElement, PlyData
+    PC = np.concatenate((PC, PC_color), axis=1)
+    PC = [tuple(element) for element in PC]
+    el = PlyElement.describe(np.array(PC, dtype=[('x', 'f4'), ('y', 'f4'), ('z', 'f4'), ('red', 'u1'), ('green', 'u1'), ('blue', 'u1')]), 'vertex')
+    PlyData([el]).write(filename)

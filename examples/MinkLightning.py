@@ -81,9 +81,6 @@ class MinkowskiSegmentationModule(LightningModule):
             device=self.device,
         )
         sinput = in_field.sparse()
-        
-        # if self.global_step % 10 == 0:
-        #     torch.cuda.empty_cache()
 
         logits = self(sinput).slice(in_field).F
         train_loss = self.criterion(logits, target)
@@ -105,6 +102,10 @@ class MinkowskiSegmentationModule(LightningModule):
         self.log('train_loss', train_loss, sync_dist=True, prog_bar=True, on_step=False, on_epoch=True)
         preds = logits.argmax(dim=-1)
         valid_targets = target != -100
+
+        if self.global_step % 10 == 0:
+            torch.cuda.empty_cache()
+
         return {'loss': train_loss, 'preds': preds[valid_targets], 'target': target[valid_targets]}
 
     def training_step_end(self, outputs):
