@@ -224,7 +224,7 @@ class ScanNet(LightningDataModule):
         else:
             labels = torch.zeros(pts.shape[0])
 
-        if self.training and self.resample_mesh:
+        if self.trainer.training and self.resample_mesh:
             faces = torch.from_numpy(np.stack(plydata['face']['vertex_indices'])).long()
             face_pts = pts[faces]
             bary_pts = torch.rand((faces.shape[0], 2))
@@ -244,7 +244,7 @@ class ScanNet(LightningDataModule):
             colors = resampled_colors[valid_face_labels]
             labels = resampled_labels[valid_face_labels]
 
-        if self.training and self.max_num_pts > 0 and self.max_num_pts < pts.shape[0]:
+        if self.trainer.training and self.max_num_pts > 0 and self.max_num_pts < pts.shape[0]:
             subsample_idx = torch.randperm(pts.shape[0])[:self.max_num_pts]
             pts = pts[subsample_idx]
             colors = colors[subsample_idx]
