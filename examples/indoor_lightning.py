@@ -110,7 +110,7 @@ if __name__ == "__main__":
                         hparams_file=f'{most_recent_train_logdir}/hparams.yaml')
             print(f'Restored {ckpt}')
             resume_from_checkpoint = ckpt
-
+    print("restore trainer")
     pl_trainer, args = init_module_from_args(Trainer, args, callbacks=callbacks,
                                              default_root_dir=os.path.join(lightning_root_dir),
                                              plugins=DDPPlugin(find_unused_parameters=False),

@@ -52,8 +52,26 @@ class ScanNetLIG(ScanNet):
         # sptensor = ME.SparseTensor(features=lats, coordinates=mask)
         return (coords, lats)
 
+    def get_features(self, input_dict):
+        feats = []
+        if self.use_colors:
+            feats.append(input_dict['colors'])
+        if self.use_coords:
+            feats.append(input_dict['coords'])
+        if self.use_coord_pos_encoding:
+            feats.append([self.embedder(coord) for coord in input_dict['coords']])
+        if len(feats) == 0:
+            feats.append([torch.ones((coords.shape[0], 1)) for coords in input_dict['coords']])
+        out_feats = []
+        for i in range(len(feats[0])):
+            cur_all_feats = [feat[i] for feat in feats]
+            # print(cur_all_feats, cur_a)
+            out_feats.append(torch.cat(cur_all_feats, dim=-1))
+        return out_feats
+
     def convert_batch(self, idxs):
         input_dict = self.load_scan_files(idxs)
+        
         coords_batch, feats_batch = ME.utils.sparse_collate(input_dict['coords'],
                                                             input_dict['lats'],
                                                             dtype=torch.float32)

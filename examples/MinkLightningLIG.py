@@ -87,7 +87,6 @@ def to_precision(inputs, precision):
 class MinkowskiSegmentationModuleLIG(MinkowskiSegmentationModule):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.save_hyperparameters()
         self.mlp_channels = [int(i) for i in self.mlp_channels.split(',')]
         self.mlp_channels = (self.in_channels + 3) * torch.tensor([1,4,8,4])
         if self.odd_model:
