@@ -8,12 +8,6 @@ from urllib.request import urlretrieve
 
 from pytorch_lightning import Trainer, seed_everything
 
-from examples.MinkLightning import MinkowskiSegmentationModule
-from examples.MinkLightningLIG import MinkowskiSegmentationModuleLIG
-from examples.ScanNetLightning import ScanNet
-from examples.ScanNetLightningLIG import ScanNetLIG
-import MinkowskiEngine as ME
-
 import torchvision
 from PIL import Image
 import matplotlib.pyplot as plt
@@ -21,8 +15,6 @@ from sklearn.metrics import ConfusionMatrixDisplay
 from pytorch_lightning.callbacks import ModelCheckpoint, LearningRateMonitor, Callback
 from pytorch_lightning.plugins import DDPPlugin
 from examples.str2bool import str2bool
-
-
 
 def plot_confusion_matrix(trainer, pl_module, confusion_metric, plot_title):
     tb = pl_module.logger.experiment
@@ -77,13 +69,16 @@ class MainArgs():
         parser.add_argument("--pipeline", type=str, default='default', choices=['default', 'implicit'])
         return parent_parser
 
-
 if __name__ == "__main__":
     main_args, args = init_module_from_args(MainArgs)
     seed_everything(main_args.seed)
-    if main_args.pipeline == 'implicit':
+    if main_args.pipeline == 'implicit':       
+        from examples.MinkLightningLIG import MinkowskiSegmentationModuleLIG
+        from examples.ScanNetLightningLIG import ScanNetLIG
         datamodule, module = ScanNetLIG, MinkowskiSegmentationModuleLIG
     else:
+        from examples.MinkLightning import MinkowskiSegmentationModule
+        from examples.ScanNetLightning import ScanNet
         datamodule, module = ScanNet, MinkowskiSegmentationModule
 
     pl_module, args = init_module_from_args(module, args)

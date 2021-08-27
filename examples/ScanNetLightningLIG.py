@@ -18,8 +18,8 @@ import MinkowskiEngine as ME
 from examples.voxelizer import SparseVoxelizer
 import examples.transforms as t
 from examples.str2bool import str2bool
-
 from examples.ScanNetLightning import ScanNet
+# from examples.utils import get_embedder
 
 class ScanNetLIG(ScanNet):
     def __init__(self, **kwargs):
@@ -46,9 +46,12 @@ class ScanNetLIG(ScanNet):
         lats_file = os.path.join(self.data_dir, 'lats', scene_name+'-d1e-05-ps0.npy')
         mask = torch.from_numpy(np.load(mask_file))
         lats = torch.from_numpy(np.load(lats_file))
+
         grid_range = [torch.arange(s) for s in mask.shape]
         grid =  torch.stack(torch.meshgrid(grid_range), dim=-1)
+        # print(mask_file, grid.shape)
         coords = grid[mask]
+        # print(mask_file, grid.shape, coords.max(dim=0)[0], coords.min(dim=0)[0], pts.max(dim=0)[0], pts.min(dim=0)[0])
         # sptensor = ME.SparseTensor(features=lats, coordinates=mask)
         return (coords, lats)
 
@@ -71,7 +74,7 @@ class ScanNetLIG(ScanNet):
 
     def convert_batch(self, idxs):
         input_dict = self.load_scan_files(idxs)
-        
+
         coords_batch, feats_batch = ME.utils.sparse_collate(input_dict['coords'],
                                                             input_dict['lats'],
                                                             dtype=torch.float32)
@@ -79,58 +82,8 @@ class ScanNetLIG(ScanNet):
                     "feats": feats_batch,
                     "pts": input_dict['pts'],
                     "labels": input_dict['labels'],
+                    "idxs": idxs,
                     }
         if self.shift_coords and self.trainer.training:
             out_dict["rand_shift"] = input_dict['rand_shift']
         return out_dict
-
-class Embedder:
-    def __init__(self, **kwargs):
-        self.kwargs = kwargs
-        self.create_embedding_fn()
-
-    def create_embedding_fn(self):
-        embed_fns = []
-        d = self.kwargs['input_dims']
-        out_dim = 0
-        if self.kwargs['include_input']:
-            embed_fns.append(lambda x : x)
-            out_dim += d
-
-        max_freq = self.kwargs['max_freq_log2']
-        N_freqs = self.kwargs['num_freqs']
-
-        if self.kwargs['log_sampling']:
-            freq_bands = 2.**torch.linspace(0., max_freq, steps=N_freqs)
-        else:
-            freq_bands = torch.linspace(2.**0., 2.**max_freq, steps=N_freqs)
-
-        for freq in freq_bands:
-            for p_fn in self.kwargs['periodic_fns']:
-                embed_fns.append(lambda x, p_fn=p_fn, freq=freq : p_fn(x * freq))
-                out_dim += d
-
-        self.embed_fns = embed_fns
-        self.out_dim = out_dim
-
-    def embed(self, inputs):
-        return torch.cat([fn(inputs) for fn in self.embed_fns], -1)
-
-
-def get_embedder(multires=10):
-    if multires == -1:
-        return nn.Identity(), 3
-
-    embed_kwargs = {
-                'include_input' : False,
-                'input_dims' : 3,
-                'max_freq_log2' : multires-1,
-                'num_freqs' : multires,
-                'log_sampling' : True,
-                'periodic_fns' : [torch.sin, torch.cos],
-    }
-
-    embedder_obj = Embedder(**embed_kwargs)
-    embed = lambda x, eo=embedder_obj : eo.embed(x)
-    return embed, embedder_obj.out_dim
-    

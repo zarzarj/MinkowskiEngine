@@ -13,13 +13,9 @@ from pytorch_lightning import LightningDataModule
 import numpy as np
 from tqdm import tqdm
 from plyfile import PlyElement, PlyData
-
-
-import MinkowskiEngine as ME
-
-from examples.voxelizer import SparseVoxelizer
 import examples.transforms as t
 from examples.str2bool import str2bool
+from examples.utils import interpolate_grid_feats, get_embedder
 
 class ScanNet(LightningDataModule):
     def __init__(self, **kwargs):
@@ -80,22 +76,6 @@ class ScanNet(LightningDataModule):
             40: (100., 85., 144.),
         }
 
-        # Augmentation arguments
-        # self.SCALE_AUGMENTATION_BOUND = (0.9, 1.1)
-        # self.ROTATION_AUGMENTATION_BOUND = ((-np.pi / 64, np.pi / 64), (-np.pi / 64, np.pi / 64), (-np.pi, np.pi))
-        # self.TRANSLATION_AUGMENTATION_RATIO_BOUND = ((-0.2, 0.2), (-0.2, 0.2), (0, 0))
-        # self.ELASTIC_DISTORT_PARAMS = ((0.2, 0.4), (0.8, 1.6))
-        # self.sparse_voxelizer = SparseVoxelizer(
-        #     voxel_size=self.voxel_size,
-        #     clip_bound=self.clip_bound,
-        #     use_augmentation=self.augment_data,
-        #     scale_augmentation_bound=self.SCALE_AUGMENTATION_BOUND,
-        #     rotation_augmentation_bound=self.ROTATION_AUGMENTATION_BOUND,
-        #     translation_augmentation_ratio_bound=self.TRANSLATION_AUGMENTATION_RATIO_BOUND,
-        #     rotation_axis=self.locfeat_idx,
-        #     ignore_label=self.ignore_label)
-
-
         self.NUM_LABELS = 150  # Will be converted to 20 as defined in IGNORE_LABELS.
         self.IGNORE_LABELS = tuple(set(range(self.NUM_LABELS)) - set(self.valid_class_ids))
         # map labels not evaluated to ignore_label
@@ -109,34 +89,6 @@ class ScanNet(LightningDataModule):
                 n_used += 1
         self.label_map[-100] = -100
         self.NUM_LABELS -= len(self.IGNORE_LABELS)
-
-        # input_transforms = []
-        # if self.augment_data:
-        #     input_transforms += [
-        #         t.RandomDropout(0.2),
-        #         t.RandomHorizontalFlip(self.rotation_axis, False),
-        #         t.ChromaticAutoContrast(),
-        #         t.ChromaticTranslation(self.data_aug_color_trans_ratio),
-        #         t.ChromaticJitter(self.data_aug_color_jitter_std),
-        #     ]
-
-        # if len(input_transforms) > 0:
-        #     self.input_transforms = t.Compose(input_transforms)
-        # else:
-        #     self.input_transforms = None
-
-        # if self.return_transformation:
-        #     self.collate_fn = t.cflt_collate_fn_factory(self.limit_numpoints)
-        # else:
-        #     self.collate_fn = t.cfl_collate_fn_factory(self.limit_numpoints)
-
-
-    # def _augment_elastic_distortion(self, pointcloud):
-    #     if self.ELASTIC_DISTORT_PARAMS is not None:
-    #       if random.random() < 0.95:
-    #         for granularity, magnitude in self.ELASTIC_DISTORT_PARAMS:
-    #           pointcloud = t.elastic_distortion(pointcloud, granularity, magnitude)
-    #     return pointcloud
 
     def prepare_data(self):
         if self.save_preds:
@@ -161,6 +113,7 @@ class ScanNet(LightningDataModule):
             self.scan_files = glob.glob(os.path.join(self.scans_test_dir, '*', '_vh_clean_2.ply'))
             self.test_idx = torch.from_numpy(np.arange(len(self.scan_files)))
         self.scan_files.sort()
+        # print(self.scan_files[97])
         if self.use_coord_pos_encoding:
             self.embedder, _ = get_embedder(self.coord_pos_encoding_multires)
     
@@ -187,11 +140,10 @@ class ScanNet(LightningDataModule):
         coords_batch, feats_batch, labels_batch = ME.utils.sparse_collate(input_dict['coords'],
                                                                           feats, input_dict['labels'],
                                                                           dtype=torch.float32)
-        # print(coords_batch.shape, feats_batch.shape, labels_batch.shape)
-        # print(coords_batch, feats_batch, labels_batch)
         return {"coords": coords_batch,
                 "feats": feats_batch,
                 "labels": labels_batch.long(),
+                "idxs": idxs,
                 }
 
     def load_scan_files(self, idxs):
@@ -307,55 +259,16 @@ class ScanNet(LightningDataModule):
             os.makedirs(os.path.join(self.data_dir, 'implicit_feats'), exist_ok=True)
             mask_file = os.path.join(self.data_dir, 'masks', scene_name+'-d1e-05-ps0.npy')
             lats_file = os.path.join(self.data_dir, 'lats', scene_name+'-d1e-05-ps0.npy')
-            mask = np.load(mask_file)
-            lats = np.load(lats_file)
-            implicit_feats = get_implicit_feats(pts, lats, mask)
+            mask = torch.from_numpy(np.load(mask_file)).bool()
+            lats = torch.from_numpy(np.load(lats_file))
+            grid = torch.zeros(mask.shape + (lats.shape[-1],), dtype=torch.float32)
+            grid[mask] = lats
+            lat, xloc = interpolate_grid_feats(pts, grid)
+            implicit_feats = torch.cat([lat, xloc], dim=-1)
             torch.save(implicit_feats, implicit_feat_file)
         else:
             implicit_feats = torch.load(implicit_feat_file)
         return implicit_feats
-
-    # def getitem(self, idx):
-    #     if self.explicit_rotation > 1:
-    #         rotation_space = np.linspace(-np.pi, np.pi, self.explicit_rotation + 1)
-    #         rotation_angle = rotation_space[index % self.explicit_rotation]
-    #         index //= self.explicit_rotation
-    #     else:
-    #         rotation_angle = None
-    #     coords, feats, labels = self.load_ply(idx)
-    #     if self.prevoxelize_voxel_size is not None:
-    #         inds = ME.SparseVoxelize(coords[:, :3] / self.prevoxelize_voxel_size, return_index=True)
-    #         coords = coords[inds]
-    #         feats = feats[inds]
-    #         labels = labels[inds]
-
-    #     if self.elastic_distortion:
-    #         pointcloud = self._augment_elastic_distortion(pointcloud)
-
-    #     outs = self.sparse_voxelizer.voxelize(
-    #         coords,
-    #         feats,
-    #         labels,
-    #         center=np.array([0,0,0]),
-    #         rotation_angle=rotation_angle,
-    #         return_transformation=self.return_transformation)
-
-    #     if self.return_transformation:
-    #         coords, feats, labels, transformation = outs
-    #         transformation = np.expand_dims(transformation, 0)
-    #     else:
-    #         coords, feats, labels = outs
-
-    #     # map labels not used for evaluation to ignore_label
-    #     if self.input_transforms is not None:
-    #         coords, feats, labels = self.input_transforms(coords, feats, labels)
-    #     if self.IGNORE_LABELS is not None:
-    #         labels = np.array([self.label_map[x] for x in labels], dtype=np.int)
-
-    #     return_args = [coords, feats, labels]
-    #     if self.return_transformation:
-    #         return_args.extend([pointcloud.astype(np.float32), transformation.astype(np.float32)])
-    #     return tuple(return_args)
 
     @staticmethod
     def add_argparse_args(parent_parser):
@@ -367,18 +280,7 @@ class ScanNet(LightningDataModule):
         parser.add_argument("--num_workers", type=int, default=5)
         parser.add_argument("--save_preds", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument("--train_percent", type=float, default=0.8)
-        # parser.add_argument("--augment_data", type=str2bool, nargs='?', const=True, default=True)
-        # parser.add_argument("--return_transformation", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument("--voxel_size", type=float, default=0.02)
-        # parser.add_argument("--rotation_axis", type=str, default='z')
-        # parser.add_argument("--locfeat_idx", type=int, default=2)
-        # parser.add_argument("--prevoxelize_voxel_size", type=float, default=None)
-        # parser.add_argument("--clip_bound", type=float, default=None)
-        # parser.add_argument("--data_aug_color_trans_ratio", type=float, default=0.10)
-        # parser.add_argument("--data_aug_color_jitter_std", type=float, default=0.05)
-        # parser.add_argument("--limit_numpoints", type=int, default=0)
-        # parser.add_argument("--explicit_rotation", type=int, default=-1)
-        # parser.add_argument("--elastic_distortion", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument("--use_implicit_feats", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument("--use_coords", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument("--use_colors", type=str2bool, nargs='?', const=True, default=True)
@@ -393,147 +295,3 @@ class ScanNet(LightningDataModule):
     def cleanup(self):
         self.sparse_voxelizer.cleanup()
 
-def get_implicit_feats(pts, lats, mask, part_size=0.25):
-    """Regular grid interpolator, returns inpterpolation coefficients.
-    Args:
-    pts: `[num_points, dim]` tensor, coordinates of points
-    lats: `[num_nonempty_lats, dim]` sparse tensor of latents
-    mask: `[*size]` mask for nonempty latents
-
-    Returns:
-    implicit feats: `[num_points, 2**dim * ( features + dim )]` tensor, neighbor
-    latent codes and relative locations for each input point .
-    """
-    # get dimensions
-    size = torch.from_numpy(np.array(mask.shape))
-    xmin = torch.min(pts[:, :3], 0)[0]
-    xmin -= part_size
-    true_shape = (size - 1) / 2.0
-    xmax = xmin + true_shape * part_size
-
-    grid = torch.zeros(mask.shape + (lats.shape[-1],), dtype=torch.float32)
-    # print(grid.shape)
-    mask = torch.from_numpy(mask).bool()
-    grid[mask] = torch.from_numpy(lats)
-
-    npts = pts.shape[0]
-    cubesize = 1.0/(size-1.0)
-    dim = len(size)
-
-    # normalize coords for interpolation
-    bbox = xmax - xmin
-    pts = (pts - xmin) / bbox
-    pts = torch.clip(pts, 1e-6, 1-1e-6)  # clip to boundary of the bbox
-
-    # find neighbor indices
-    ind0 = torch.floor(pts / cubesize)  # `[num_points, dim]`
-    ind1 = torch.ceil(pts / cubesize)  # `[num_points, dim]`
-    ind01 = torch.stack([ind0, ind1], dim=0)  # `[2, num_points, dim]`
-    ind01 = torch.transpose(ind01, 1, 2)  # `[2, dim, num_points]`
-
-    # generate combinations for enumerating neighbors
-    com_ = torch.stack(torch.meshgrid(*tuple(torch.tensor([[0,1]] * dim))), dim=-1)
-    com_ = torch.reshape(com_, [-1, dim])  # `[2**dim, dim]`
-    # print(com_, com_.shape)
-    dim_ = torch.reshape(torch.arange(0,dim), [1, -1])
-    dim_ = torch.tile(dim_, [2**dim, 1])  # `[2**dim, dim]`
-    # print(dim_, dim_.shape)
-    gather_ind = torch.stack([com_, dim_], dim=-1)  # `[2**dim, dim, 2]`
-    # print(gather_ind, gather_ind.shape)
-    ind_ = gather_nd(ind01, gather_ind)  # [2**dim, dim, num_pts]
-    # print(ind_, ind_.shape)
-    ind_n = torch.transpose(ind_, 0,2).transpose(1,2)  # neighbor indices `[num_pts, 2**dim, dim]`
-    # print(ind_n, ind_n.shape)
-    lat = gather_nd(grid, ind_n) # `[num_points, 2**dim, in_features]`
-    # print(lat, lat.shape)
-
-    # weights of neighboring nodes
-    xyz0 = ind0 * cubesize  # `[num_points, dim]`
-    xyz1 = (ind0 + 1) * cubesize  # `[num_points, dim]`
-    xyz01 = torch.stack([xyz0, xyz1], dim=-1)  # [num_points, dim, 2]`
-    xyz01 = torch.transpose(xyz01, 0,2)  # [2, dim, num_points]
-    pos = gather_nd(xyz01, gather_ind)  # `[2**dim, dim, num_points]`
-    pos = torch.transpose(pos, 0,2).transpose(1,2) # `[num_points, 2**dim, dim]`
-    xloc = (torch.unsqueeze(pts, -2) - pos) / cubesize # `[num_points, 2**dim, dim]`
-
-    xloc = xloc.contiguous().reshape(npts, -1)
-    lat = lat.contiguous().reshape(npts, -1)
-    implicit_feats = torch.cat([lat, xloc], dim=-1) # `[num_points, 2**dim * (in_features + dim)]`
-    # print(implicit_feats, implicit_feats.shape)
-    return implicit_feats
-
-
-def gather_nd(params, indices):
-    orig_shape = list(indices.shape)
-    num_samples = np.prod(orig_shape[:-1])
-    m = orig_shape[-1]
-    n = len(params.shape)
-    if m <= n:
-        out_shape = orig_shape[:-1] + list(params.shape)[m:]
-    else:
-        raise ValueError(
-            f'the last dimension of indices must less or equal to the rank of params. Got indices:{indices.shape}, params:{params.shape}. {m} > {n}'
-        )
-
-    indices = indices.reshape((num_samples, m)).transpose(0, 1).tolist()
-    output = params[indices] 
-    return output.reshape(out_shape).contiguous()
-
-
-class Embedder:
-    def __init__(self, **kwargs):
-        self.kwargs = kwargs
-        self.create_embedding_fn()
-
-    def create_embedding_fn(self):
-        embed_fns = []
-        d = self.kwargs['input_dims']
-        out_dim = 0
-        if self.kwargs['include_input']:
-            embed_fns.append(lambda x : x)
-            out_dim += d
-
-        max_freq = self.kwargs['max_freq_log2']
-        N_freqs = self.kwargs['num_freqs']
-
-        if self.kwargs['log_sampling']:
-            freq_bands = 2.**torch.linspace(0., max_freq, steps=N_freqs)
-        else:
-            freq_bands = torch.linspace(2.**0., 2.**max_freq, steps=N_freqs)
-
-        for freq in freq_bands:
-            for p_fn in self.kwargs['periodic_fns']:
-                embed_fns.append(lambda x, p_fn=p_fn, freq=freq : p_fn(x * freq))
-                out_dim += d
-
-        self.embed_fns = embed_fns
-        self.out_dim = out_dim
-
-    def embed(self, inputs):
-        return torch.cat([fn(inputs) for fn in self.embed_fns], -1)
-
-
-def get_embedder(multires=10):
-    if multires == -1:
-        return nn.Identity(), 3
-
-    embed_kwargs = {
-                'include_input' : False,
-                'input_dims' : 3,
-                'max_freq_log2' : multires-1,
-                'num_freqs' : multires,
-                'log_sampling' : True,
-                'periodic_fns' : [torch.sin, torch.cos],
-    }
-
-    embedder_obj = Embedder(**embed_kwargs)
-    embed = lambda x, eo=embedder_obj : eo.embed(x)
-    return embed, embedder_obj.out_dim
-
-
-def save_pc(PC, PC_color, filename):
-    from plyfile import PlyElement, PlyData
-    PC = np.concatenate((PC, PC_color), axis=1)
-    PC = [tuple(element) for element in PC]
-    el = PlyElement.describe(np.array(PC, dtype=[('x', 'f4'), ('y', 'f4'), ('z', 'f4'), ('red', 'u1'), ('green', 'u1'), ('blue', 'u1')]), 'vertex')
-    PlyData([el]).write(filename)
