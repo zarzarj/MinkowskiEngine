@@ -16,6 +16,8 @@ from pytorch_lightning.callbacks import ModelCheckpoint, LearningRateMonitor, Ca
 from pytorch_lightning.plugins import DDPPlugin
 from examples.str2bool import str2bool
 
+import MinkowskiEngine as ME
+
 def plot_confusion_matrix(trainer, pl_module, confusion_metric, plot_title):
     tb = pl_module.logger.experiment
     conf_mat = confusion_metric.compute().detach().cpu().numpy()
