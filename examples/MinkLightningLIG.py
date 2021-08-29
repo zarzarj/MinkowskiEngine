@@ -26,21 +26,29 @@ def to_precision(inputs, precision):
     outputs = []
     for input in inputs:
         if isinstance(input, list):
-            outputs.append([linput.to(dtype) for linput in input])
+            loutputs = []
+            for loutput in input:
+                if loutput is not None:
+                    loutputs.append(loutput.to(dtype))
+                else:
+                    loutputs.append(loutput)
+            outputs.append(loutputs)
+            # print(loutputs)
         else:
             outputs.append(input.to(dtype))
+    # print(outputs)
     return tuple(outputs)
 
 class MinkowskiSegmentationModuleLIG(BaseSegmentationModule):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.mlp_channels = [int(i) for i in self.mlp_channels.split(',')]
-        self.mlp_channels = (self.in_channels + 3) * torch.tensor([1,4,8,4])
+        self.mlp_channels = (self.in_channels + self.mlp_extra_in_channels) * torch.tensor([1,4,8,4])
         if self.mink_sdf_to_seg:
             if self.odd_model:
-                self.model = MinkUNet34Codd(self.in_channels, self.mlp_channels[0] - 3)
+                self.model = MinkUNet34Codd(self.in_channels, self.in_channels)
             else:
-                self.model = MinkUNet34C(self.in_channels, self.mlp_channels[0] - 3)
+                self.model = MinkUNet34C(self.in_channels, self.in_channels)
         self.seg_head = nn.Sequential(MLP(self.mlp_channels, dropout=self.seg_head_dropout),
                                       nn.Conv1d(self.mlp_channels[-1], self.out_channels, kernel_size=1, bias=True)
                                       # nn.Linear(self.mlp_channels[-1], self.out_channels)
@@ -49,6 +57,7 @@ class MinkowskiSegmentationModuleLIG(BaseSegmentationModule):
 
     def forward(self, x, pts, feats, rand_shift=None):
         bs = len(pts)
+        # print(bs)
         if self.mink_sdf_to_seg:
             sparse_lats = self.model(x)
         else:
@@ -76,6 +85,7 @@ class MinkowskiSegmentationModuleLIG(BaseSegmentationModule):
                 cur_seg_occ_in = torch.cat([lat, xloc, feats[i].unsqueeze(1).repeat(1,lat.shape[1],1)], dim=-1)
             else:
                 cur_seg_occ_in = torch.cat([lat, xloc], dim=-1)
+            # print(cur_seg_occ_in.shape, feats[i])
             cur_weights = 1 - torch.prod(torch.abs(xloc), axis=-1)
             seg_occ_in_list.append(cur_seg_occ_in)
             weights_list.append(cur_weights)
@@ -161,5 +171,6 @@ class MinkowskiSegmentationModuleLIG(BaseSegmentationModule):
         parser.add_argument("--mink_sdf_to_seg", type=str2bool, nargs='?', const=True, default=True)
         parser.add_argument('--seg_head_dropout', type=float, default=0.3)
         parser.add_argument("--mlp_channels", type=str, default='1,4,8,4')
+        parser.add_argument("--mlp_extra_in_channels", type=int, default=3)
         return parent_parser
 

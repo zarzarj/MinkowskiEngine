@@ -64,8 +64,8 @@ class ScanNetLIG(ScanNet):
             feats.append(input_dict['pts'])
         if self.use_coord_pos_encoding:
             feats.append(self.embedder(input_dict['pts']))
-        # if len(feats) == 0:
-        #     return None
+        if len(feats) == 0:
+            return None
         out_feats = torch.cat(feats, dim=-1)
         return out_feats
 
