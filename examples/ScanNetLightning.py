@@ -138,7 +138,6 @@ class ScanNet(LightningDataModule):
 
     def convert_batch(self, idxs):
         input_dict = self.load_scan_files(idxs)
-        feats = self.get_features(input_dict)
         coords_batch, feats_batch, labels_batch = ME.utils.sparse_collate(input_dict['coords'],
                                                                           feats, input_dict['labels'],
                                                                           dtype=torch.float32)
@@ -231,6 +230,7 @@ class ScanNet(LightningDataModule):
         if self.shift_coords and self.trainer.training:
             input_dict['coords'] += (torch.rand(3) * 100).type_as(input_dict['coords'])
         input_dict['colors'] = (input_dict['colors'] / 255.) - 0.5
+        input_dict['feats'] = self.get_features(input_dict)
         del input_dict['pts']
         return input_dict
 
@@ -239,18 +239,14 @@ class ScanNet(LightningDataModule):
         if self.use_colors:
             feats.append(input_dict['colors'])
         if self.use_coords:
-            feats.append(input_dict['coords'])
+            feats.append(input_dict['pts'])
         if self.use_implicit_feats:
             feats.append(input_dict['implicit_feats'])
         if self.use_coord_pos_encoding:
-            feats.append([self.embedder(coord) for coord in input_dict['coords']])
+            feats.append(self.embedder(input_dict['pts']))
         if len(feats) == 0:
-            feats.append([torch.ones((coords.shape[0], 1)) for coords in input_dict['coords']])
-        out_feats = []
-        for i in range(len(feats[0])):
-            cur_all_feats = [feat[i] for feat in feats]
-            # print(cur_all_feats, cur_a)
-            out_feats.append(torch.cat(cur_all_feats, dim=-1))
+            feats.append(torch.ones((input_dict['pts'].shape[0], 1)))
+        out_feats = torch.cat(feats, dim=-1)
         return out_feats
 
 

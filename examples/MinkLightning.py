@@ -121,6 +121,9 @@ class BaseSegmentationModule(LightningModule):
             new_metrics_dict.pop(key)
         return new_metrics_dict
 
+    def convert_sync_batchnorm(self):
+        self.model = ME.MinkowskiSyncBatchNorm.convert_sync_batchnorm(self.model)
+
     @staticmethod
     def add_argparse_args(parent_parser):
         parser = parent_parser.add_argument_group("BaseSegModel")
@@ -157,7 +160,7 @@ class MinkowskiSegmentationModule(BaseSegmentationModule):
                                       nn.Conv1d(self.mlp_channels[-1], self.out_channels, kernel_size=1, bias=True)
                                       # nn.Linear(self.mlp_channels[-1], self.out_channels)
                                       )
-            
+
     def forward(self, x):
         return self.model(x)
 

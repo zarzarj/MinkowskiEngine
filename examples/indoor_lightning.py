@@ -16,8 +16,6 @@ from pytorch_lightning.callbacks import ModelCheckpoint, LearningRateMonitor, Ca
 from pytorch_lightning.plugins import DDPPlugin
 from examples.str2bool import str2bool
 
-import MinkowskiEngine as ME
-
 def plot_confusion_matrix(trainer, pl_module, confusion_metric, plot_title):
     tb = pl_module.logger.experiment
     conf_mat = confusion_metric.compute().detach().cpu().numpy()
@@ -108,14 +106,13 @@ if __name__ == "__main__":
                         **pl_module_args)
             print(f'Restored {ckpt}')
             resume_from_checkpoint = ckpt
-    print("restore trainer")
     pl_trainer, args, _ = init_module_from_args(Trainer, args, callbacks=callbacks,
                                              default_root_dir=os.path.join(lightning_root_dir),
                                              plugins=DDPPlugin(find_unused_parameters=False),
                                              resume_from_checkpoint=resume_from_checkpoint)
 
     if pl_trainer.gpus > 1:
-        pl_module.model = ME.MinkowskiSyncBatchNorm.convert_sync_batchnorm(pl_module.model)
+        pl_module.convert_sync_batchnorm()
 
     if main_args.run_mode == 'train':
         pl_trainer.fit(pl_module, pl_datamodule) 

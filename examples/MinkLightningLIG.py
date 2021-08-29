@@ -45,10 +45,9 @@ class MinkowskiSegmentationModuleLIG(BaseSegmentationModule):
                                       nn.Conv1d(self.mlp_channels[-1], self.out_channels, kernel_size=1, bias=True)
                                       # nn.Linear(self.mlp_channels[-1], self.out_channels)
                                       )
+        # print(self)
 
-        print(self)
-
-    def forward(self, x, pts, rand_shift=None):
+    def forward(self, x, pts, feats, rand_shift=None):
         bs = len(pts)
         if self.mink_sdf_to_seg:
             sparse_lats = self.model(x)
@@ -70,8 +69,13 @@ class MinkowskiSegmentationModuleLIG(BaseSegmentationModule):
         seg_occ_in_list = []
         weights_list = []
         for i in range(bs):
+            # print(pts[i].shape, feats[i].shape)
             lat, xloc = interpolate_grid_feats(pts[i], seg_lats[i].permute([1,2,3,0]), min_coord=min_coord) # (num_pts, 2**dim, c + 3), (num_pts, 2**dim)
-            cur_seg_occ_in = torch.cat([lat, xloc], dim=-1)
+            if feats[i] is not None:
+                # print(feats[i].shape, lat.shape, xloc.shape)
+                cur_seg_occ_in = torch.cat([lat, xloc, feats[i].unsqueeze(1).repeat(1,lat.shape[1],1)], dim=-1)
+            else:
+                cur_seg_occ_in = torch.cat([lat, xloc], dim=-1)
             cur_weights = 1 - torch.prod(torch.abs(xloc), axis=-1)
             seg_occ_in_list.append(cur_seg_occ_in)
             weights_list.append(cur_weights)
@@ -91,8 +95,8 @@ class MinkowskiSegmentationModuleLIG(BaseSegmentationModule):
     #         print(k, v.grad)
 
     def training_step(self, batch, batch_idx):
-        coords, feats, pts, target = batch['coords'], batch['feats'], batch['pts'], batch['labels']
-        coords, feats, pts = to_precision((coords, feats, pts), self.trainer.precision)
+        coords, lats, pts, feats, target = batch['coords'], batch['lats'], batch['pts'], batch['feats'], batch['labels']
+        coords, lats, pts, feats = to_precision((coords, lats, pts, feats), self.trainer.precision)
         if self.trainer.datamodule.shift_coords:
             rand_shift = batch['rand_shift']
         else:
@@ -100,7 +104,7 @@ class MinkowskiSegmentationModuleLIG(BaseSegmentationModule):
         target = torch.cat(target, dim=0).long()
         # print('coords', coords.max(dim=0)[0])
         in_field = ME.TensorField(
-            features=feats,
+            features=lats,
             coordinates=coords,
             quantization_mode=ME.SparseTensorQuantizationMode.UNWEIGHTED_AVERAGE,
             minkowski_algorithm=ME.MinkowskiAlgorithm.SPEED_OPTIMIZED,
@@ -109,7 +113,7 @@ class MinkowskiSegmentationModuleLIG(BaseSegmentationModule):
         )
         sinput = in_field.sparse()
         # print('coords2', sinput.coordinates.max(dim=0)[0])
-        logits = self(sinput, pts, rand_shift)
+        logits = self(sinput, pts, feats, rand_shift)
         train_loss = self.criterion(logits, target)
 
         self.log('train_loss', train_loss, sync_dist=True, prog_bar=True, on_step=False, on_epoch=True)
@@ -122,12 +126,12 @@ class MinkowskiSegmentationModuleLIG(BaseSegmentationModule):
         return {'loss': train_loss, 'preds': preds[valid_targets], 'target': target[valid_targets]}
 
     def validation_step(self, batch, batch_idx):
-        coords, feats, pts, target = batch['coords'], batch['feats'], batch['pts'], batch['labels']
-        coords, feats, pts = to_precision((coords, feats, pts), self.trainer.precision)
+        coords, lats, pts, feats, target = batch['coords'], batch['lats'], batch['pts'], batch['feats'], batch['labels']
+        coords, lats, pts, feats = to_precision((coords, lats, pts, feats), self.trainer.precision)
         target = torch.cat(target, dim=0).long()
         # print('coords', coords.max(dim=0)[0], [p.max(dim=0)[0] for p in pts], [p.min(dim=0)[0] for p in pts], batch['idxs'])
         in_field = ME.TensorField(
-            features=feats,
+            features=lats,
             coordinates=coords,
             quantization_mode=ME.SparseTensorQuantizationMode.UNWEIGHTED_AVERAGE,
             minkowski_algorithm=ME.MinkowskiAlgorithm.SPEED_OPTIMIZED,
@@ -137,12 +141,16 @@ class MinkowskiSegmentationModuleLIG(BaseSegmentationModule):
         # print('coords2', sinput.coordinates.max(dim=0)[0])
         if self.global_step % 10 == 0:
             torch.cuda.empty_cache()
-        logits = self(sinput, pts)
+        logits = self(sinput, pts, feats)
         val_loss = self.criterion(logits, target)
         self.log('val_loss', val_loss, sync_dist=True, prog_bar=True, on_step=False, on_epoch=True)
         preds = logits.argmax(dim=-1)
         valid_targets = target != -100
         return {'loss': val_loss, 'preds': preds[valid_targets], 'target': target[valid_targets]}
+
+    def convert_sync_batchnorm(self):
+        if self.mink_sdf_to_seg:
+            self.model = ME.MinkowskiSyncBatchNorm.convert_sync_batchnorm(self.model)
 
     @staticmethod
     def add_argparse_args(parent_parser):
