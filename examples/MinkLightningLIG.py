@@ -10,7 +10,7 @@ from examples.minkunetodd import MinkUNet34C as MinkUNet34Codd
 from examples.MeanAccuracy import MeanAccuracy
 from examples.MeanIoU import MeanIoU
 from pytorch_lightning.metrics import Accuracy, ConfusionMatrix, MetricCollection
-from examples.MinkLightning import MinkowskiSegmentationModule
+from examples.MinkLightning import BaseSegmentationModule
 from examples.str2bool import str2bool
 from examples.basic_blocks import MLP
 from examples.utils import interpolate_grid_feats
@@ -31,26 +31,29 @@ def to_precision(inputs, precision):
             outputs.append(input.to(dtype))
     return tuple(outputs)
 
-class MinkowskiSegmentationModuleLIG(MinkowskiSegmentationModule):
+class MinkowskiSegmentationModuleLIG(BaseSegmentationModule):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.mlp_channels = [int(i) for i in self.mlp_channels.split(',')]
         self.mlp_channels = (self.in_channels + 3) * torch.tensor([1,4,8,4])
-        if self.odd_model:
-            self.model = MinkUNet34Codd(self.in_channels, self.mlp_channels[0] - 3)
-        else:
-            self.model = MinkUNet34C(self.in_channels, self.mlp_channels[0] - 3)
+        if self.mink_sdf_to_seg:
+            if self.odd_model:
+                self.model = MinkUNet34Codd(self.in_channels, self.mlp_channels[0] - 3)
+            else:
+                self.model = MinkUNet34C(self.in_channels, self.mlp_channels[0] - 3)
         self.seg_head = nn.Sequential(MLP(self.mlp_channels, dropout=self.seg_head_dropout),
                                       nn.Conv1d(self.mlp_channels[-1], self.out_channels, kernel_size=1, bias=True)
                                       # nn.Linear(self.mlp_channels[-1], self.out_channels)
                                       )
-        # print(self)
+
+        print(self)
 
     def forward(self, x, pts, rand_shift=None):
-        # print(x)
-        # print(x)
         bs = len(pts)
-        sparse_lats = self.model(x)
+        if self.mink_sdf_to_seg:
+            sparse_lats = self.model(x)
+        else:
+            sparse_lats = x
         if rand_shift is not None:
             list_of_coords, list_of_feats = sparse_lats.decomposed_coordinates_and_features
             for i in range(bs):
@@ -63,10 +66,6 @@ class MinkowskiSegmentationModuleLIG(MinkowskiSegmentationModule):
             
         else:
             seg_lats, min_coord, _ = sparse_lats.dense() # (b, *sizes, c)
-
-        # print(min_coord)
-        # print(seg_lats.shape)
-        # print(seg_lats)
         
         seg_occ_in_list = []
         weights_list = []
@@ -147,10 +146,11 @@ class MinkowskiSegmentationModuleLIG(MinkowskiSegmentationModule):
 
     @staticmethod
     def add_argparse_args(parent_parser):
-        parent_parser = MinkowskiSegmentationModule.add_argparse_args(parent_parser)
+        parent_parser = BaseSegmentationModule.add_argparse_args(parent_parser)
         parser = parent_parser.add_argument_group("MinkSegModelLIG")
         parser.add_argument("--interpolate_grid_feats", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument("--odd_model", type=str2bool, nargs='?', const=True, default=False)
+        parser.add_argument("--mink_sdf_to_seg", type=str2bool, nargs='?', const=True, default=True)
         parser.add_argument('--seg_head_dropout', type=float, default=0.3)
         parser.add_argument("--mlp_channels", type=str, default='1,4,8,4')
         return parent_parser

@@ -40,7 +40,7 @@ def to_precision(inputs, precision):
         dtype = torch.float64
     return tuple([input.to(dtype) for input in inputs])
 
-class MinkowskiSegmentationModule(LightningModule):
+class BaseSegmentationModule(LightningModule):
     def __init__(self, **kwargs):
         super().__init__()
         self.save_hyperparameters()
@@ -51,14 +51,6 @@ class MinkowskiSegmentationModule(LightningModule):
                 except:
                     print(name, value)
         self.criterion = nn.CrossEntropyLoss(ignore_index=-100)
-        self.model = MinkUNet34C(self.in_channels, self.out_channels)
-
-        if self.use_seg_head:
-            self.seg_head = nn.Sequential(MLP(self.mlp_channels, dropout=self.seg_head_dropout),
-                                      nn.Conv1d(self.mlp_channels[-1], self.out_channels, kernel_size=1, bias=True)
-                                      # nn.Linear(self.mlp_channels[-1], self.out_channels)
-                                      )
-
         metrics = MetricCollection({'acc': Accuracy(),
                                     'macc': MeanAccuracy(num_classes=self.out_channels),
                                     'miou': MeanIoU(num_classes=self.out_channels)})
@@ -70,60 +62,12 @@ class MinkowskiSegmentationModule(LightningModule):
         self.train_conf_metrics = conf_metrics.clone(prefix='train_')
         self.val_conf_metrics = conf_metrics.clone(prefix='val_')
 
-    def forward(self, x):
-        return self.model(x)
-
-    def training_step(self, batch, batch_idx):
-        # print("Train ", batch)
-        coords, feats, target = batch['coords'], batch['feats'], batch['labels']
-        coords, feats = to_precision((coords, feats), self.trainer.precision)     
-        in_field = ME.TensorField(
-            features=feats,
-            coordinates=coords,
-            quantization_mode=ME.SparseTensorQuantizationMode.UNWEIGHTED_AVERAGE,
-            minkowski_algorithm=ME.MinkowskiAlgorithm.SPEED_OPTIMIZED,
-            device=self.device,
-        )
-        sinput = in_field.sparse()
-
-        logits = self(sinput).slice(in_field).F
-        train_loss = self.criterion(logits, target)
-
-        self.log('train_loss', train_loss, sync_dist=True, prog_bar=True, on_step=False, on_epoch=True)
-        preds = logits.argmax(dim=-1)
-        valid_targets = target != -100
-
-        if self.global_step % 10 == 0:
-            torch.cuda.empty_cache()
-
-        return {'loss': train_loss, 'preds': preds[valid_targets], 'target': target[valid_targets]}
-
     def training_step_end(self, outputs):
         #update and log
         self.train_metrics(outputs['preds'], outputs['target'])
         self.log_dict(self.train_metrics, prog_bar=False, on_step=False, on_epoch=True)
         self.train_conf_metrics(outputs['preds'], outputs['target'])
         self.log_dict(self.train_conf_metrics, prog_bar=False, on_step=False, on_epoch=False)
-
-    def validation_step(self, batch, batch_idx):
-        # print("Val ", batch)
-        coords, feats, target = batch['coords'], batch['feats'], batch['labels']
-        coords, feats = to_precision((coords, feats), self.trainer.precision)
-        # print(target.min(), target.max(), target)
-        in_field = ME.TensorField(
-            features=feats,
-            coordinates=coords,
-            quantization_mode=ME.SparseTensorQuantizationMode.UNWEIGHTED_AVERAGE,
-            minkowski_algorithm=ME.MinkowskiAlgorithm.SPEED_OPTIMIZED,
-            device=self.device,
-        )
-        sinput = in_field.sparse()
-        logits = self(sinput).slice(in_field).F
-        val_loss = self.criterion(logits, target)
-        self.log('val_loss', val_loss, sync_dist=True, prog_bar=True, on_step=False, on_epoch=True)
-        preds = logits.argmax(dim=-1)
-        valid_targets = target != -100
-        return {'loss': val_loss, 'preds': preds[valid_targets], 'target': target[valid_targets]}
 
     def validation_step_end(self, outputs):
         #update and log
@@ -179,10 +123,9 @@ class MinkowskiSegmentationModule(LightningModule):
 
     @staticmethod
     def add_argparse_args(parent_parser):
-        parser = parent_parser.add_argument_group("MinkSegModel")
+        parser = parent_parser.add_argument_group("BaseSegModel")
         parser.add_argument("--in_channels", type=int, default=3)
         parser.add_argument("--out_channels", type=int, default=20)
-        parser.add_argument("--use_seg_head", type=str2bool, nargs='?', const=True, default=False)
 
         # Optimizer arguments
         parser.add_argument('--optimizer', type=str, default='SGD', choices=['SGD', 'Adam'])
@@ -202,6 +145,72 @@ class MinkowskiSegmentationModule(LightningModule):
         parser.add_argument('--poly_power', type=float, default=0.9)
         parser.add_argument('--exp_gamma', type=float, default=0.95)
         parser.add_argument('--exp_step_size', type=float, default=445)
+        return parent_parser
+
+
+class MinkowskiSegmentationModule(BaseSegmentationModule):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.model = MinkUNet34C(self.in_channels, self.out_channels)
+        if self.use_seg_head:
+            self.seg_head = nn.Sequential(MLP(self.mlp_channels, dropout=self.seg_head_dropout),
+                                      nn.Conv1d(self.mlp_channels[-1], self.out_channels, kernel_size=1, bias=True)
+                                      # nn.Linear(self.mlp_channels[-1], self.out_channels)
+                                      )
+            
+    def forward(self, x):
+        return self.model(x)
+
+    def training_step(self, batch, batch_idx):
+        # print("Train ", batch)
+        coords, feats, target = batch['coords'], batch['feats'], batch['labels']
+        coords, feats = to_precision((coords, feats), self.trainer.precision)     
+        in_field = ME.TensorField(
+            features=feats,
+            coordinates=coords,
+            quantization_mode=ME.SparseTensorQuantizationMode.UNWEIGHTED_AVERAGE,
+            minkowski_algorithm=ME.MinkowskiAlgorithm.SPEED_OPTIMIZED,
+            device=self.device,
+        )
+        sinput = in_field.sparse()
+
+        logits = self(sinput).slice(in_field).F
+        train_loss = self.criterion(logits, target)
+
+        self.log('train_loss', train_loss, sync_dist=True, prog_bar=True, on_step=False, on_epoch=True)
+        preds = logits.argmax(dim=-1)
+        valid_targets = target != -100
+
+        if self.global_step % 10 == 0:
+            torch.cuda.empty_cache()
+
+        return {'loss': train_loss, 'preds': preds[valid_targets], 'target': target[valid_targets]}
+    
+    def validation_step(self, batch, batch_idx):
+        # print("Val ", batch)
+        coords, feats, target = batch['coords'], batch['feats'], batch['labels']
+        coords, feats = to_precision((coords, feats), self.trainer.precision)
+        # print(target.min(), target.max(), target)
+        in_field = ME.TensorField(
+            features=feats,
+            coordinates=coords,
+            quantization_mode=ME.SparseTensorQuantizationMode.UNWEIGHTED_AVERAGE,
+            minkowski_algorithm=ME.MinkowskiAlgorithm.SPEED_OPTIMIZED,
+            device=self.device,
+        )
+        sinput = in_field.sparse()
+        logits = self(sinput).slice(in_field).F
+        val_loss = self.criterion(logits, target)
+        self.log('val_loss', val_loss, sync_dist=True, prog_bar=True, on_step=False, on_epoch=True)
+        preds = logits.argmax(dim=-1)
+        valid_targets = target != -100
+        return {'loss': val_loss, 'preds': preds[valid_targets], 'target': target[valid_targets]}
+
+    @staticmethod
+    def add_argparse_args(parent_parser):
+        parent_parser = BaseSegmentationModule.add_argparse_args(parent_parser)
+        parser = parent_parser.add_argument_group("MinkSegModel")
+        parser.add_argument("--use_seg_head", type=str2bool, nargs='?', const=True, default=False)
         return parent_parser
 
 
