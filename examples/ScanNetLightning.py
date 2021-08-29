@@ -17,6 +17,8 @@ import examples.transforms as t
 from examples.str2bool import str2bool
 from examples.utils import interpolate_grid_feats, get_embedder
 
+import MinkowskiEngine as ME
+
 class ScanNet(LightningDataModule):
     def __init__(self, **kwargs):
         super().__init__()
