@@ -50,7 +50,7 @@ def init_module_from_args(module, args=None, **kwargs):
     module_args, args = parser.parse_known_args(args=args)
     args_dict = vars(module_args)
     args_dict.update(kwargs)
-    return module(**args_dict), args
+    return module(**args_dict), args, args_dict
 
 class MainArgs():
     def __init__(self, **kwargs):
@@ -72,7 +72,7 @@ class MainArgs():
         return parent_parser
 
 if __name__ == "__main__":
-    main_args, args = init_module_from_args(MainArgs)
+    main_args, args, _ = init_module_from_args(MainArgs)
     seed_everything(main_args.seed)
     if main_args.pipeline == 'implicit':       
         from examples.MinkLightningLIG import MinkowskiSegmentationModuleLIG
@@ -83,8 +83,8 @@ if __name__ == "__main__":
         from examples.ScanNetLightning import ScanNet
         datamodule, module = ScanNet, MinkowskiSegmentationModule
 
-    pl_module, args = init_module_from_args(module, args)
-    pl_datamodule, args = init_module_from_args(datamodule, args)
+    pl_module, args, pl_module_args = init_module_from_args(module, args)
+    pl_datamodule, args, _ = init_module_from_args(datamodule, args)
 
     callbacks = []
     callbacks.append(ConfusionMatrixPlotCallback())
@@ -104,11 +104,12 @@ if __name__ == "__main__":
             ckpt = ckptdirs[0]
             pl_module = pl_module.load_from_checkpoint(
                         checkpoint_path=ckpt,
-                        hparams_file=f'{most_recent_train_logdir}/hparams.yaml')
+                        hparams_file=f'{most_recent_train_logdir}/hparams.yaml',
+                        **pl_module_args)
             print(f'Restored {ckpt}')
             resume_from_checkpoint = ckpt
     print("restore trainer")
-    pl_trainer, args = init_module_from_args(Trainer, args, callbacks=callbacks,
+    pl_trainer, args, _ = init_module_from_args(Trainer, args, callbacks=callbacks,
                                              default_root_dir=os.path.join(lightning_root_dir),
                                              plugins=DDPPlugin(find_unused_parameters=False),
                                              resume_from_checkpoint=resume_from_checkpoint)
