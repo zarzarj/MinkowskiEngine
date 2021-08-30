@@ -139,7 +139,7 @@ class ScanNet(LightningDataModule):
     def convert_batch(self, idxs):
         input_dict = self.load_scan_files(idxs)
         coords_batch, feats_batch, labels_batch = ME.utils.sparse_collate(input_dict['coords'],
-                                                                          feats, input_dict['labels'],
+                                                                          input_dict['feats'], input_dict['labels'],
                                                                           dtype=torch.float32)
         return {"coords": coords_batch,
                 "feats": feats_batch,

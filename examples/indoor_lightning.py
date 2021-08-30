@@ -66,20 +66,24 @@ class MainArgs():
         parser.add_argument("--exp_name", type=str, default='default')
         parser.add_argument('--run_mode', type=str, default='train', choices=['train','validate','test'])
         parser.add_argument('--seed', type=int, default=42)
-        parser.add_argument("--pipeline", type=str, default='default', choices=['default', 'implicit'])
+        parser.add_argument("--pipeline", type=str, default='default', choices=['default', 'implicit', 'revgnn'])
         return parent_parser
 
 if __name__ == "__main__":
     main_args, args, _ = init_module_from_args(MainArgs)
     seed_everything(main_args.seed)
-    if main_args.pipeline == 'implicit':       
+    if main_args.pipeline == 'default':  
+        from examples.MinkLightning import MinkowskiSegmentationModule
+        from examples.ScanNetLightning import ScanNet
+        datamodule, module = ScanNet, MinkowskiSegmentationModule     
+    elif main_args.pipeline == 'implicit':
         from examples.MinkLightningLIG import MinkowskiSegmentationModuleLIG
         from examples.ScanNetLightningLIG import ScanNetLIG
         datamodule, module = ScanNetLIG, MinkowskiSegmentationModuleLIG
-    else:
-        from examples.MinkLightning import MinkowskiSegmentationModule
+    elif main_args.pipeline == 'revgnn':
+        from examples.rgnn_rooms import RevGNN_Rooms
         from examples.ScanNetLightning import ScanNet
-        datamodule, module = ScanNet, MinkowskiSegmentationModule
+        datamodule, module = ScanNet, RevGNN_Rooms
 
     pl_module, args, pl_module_args = init_module_from_args(module, args)
     pl_datamodule, args, _ = init_module_from_args(datamodule, args)
