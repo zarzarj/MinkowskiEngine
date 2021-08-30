@@ -255,12 +255,8 @@ class ScanNet(LightningDataModule):
         implicit_feat_file = os.path.join(self.data_dir, 'implicit_feats', scene_name+'-d1e-05-ps0.pt')
         if not os.path.exists(implicit_feat_file):
             os.makedirs(os.path.join(self.data_dir, 'implicit_feats'), exist_ok=True)
-            mask_file = os.path.join(self.data_dir, 'masks', scene_name+'-d1e-05-ps0.npy')
             lats_file = os.path.join(self.data_dir, 'lats', scene_name+'-d1e-05-ps0.npy')
-            mask = torch.from_numpy(np.load(mask_file)).bool()
-            lats = torch.from_numpy(np.load(lats_file))
-            grid = torch.zeros(mask.shape + (lats.shape[-1],), dtype=torch.float32)
-            grid[mask] = lats
+            grid = torch.from_numpy(np.load(lats_file))
             lat, xloc = interpolate_grid_feats(pts, grid)
             implicit_feats = torch.cat([lat, xloc], dim=-1)
             torch.save(implicit_feats, implicit_feat_file)

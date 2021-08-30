@@ -43,15 +43,20 @@ class ScanNetLIG(ScanNet):
 
     def load_implicit_feats(self, file_name, pts):
         scene_name = file_name.split('/')[-2]
-        mask_file = os.path.join(self.data_dir, 'masks', scene_name+'-d1e-05-ps0.npy')
+        # mask_file = os.path.join(self.data_dir, 'masks', scene_name+'-d1e-05-ps0.npy')
         lats_file = os.path.join(self.data_dir, 'lats', scene_name+'-d1e-05-ps0.npy')
-        mask = torch.from_numpy(np.load(mask_file))
-        lats = torch.from_numpy(np.load(lats_file))
+        # mask = torch.from_numpy(np.load(mask_file))
+        grid = torch.from_numpy(np.load(lats_file))
+        # print(grid.shape)
+        mask = torch.all(grid != 0, dim=-1)
+        # print(lats.shape)
+        # assert(True==False)
 
-        grid_range = [torch.arange(s) for s in mask.shape]
-        grid =  torch.stack(torch.meshgrid(grid_range), dim=-1)
+        idx_grid_range = [torch.arange(s) for s in mask.shape]
+        idx_grid =  torch.stack(torch.meshgrid(idx_grid_range), dim=-1).long()
         # print(mask_file, grid.shape)
-        coords = grid[mask]
+        coords = idx_grid[mask]
+        lats = gather_nd(grid, coords)
         # print(mask_file, grid.shape, coords.max(dim=0)[0], coords.min(dim=0)[0], pts.max(dim=0)[0], pts.min(dim=0)[0])
         # sptensor = ME.SparseTensor(features=lats, coordinates=mask)
         return (coords, lats)

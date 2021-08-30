@@ -62,6 +62,7 @@ class MinkowskiSegmentationModuleLIG(BaseSegmentationModule):
             sparse_lats = self.model(x)
         else:
             sparse_lats = x
+        print(rand_shift)
         if rand_shift is not None:
             list_of_coords, list_of_feats = sparse_lats.decomposed_coordinates_and_features
             for i in range(bs):
@@ -74,7 +75,6 @@ class MinkowskiSegmentationModuleLIG(BaseSegmentationModule):
             
         else:
             seg_lats, min_coord, _ = sparse_lats.dense() # (b, *sizes, c)
-        
         seg_occ_in_list = []
         weights_list = []
         for i in range(bs):
@@ -85,6 +85,9 @@ class MinkowskiSegmentationModuleLIG(BaseSegmentationModule):
                 cur_seg_occ_in = torch.cat([lat, xloc, feats[i].unsqueeze(1).repeat(1,lat.shape[1],1)], dim=-1)
             else:
                 cur_seg_occ_in = torch.cat([lat, xloc], dim=-1)
+
+            print(seg_lats, pts, cur_seg_occ_in, lat)
+            break
             # print(cur_seg_occ_in.shape, feats[i])
             cur_weights = 1 - torch.prod(torch.abs(xloc), axis=-1)
             seg_occ_in_list.append(cur_seg_occ_in)
