@@ -10,7 +10,7 @@ from examples.minkunetodd import MinkUNet34C as MinkUNet34Codd
 from examples.MeanAccuracy import MeanAccuracy
 from examples.MeanIoU import MeanIoU
 from pytorch_lightning.metrics import Accuracy, ConfusionMatrix, MetricCollection
-from examples.MinkLightning import BaseSegmentationModule
+from examples.BaseSegLightning import BaseSegmentationModule
 from examples.str2bool import str2bool
 from examples.basic_blocks import MLP
 from examples.utils import interpolate_grid_feats
@@ -62,7 +62,7 @@ class MinkowskiSegmentationModuleLIG(BaseSegmentationModule):
             sparse_lats = self.model(x)
         else:
             sparse_lats = x
-        print(rand_shift)
+        # print(rand_shift)
         if rand_shift is not None:
             list_of_coords, list_of_feats = sparse_lats.decomposed_coordinates_and_features
             for i in range(bs):
@@ -72,7 +72,6 @@ class MinkowskiSegmentationModuleLIG(BaseSegmentationModule):
                                                             dtype=x.dtype)
             new_sparse_lats = ME.SparseTensor(features=collated_feats.to(self.device), coordinates=collated_coords.int().to(self.device))
             seg_lats, min_coord, _ = new_sparse_lats.dense() # (b, *sizes, c)
-            
         else:
             seg_lats, min_coord, _ = sparse_lats.dense() # (b, *sizes, c)
         seg_occ_in_list = []
@@ -86,8 +85,8 @@ class MinkowskiSegmentationModuleLIG(BaseSegmentationModule):
             else:
                 cur_seg_occ_in = torch.cat([lat, xloc], dim=-1)
 
-            print(seg_lats, pts, cur_seg_occ_in, lat)
-            break
+            # print(seg_lats, pts, cur_seg_occ_in, lat)
+            # break
             # print(cur_seg_occ_in.shape, feats[i])
             cur_weights = 1 - torch.prod(torch.abs(xloc), axis=-1)
             seg_occ_in_list.append(cur_seg_occ_in)

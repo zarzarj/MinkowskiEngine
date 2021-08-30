@@ -71,7 +71,7 @@ class MainArgs():
 
 if __name__ == "__main__":
     main_args, args, _ = init_module_from_args(MainArgs)
-    seed_everything(main_args.seed)
+    seed_everything(main_args.seed, workers=True)
     if main_args.pipeline == 'default':  
         from examples.MinkLightning import MinkowskiSegmentationModule
         from examples.ScanNetLightning import ScanNet

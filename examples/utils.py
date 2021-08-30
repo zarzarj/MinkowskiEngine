@@ -12,7 +12,7 @@ def interpolate_grid_feats(pts, grid, min_coord=None, part_size=0.25):
     """
     npts = pts.shape[0]
     dim = pts.shape[1]
-    xmin = torch.min(pts, dim=0)[0] - (.5 * part_size)
+    xmin = torch.min(pts, dim=0)[0] - (part_size * 1.1)
     half_part_size = part_size / 2
     # normalize coords for interpolation
     pts = (pts - xmin) / half_part_size

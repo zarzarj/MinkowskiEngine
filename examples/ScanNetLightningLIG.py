@@ -19,6 +19,7 @@ from examples.voxelizer import SparseVoxelizer
 import examples.transforms as t
 from examples.str2bool import str2bool
 from examples.ScanNetLightning import ScanNet
+from examples.utils import gather_nd
 # from examples.utils import get_embedder
 
 class ScanNetLIG(ScanNet):

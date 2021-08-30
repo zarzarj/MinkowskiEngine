@@ -56,3 +56,31 @@ class MLP(nn.Sequential):
             elif isinstance(m, nn.BatchNorm1d) or isinstance(m, nn.InstanceNorm1d):
                 m.weight.data.fill_(1)
                 m.bias.data.zero_()
+
+
+class BasicGCNBlock(nn.Module):
+    def __init__(self, gcn, norm: str = 'batch', dropout: float = 0.0,
+                input_layer: bool = False, track_running_stats: bool = True):
+        super(BasicGCNBlock, self).__init__()
+        self.gcn = gcn
+        self.input_layer = input_layer
+        if not self.input_layer:
+            self.norm = norm_layer(norm, gcn.in_channels, track_running_stats)
+            self.dropout = nn.Dropout(p=dropout)
+
+    def forward(self, x, edge_index):
+        # print(x.shape)
+        if not self.input_layer:
+            out = self.norm(x)
+            out = F.relu(out, inplace=True)
+            out = self.dropout(out)
+            out = self.gcn(out, edge_index)
+        else:
+            out = self.gcn(x, edge_index)
+        return out
+
+    def reset_parameters(self):
+        self.gcn.reset_parameters()
+        if not isinstance(self.norm, nn.Identity):
+            self.norm.weight.data.fill_(1)
+            self.norm.bias.data.zero_()

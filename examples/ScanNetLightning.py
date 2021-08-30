@@ -13,11 +13,9 @@ from pytorch_lightning import LightningDataModule
 import numpy as np
 from tqdm import tqdm
 from plyfile import PlyElement, PlyData
-import examples.transforms as t
+# import examples.transforms as t
 from examples.str2bool import str2bool
-from examples.utils import interpolate_grid_feats, get_embedder
-
-import MinkowskiEngine as ME
+from examples.utils import interpolate_grid_feats, get_embedder, gather_nd
 
 class ScanNet(LightningDataModule):
     def __init__(self, **kwargs):
@@ -252,16 +250,19 @@ class ScanNet(LightningDataModule):
 
     def load_implicit_feats(self, file_name, pts):
         scene_name = file_name.split('/')[-2]
-        implicit_feat_file = os.path.join(self.data_dir, 'implicit_feats', scene_name+'-d1e-05-ps0.pt')
-        if not os.path.exists(implicit_feat_file):
-            os.makedirs(os.path.join(self.data_dir, 'implicit_feats'), exist_ok=True)
-            lats_file = os.path.join(self.data_dir, 'lats', scene_name+'-d1e-05-ps0.npy')
-            grid = torch.from_numpy(np.load(lats_file))
-            lat, xloc = interpolate_grid_feats(pts, grid)
-            implicit_feats = torch.cat([lat, xloc], dim=-1)
-            torch.save(implicit_feats, implicit_feat_file)
-        else:
-            implicit_feats = torch.load(implicit_feat_file)
+        # implicit_feat_file = os.path.join(self.data_dir, 'implicit_feats', scene_name+'-d1e-05-ps0.pt')
+        lats_file = os.path.join(self.data_dir, 'lats', scene_name+'-d1e-05-ps0.npy')
+        grid = torch.from_numpy(np.load(lats_file))
+        # print(grid.shape)
+        lat, xloc = interpolate_grid_feats(pts, grid)
+        # print(lat)
+        implicit_feats = torch.cat([lat, xloc], dim=-1)
+        # if not os.path.exists(implicit_feat_file):
+        #     os.makedirs(os.path.join(self.data_dir, 'implicit_feats'), exist_ok=True)
+            
+        #     torch.save(implicit_feats, implicit_feat_file)
+        # else:
+        #     implicit_feats = torch.load(implicit_feat_file)
         return implicit_feats
 
     @staticmethod
@@ -285,7 +286,3 @@ class ScanNet(LightningDataModule):
         parser.add_argument("--resample_mesh", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument("--max_num_pts", type=int, default=-1)
         return parent_parser
-
-    def cleanup(self):
-        self.sparse_voxelizer.cleanup()
-
