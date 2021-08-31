@@ -49,7 +49,7 @@ class ScanNetLIG(ScanNet):
         # mask = torch.from_numpy(np.load(mask_file))
         grid = torch.from_numpy(np.load(lats_file))
         # print(grid.shape)
-        mask = torch.all(grid != 0, dim=-1)
+        mask = torch.all(grid != 0, dim=-1).bool()
         # print(lats.shape)
         # assert(True==False)
 
@@ -57,7 +57,10 @@ class ScanNetLIG(ScanNet):
         idx_grid =  torch.stack(torch.meshgrid(idx_grid_range), dim=-1).long()
         # print(mask_file, grid.shape)
         coords = idx_grid[mask]
+        # print(coords.shape)
         lats = gather_nd(grid, coords)
+        # print(lats)
+        # print("Loading: ", file_name, grid.shape, coords.max(dim=0)[0], coords.min(dim=0)[0])
         # print(mask_file, grid.shape, coords.max(dim=0)[0], coords.min(dim=0)[0], pts.max(dim=0)[0], pts.min(dim=0)[0])
         # sptensor = ME.SparseTensor(features=lats, coordinates=mask)
         return (coords, lats)
@@ -77,9 +80,11 @@ class ScanNetLIG(ScanNet):
 
     def convert_batch(self, idxs):
         input_dict = self.load_scan_files(idxs)
+        # print("indict: ", input_dict['coords'][0].max(dim=0)[0], input_dict['coords'][0].min(dim=0)[0])
         coords_batch, lats_batch = ME.utils.sparse_collate(input_dict['coords'],
                                                             input_dict['lats'],
                                                             dtype=torch.float32)
+        # print("batched: ", coords_batch.max(dim=0)[0], coords_batch.min(dim=0)[0])
         out_dict = {"coords": coords_batch,
                     "lats": lats_batch,
                     "feats": input_dict['feats'],

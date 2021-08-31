@@ -1,6 +1,6 @@
 import torch
 
-def interpolate_grid_feats(pts, grid, min_coord=None, part_size=0.25):
+def interpolate_grid_feats(pts, grid, part_size=0.25):
     """Regular grid interpolator, returns inpterpolation coefficients.
     Args:
     pts: `[num_points, dim]` tensor, coordinates of points
@@ -32,8 +32,12 @@ def interpolate_grid_feats(pts, grid, min_coord=None, part_size=0.25):
     gather_ind = torch.stack([com_, dim_], dim=-1)  # `[2**dim, dim, 2]`
     ind_ = gather_nd(ind01, gather_ind)  # [2**dim, dim, num_pts]
     ind_n = torch.transpose(ind_, 0,2).transpose(1,2)  # neighbor indices `[num_pts, 2**dim, dim]`
-    if min_coord is not None:
-        ind_n -= min_coord
+    # if min_coord is not None:
+    #     ind_n -= (min_coord-1)
+    # print(grid.shape, ind1.max(dim=0)[0], ind1.min(dim=0)[0], min_coord)
+    # print(grid.shape)
+    grid = torch.nn.functional.pad(grid, (0,0,0,1,0,1,0,1), mode='constant', value=0)
+    # print(grid.shape)
     lat = gather_nd(grid, ind_n) # `[num_points, 2**dim, in_features]`
 
     # weights of neighboring nodes

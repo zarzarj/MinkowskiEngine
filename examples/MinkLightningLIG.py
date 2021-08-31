@@ -62,6 +62,9 @@ class MinkowskiSegmentationModuleLIG(BaseSegmentationModule):
             sparse_lats = self.model(x)
         else:
             sparse_lats = x
+
+        # list_of_coords, list_of_feats = sparse_lats.decomposed_coordinates_and_features
+        # print("sparse lats: ", list_of_coords[0].max(dim=0)[0], list_of_coords[0].min(dim=0)[0])
         # print(rand_shift)
         if rand_shift is not None:
             list_of_coords, list_of_feats = sparse_lats.decomposed_coordinates_and_features
@@ -71,14 +74,17 @@ class MinkowskiSegmentationModuleLIG(BaseSegmentationModule):
                                                             list_of_feats,
                                                             dtype=x.dtype)
             new_sparse_lats = ME.SparseTensor(features=collated_feats.to(self.device), coordinates=collated_coords.int().to(self.device))
-            seg_lats, min_coord, _ = new_sparse_lats.dense() # (b, *sizes, c)
+            seg_lats, min_coord, _ = new_sparse_lats.dense(min_coordinate=torch.tensor([0,0,0], dtype=torch.int)) # (b, *sizes, c)
         else:
-            seg_lats, min_coord, _ = sparse_lats.dense() # (b, *sizes, c)
+
+            seg_lats, min_coord, _ = sparse_lats.dense(min_coordinate=torch.tensor([0,0,0], dtype=torch.int)) # (b, *sizes, c)
         seg_occ_in_list = []
         weights_list = []
         for i in range(bs):
             # print(pts[i].shape, feats[i].shape)
-            lat, xloc = interpolate_grid_feats(pts[i], seg_lats[i].permute([1,2,3,0]), min_coord=min_coord) # (num_pts, 2**dim, c + 3), (num_pts, 2**dim)
+            # print(x.shape)
+            lat, xloc = interpolate_grid_feats(pts[i], seg_lats[i].permute([1,2,3,0])) # (num_pts, 2**dim, c + 3), (num_pts, 2**dim)
+            # print(lat[:,0])
             if feats[i] is not None:
                 # print(feats[i].shape, lat.shape, xloc.shape)
                 cur_seg_occ_in = torch.cat([lat, xloc, feats[i].unsqueeze(1).repeat(1,lat.shape[1],1)], dim=-1)
@@ -115,6 +121,7 @@ class MinkowskiSegmentationModuleLIG(BaseSegmentationModule):
             rand_shift = None
         target = torch.cat(target, dim=0).long()
         # print('coords', coords.max(dim=0)[0])
+        # print("preinfield", coords.max(dim=0)[0], coords.min(dim=0)[0])
         in_field = ME.TensorField(
             features=lats,
             coordinates=coords,
@@ -123,7 +130,9 @@ class MinkowskiSegmentationModuleLIG(BaseSegmentationModule):
             # minkowski_algorithm=ME.MinkowskiAlgorithm.MEMORY_EFFICIENT,
             device=self.device,
         )
+        # print("infield", in_field.coordinates.max(dim=0)[0], in_field.coordinates.min(dim=0)[0])
         sinput = in_field.sparse()
+        # print("sparse", sinput.coordinates.max(dim=0)[0], sinput.coordinates.min(dim=0)[0])
         # print('coords2', sinput.coordinates.max(dim=0)[0])
         logits = self(sinput, pts, feats, rand_shift)
         train_loss = self.criterion(logits, target)
