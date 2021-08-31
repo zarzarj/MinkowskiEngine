@@ -7,6 +7,15 @@ from examples.str2bool import str2bool
 from examples.basic_blocks import MLP
 from examples.BaseSegLightning import BaseSegmentationModule
 
+def to_precision(inputs, precision):
+    if precision == 16:
+        dtype = torch.float16
+    elif precision == 32:
+        dtype = torch.float32
+    elif precision == 64:
+        dtype = torch.float64
+    return tuple([input.to(dtype) for input in inputs])
+
 class MinkowskiSegmentationModule(BaseSegmentationModule):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -64,6 +73,9 @@ class MinkowskiSegmentationModule(BaseSegmentationModule):
         preds = logits.argmax(dim=-1)
         valid_targets = target != -100
         return {'loss': val_loss, 'preds': preds[valid_targets], 'target': target[valid_targets]}
+
+    def convert_sync_batchnorm(self):
+        self.model = ME.MinkowskiSyncBatchNorm.convert_sync_batchnorm(self.model)
 
     @staticmethod
     def add_argparse_args(parent_parser):

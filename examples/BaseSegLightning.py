@@ -120,8 +120,8 @@ class BaseSegmentationModule(LightningModule):
             new_metrics_dict.pop(key)
         return new_metrics_dict
 
-    def convert_sync_batchnorm(self):
-        self.model = ME.MinkowskiSyncBatchNorm.convert_sync_batchnorm(self.model)
+    #def convert_sync_batchnorm(self):
+    #    self.model = ME.MinkowskiSyncBatchNorm.convert_sync_batchnorm(self.model)
 
     @staticmethod
     def add_argparse_args(parent_parser):

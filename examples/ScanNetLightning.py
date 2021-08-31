@@ -16,6 +16,8 @@ from plyfile import PlyElement, PlyData
 # import examples.transforms as t
 from examples.str2bool import str2bool
 from examples.utils import interpolate_grid_feats, get_embedder, gather_nd
+import MinkowskiEngine as ME
+
 
 class ScanNet(LightningDataModule):
     def __init__(self, **kwargs):
