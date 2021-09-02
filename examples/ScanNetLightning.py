@@ -254,6 +254,7 @@ class ScanNet(LightningDataModule):
         scene_name = file_name.split('/')[-2]
         # implicit_feat_file = os.path.join(self.data_dir, 'implicit_feats', scene_name+'-d1e-05-ps0.pt')
         lats_file = os.path.join(self.data_dir, 'lats', scene_name+'-d1e-05-ps0.npy')
+        lats_file = os.path.join(self.data_dir, 'lats', scene_name+'-d1e-05-vertices-st20000.npy')
         grid = torch.from_numpy(np.load(lats_file))
         # print(grid.shape)
         lat, xloc = interpolate_grid_feats(pts, grid)
@@ -277,6 +278,8 @@ class ScanNet(LightningDataModule):
         parser.add_argument("--num_workers", type=int, default=5)
         parser.add_argument("--save_preds", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument("--train_percent", type=float, default=0.8)
+
+        parser.add_argument("--point_subsampling_percent", type=float, default=1.0)
         parser.add_argument("--voxel_size", type=float, default=0.02)
         parser.add_argument("--use_implicit_feats", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument("--use_coords", type=str2bool, nargs='?', const=True, default=False)

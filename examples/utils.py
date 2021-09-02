@@ -1,4 +1,5 @@
 import torch
+# import numpy as np
 
 def interpolate_grid_feats(pts, grid, part_size=0.25):
     """Regular grid interpolator, returns inpterpolation coefficients.
@@ -10,6 +11,7 @@ def interpolate_grid_feats(pts, grid, part_size=0.25):
     implicit feats: `[num_points, 2**dim * ( features + dim )]` tensor, neighbor
     latent codes and relative locations for each input point .
     """
+    # np.save('test_pts.npy', pts.cpu().numpy())
     npts = pts.shape[0]
     dim = pts.shape[1]
     xmin = torch.min(pts, dim=0)[0] - (part_size * 1.1)
@@ -32,13 +34,13 @@ def interpolate_grid_feats(pts, grid, part_size=0.25):
     gather_ind = torch.stack([com_, dim_], dim=-1)  # `[2**dim, dim, 2]`
     ind_ = gather_nd(ind01, gather_ind)  # [2**dim, dim, num_pts]
     ind_n = torch.transpose(ind_, 0,2).transpose(1,2)  # neighbor indices `[num_pts, 2**dim, dim]`
-    # if min_coord is not None:
-    #     ind_n -= (min_coord-1)
     # print(grid.shape, ind1.max(dim=0)[0], ind1.min(dim=0)[0], min_coord)
+    # print(grid.shape)
     # print(grid.shape)
     grid = torch.nn.functional.pad(grid, (0,0,0,1,0,1,0,1), mode='constant', value=0)
     # print(grid.shape)
-    lat = gather_nd(grid, ind_n) # `[num_points, 2**dim, in_features]`
+    lat = gather_nd(grid, ind_n) # `[num_points, 2**dim, in_features]
+
 
     # weights of neighboring nodes
     xyz0 = ind0  # `[num_points, dim]`
@@ -48,6 +50,13 @@ def interpolate_grid_feats(pts, grid, part_size=0.25):
     pos = gather_nd(xyz01, gather_ind)  # `[2**dim, dim, num_points]`
     pos = torch.transpose(pos, 0,2).transpose(1,2) # `[num_points, 2**dim, dim]`
     xloc = (torch.unsqueeze(pts, -2) - pos) # `[num_points, 2**dim, dim]`
+    # np.save('test_lat.npy', lat.cpu().numpy())
+    # np.save('test_xloc.npy', xloc.cpu().numpy())
+    
+    # print(grid.shape)
+    # assert(True==False)
+
+    # print(lat)
     return lat, xloc
 
 def gather_nd(params, indices):

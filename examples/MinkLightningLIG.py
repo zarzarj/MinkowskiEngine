@@ -53,6 +53,14 @@ class MinkowskiSegmentationModuleLIG(BaseSegmentationModule):
                                       nn.Conv1d(self.mlp_channels[-1], self.out_channels, kernel_size=1, bias=True)
                                       # nn.Linear(self.mlp_channels[-1], self.out_channels)
                                       )
+        if self.pretrained_minkunet_ckpt is not None:
+            # print(self.model)
+            pretrained_ckpt = torch.load(self.pretrained_minkunet_ckpt)
+            del pretrained_ckpt['conv0p1s1.kernel']
+            del pretrained_ckpt['final.kernel']
+            del pretrained_ckpt['final.bias']
+            # print(pretrained_ckpt)
+            self.model.load_state_dict(pretrained_ckpt, strict=False)
         # print(self)
 
     def forward(self, x, pts, feats, rand_shift=None):
@@ -83,13 +91,15 @@ class MinkowskiSegmentationModuleLIG(BaseSegmentationModule):
         for i in range(bs):
             # print(pts[i].shape, feats[i].shape)
             # print(x.shape)
-            lat, xloc = interpolate_grid_feats(pts[i], seg_lats[i].permute([1,2,3,0])) # (num_pts, 2**dim, c + 3), (num_pts, 2**dim)
+            lat, xloc = interpolate_grid_feats(pts[i], seg_lats[i].permute([1,2,3,0])) # (num_pts, 2**dim, c), (num_pts, 2**dim, 3)
             # print(lat[:,0])
             if feats[i] is not None:
                 # print(feats[i].shape, lat.shape, xloc.shape)
                 cur_seg_occ_in = torch.cat([lat, xloc, feats[i].unsqueeze(1).repeat(1,lat.shape[1],1)], dim=-1)
+                # cur_seg_occ_in = torch.cat([lat, feats[i].unsqueeze(1).repeat(1,lat.shape[1],1)], dim=-1)
             else:
                 cur_seg_occ_in = torch.cat([lat, xloc], dim=-1)
+                # cur_seg_occ_in = lat
 
             # print(seg_lats, pts, cur_seg_occ_in, lat)
             # break
@@ -178,6 +188,7 @@ class MinkowskiSegmentationModuleLIG(BaseSegmentationModule):
         parent_parser = BaseSegmentationModule.add_argparse_args(parent_parser)
         parser = parent_parser.add_argument_group("MinkSegModelLIG")
         parser.add_argument("--interpolate_grid_feats", type=str2bool, nargs='?', const=True, default=False)
+        parser.add_argument("--pretrained_minkunet_ckpt", type=str, default=None)
         parser.add_argument("--odd_model", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument("--mink_sdf_to_seg", type=str2bool, nargs='?', const=True, default=True)
         parser.add_argument('--seg_head_dropout', type=float, default=0.3)
