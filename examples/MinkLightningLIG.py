@@ -14,6 +14,7 @@ from examples.BaseSegLightning import BaseSegmentationModule
 from examples.str2bool import str2bool
 from examples.basic_blocks import MLP
 from examples.utils import interpolate_grid_feats
+import numpy as np
 
 def to_precision(inputs, precision):
     # print(precision)
@@ -42,9 +43,10 @@ def to_precision(inputs, precision):
 class MinkowskiSegmentationModuleLIG(BaseSegmentationModule):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.mlp_channels = [int(i) for i in self.mlp_channels.split(',')]
+        self.mlp_channels = np.array([int(i) for i in self.mlp_channels.split(',')])
         if self.relative_mlp_channels:
             self.mlp_channels = (self.in_channels + self.mlp_extra_in_channels) * self.mlp_channels
+            # print(self.mlp_channels)
         else:
             self.mlp_channels = [self.in_channels + self.mlp_extra_in_channels] + self.mlp_channels
         if self.mink_sdf_to_seg:

@@ -26,12 +26,6 @@ class ScanNetLIG(ScanNet):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
-    @staticmethod
-    def add_argparse_args(parent_parser):
-        parent_parser = ScanNet.add_argparse_args(parent_parser)
-        parser = parent_parser.add_argument_group("ScanNetLIG")
-        return parent_parser
-
     def process_input(self, input_dict):
         # print(input_dict)
         input_dict['coords'], input_dict['lats'] = input_dict['implicit_feats']
@@ -59,7 +53,11 @@ class ScanNetLIG(ScanNet):
         # print(mask_file, grid.shape)
         coords = idx_grid[mask]
         # print(coords.shape)
-        lats = gather_nd(grid, coords)
+        if self.occupancy_lats:
+            # print(coords.shape)
+            lats = torch.ones((coords.shape[0], 1), dtype=torch.float)
+        else:
+            lats = gather_nd(grid, coords)
         # print(lats)
         # print("Loading: ", file_name, grid.shape, coords.max(dim=0)[0], coords.min(dim=0)[0])
         # print(mask_file, grid.shape, coords.max(dim=0)[0], coords.min(dim=0)[0], pts.max(dim=0)[0], pts.min(dim=0)[0])
@@ -96,3 +94,10 @@ class ScanNetLIG(ScanNet):
         if self.shift_coords and self.trainer.training:
             out_dict["rand_shift"] = input_dict['rand_shift']
         return out_dict
+
+    @staticmethod
+    def add_argparse_args(parent_parser):
+        parent_parser = ScanNet.add_argparse_args(parent_parser)
+        parser = parent_parser.add_argument_group("ScanNetLIG")
+        parser.add_argument("--occupancy_lats", type=str2bool, nargs='?', const=True, default=False)
+        return parent_parser
