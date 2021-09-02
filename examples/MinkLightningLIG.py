@@ -43,7 +43,10 @@ class MinkowskiSegmentationModuleLIG(BaseSegmentationModule):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.mlp_channels = [int(i) for i in self.mlp_channels.split(',')]
-        self.mlp_channels = (self.in_channels + self.mlp_extra_in_channels) * torch.tensor([1,4,8,4])
+        if self.relative_mlp_channels:
+            self.mlp_channels = (self.in_channels + self.mlp_extra_in_channels) * self.mlp_channels
+        else:
+            self.mlp_channels = [self.in_channels + self.mlp_extra_in_channels] + self.mlp_channels
         if self.mink_sdf_to_seg:
             if self.odd_model:
                 self.model = MinkUNet34Codd(self.in_channels, self.in_channels)
@@ -114,6 +117,7 @@ class MinkowskiSegmentationModuleLIG(BaseSegmentationModule):
             weighted_feats = torch.bmm(seg_occ_in, weights) # (b x num_pts, c + 3, 1)
             logits = self.seg_head(weighted_feats).squeeze(dim=-1) # (b x num_pts, out_c, 1)
         else:
+            # seg_occ_in = seg_occ_in.reshape(seg_occ_in.shape[])
             seg_probs = self.seg_head(seg_occ_in) # (b x num_pts, out_c, 2**dim)
             logits = torch.bmm(seg_probs, weights).squeeze(dim=-1) # (b x num_pts, out_c)
         return logits
@@ -193,6 +197,7 @@ class MinkowskiSegmentationModuleLIG(BaseSegmentationModule):
         parser.add_argument("--mink_sdf_to_seg", type=str2bool, nargs='?', const=True, default=True)
         parser.add_argument('--seg_head_dropout', type=float, default=0.3)
         parser.add_argument("--mlp_channels", type=str, default='1,4,8,4')
+        parser.add_argument("--relative_mlp_channels", type=str2bool, nargs='?', const=True, default=True)
         parser.add_argument("--mlp_extra_in_channels", type=int, default=3)
         return parent_parser
 
