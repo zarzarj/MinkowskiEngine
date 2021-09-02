@@ -45,7 +45,8 @@ class ScanNetLIG(ScanNet):
     def load_implicit_feats(self, file_name, pts):
         scene_name = file_name.split('/')[-2]
         # mask_file = os.path.join(self.data_dir, 'masks', scene_name+'-d1e-05-ps0.npy')
-        lats_file = os.path.join(self.data_dir, 'lats', scene_name+'-d1e-05-ps0.npy')
+        # lats_file = os.path.join(self.data_dir, 'lats', scene_name+'-d1e-05-ps0.npy')
+        lats_file = os.path.join(self.data_dir, 'lats', scene_name+'-d1e-05-vertices-st20000.npy')
         # mask = torch.from_numpy(np.load(mask_file))
         grid = torch.from_numpy(np.load(lats_file))
         # print(grid.shape)

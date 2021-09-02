@@ -104,7 +104,7 @@ class MinkowskiSegmentationModuleLIG(BaseSegmentationModule):
             # print(seg_lats, pts, cur_seg_occ_in, lat)
             # break
             # print(cur_seg_occ_in.shape, feats[i])
-            cur_weights = 1 - torch.prod(torch.abs(xloc), axis=-1)
+            cur_weights = torch.prod(1-torch.abs(xloc), axis=-1)
             seg_occ_in_list.append(cur_seg_occ_in)
             weights_list.append(cur_weights)
         seg_occ_in = torch.cat(seg_occ_in_list, dim=0).transpose(1,2) # (b x num_pts, c + 3, 2**dim)
