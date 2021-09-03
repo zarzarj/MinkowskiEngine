@@ -31,6 +31,47 @@ from MinkowskiEngine.modules.resnet_block import BasicBlock, Bottleneck
 
 from examples.resnet import ResNetBase
 
+class BasicBlockShallow(nn.Module):
+    expansion = 1
+
+    def __init__(self,
+                 inplanes,
+                 planes,
+                 stride=1,
+                 dilation=1,
+                 downsample=None,
+                 bn_momentum=0.1,
+                 dimension=-1):
+        super(BasicBlockShallow, self).__init__()
+        assert dimension > 0
+
+        self.conv1 = ME.MinkowskiConvolution(
+            inplanes, planes, kernel_size=1, stride=stride, dilation=dilation, dimension=dimension)
+        self.norm1 = ME.MinkowskiBatchNorm(planes, momentum=bn_momentum)
+        self.conv2 = ME.MinkowskiConvolution(
+            planes, planes, kernel_size=1, stride=1, dilation=dilation, dimension=dimension)
+        self.norm2 = ME.MinkowskiBatchNorm(planes, momentum=bn_momentum)
+        self.relu = ME.MinkowskiReLU(inplace=True)
+        self.downsample = downsample
+
+    def forward(self, x):
+        residual = x
+
+        out = self.conv1(x)
+        out = self.norm1(out)
+        out = self.relu(out)
+
+        out = self.conv2(out)
+        out = self.norm2(out)
+
+        if self.downsample is not None:
+          residual = self.downsample(x)
+
+        out += residual
+        out = self.relu(out)
+
+        return out
+
 
 class MinkUNetBase(ResNetBase):
     BLOCK = None
@@ -194,6 +235,9 @@ class MinkUNet34(MinkUNetBase):
     BLOCK = BasicBlock
     LAYERS = (2, 3, 4, 6, 2, 2, 2, 2)
 
+class MinkUNet34Shallow(MinkUNetBase):
+    BLOCK = BasicBlockShallow
+    LAYERS = (2, 3, 4, 6, 2, 2, 2, 2)
 
 class MinkUNet50(MinkUNetBase):
     BLOCK = Bottleneck
@@ -242,6 +286,9 @@ class MinkUNet34B(MinkUNet34):
 
 
 class MinkUNet34C(MinkUNet34):
+    PLANES = (32, 64, 128, 256, 256, 128, 96, 96)
+
+class MinkUNet34CShallow(MinkUNet34Shallow):
     PLANES = (32, 64, 128, 256, 256, 128, 96, 96)
 
 

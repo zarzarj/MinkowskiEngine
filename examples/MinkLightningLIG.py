@@ -5,7 +5,7 @@ from torch.optim.lr_scheduler import LambdaLR, StepLR
 
 from pytorch_lightning.core import LightningModule
 import MinkowskiEngine as ME
-from examples.minkunet import MinkUNet34C, MinkUNet14A
+from examples.minkunet import MinkUNet34C, MinkUNet14A, MinkUNet34CShallow
 from examples.minkunetodd import MinkUNet34C as MinkUNet34Codd
 from examples.MeanAccuracy import MeanAccuracy
 from examples.MeanIoU import MeanIoU
@@ -52,6 +52,8 @@ class MinkowskiSegmentationModuleLIG(BaseSegmentationModule):
         if self.mink_sdf_to_seg:
             if self.odd_model:
                 self.model = MinkUNet34Codd(self.in_channels, self.in_channels)
+            elif self.shallow_model:
+                self.model = MinkUNet34CShallow(self.in_channels, self.in_channels)
             else:
                 self.model = MinkUNet34C(self.in_channels, self.in_channels)
         self.seg_head = nn.Sequential(MLP(self.mlp_channels, dropout=self.seg_head_dropout),
@@ -196,6 +198,7 @@ class MinkowskiSegmentationModuleLIG(BaseSegmentationModule):
         parser.add_argument("--interpolate_grid_feats", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument("--pretrained_minkunet_ckpt", type=str, default=None)
         parser.add_argument("--odd_model", type=str2bool, nargs='?', const=True, default=False)
+        parser.add_argument("--shallow_model", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument("--mink_sdf_to_seg", type=str2bool, nargs='?', const=True, default=True)
         parser.add_argument('--seg_head_dropout', type=float, default=0.3)
         parser.add_argument("--mlp_channels", type=str, default='1,4,8,4')
