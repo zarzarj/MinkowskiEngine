@@ -43,9 +43,9 @@ def to_precision(inputs, precision):
 class MinkowskiSegmentationModuleLIG(BaseSegmentationModule):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.mlp_channels = np.array([int(i) for i in self.mlp_channels.split(',')])
+        self.mlp_channels = [int(i) for i in self.mlp_channels.split(',')]
         if self.relative_mlp_channels:
-            self.mlp_channels = (self.in_channels + self.mlp_extra_in_channels) * self.mlp_channels
+            self.mlp_channels = (self.in_channels + self.mlp_extra_in_channels) * np.array(self.mlp_channels)
             # print(self.mlp_channels)
         else:
             self.mlp_channels = [self.in_channels + self.mlp_extra_in_channels] + self.mlp_channels
