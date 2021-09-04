@@ -100,6 +100,9 @@ class MinkowskiSegmentationModuleLIG(BaseSegmentationModule):
             # print(x.shape)
             lat, xloc = interpolate_grid_feats(pts[i], seg_lats[i].permute([1,2,3,0])) # (num_pts, 2**dim, c), (num_pts, 2**dim, 3)
             # print(lat[:,0])
+            if self.interpolate_grid_feats and self.average_xlocs:
+                xloc = xloc.mean(axis=1, keepdim=True).repeat(1, lat.shape[1], 1)
+                # print(xloc.shape)
             if feats[i] is not None:
                 # print(feats[i].shape, lat.shape, xloc.shape)
                 cur_seg_occ_in = torch.cat([lat, xloc, feats[i].unsqueeze(1).repeat(1,lat.shape[1],1)], dim=-1)
@@ -196,6 +199,7 @@ class MinkowskiSegmentationModuleLIG(BaseSegmentationModule):
         parent_parser = BaseSegmentationModule.add_argparse_args(parent_parser)
         parser = parent_parser.add_argument_group("MinkSegModelLIG")
         parser.add_argument("--interpolate_grid_feats", type=str2bool, nargs='?', const=True, default=False)
+        parser.add_argument("--average_xlocs", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument("--pretrained_minkunet_ckpt", type=str, default=None)
         parser.add_argument("--odd_model", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument("--shallow_model", type=str2bool, nargs='?', const=True, default=False)
