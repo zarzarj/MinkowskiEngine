@@ -110,6 +110,9 @@ class ScanNet(LightningDataModule):
         if stage == 'fit' or stage =='validate':
             self.scan_files = glob.glob(os.path.join(self.scans_dir, '*', '*_vh_clean_2.ply'))
             self.train_idx = torch.from_numpy(np.load(os.path.join(self.data_dir, 'train_idx.npy')))
+            if self.train_subset != 1:
+                num_train_samples = int(self.train_idx.shape[0] * self.train_subset)
+                self.train_idx = self.train_idx[:num_train_samples]
             self.val_idx = torch.from_numpy(np.load(os.path.join(self.data_dir, 'val_idx.npy')))
         else:
             self.scan_files = glob.glob(os.path.join(self.scans_test_dir, '*', '_vh_clean_2.ply'))
@@ -280,6 +283,7 @@ class ScanNet(LightningDataModule):
         parser.add_argument("--num_workers", type=int, default=5)
         parser.add_argument("--save_preds", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument("--train_percent", type=float, default=0.8)
+        parser.add_argument("--train_subset", type=float, default=1.0)
 
         parser.add_argument("--point_subsampling_percent", type=float, default=1.0)
         parser.add_argument("--voxel_size", type=float, default=0.02)
