@@ -12,7 +12,7 @@ from examples.MeanIoU import MeanIoU
 from pytorch_lightning.metrics import Accuracy, ConfusionMatrix, MetricCollection
 from examples.BaseSegLightning import BaseSegmentationModule
 from examples.str2bool import str2bool
-from examples.basic_blocks import MLP
+from examples.basic_blocks import MLP, norm_layer
 from examples.utils import interpolate_grid_feats
 import numpy as np
 
@@ -56,10 +56,12 @@ class MinkowskiSegmentationModuleLIG(BaseSegmentationModule):
                 self.model = MinkUNet34CShallow(self.in_channels, self.in_channels)
             else:
                 self.model = MinkUNet34C(self.in_channels, self.in_channels)
-        self.seg_head = nn.Sequential(MLP(self.mlp_channels, dropout=self.seg_head_dropout),
-                                      nn.Conv1d(self.mlp_channels[-1], self.out_channels, kernel_size=1, bias=True)
-                                      # nn.Linear(self.mlp_channels[-1], self.out_channels)
-                                      )
+        seg_head_list = []
+        if self.seg_head_in_bn:
+            seg_head_list.append(norm_layer(norm_type='batch', nc=self.mlp_channels[0]))
+        seg_head_list += [MLP(self.mlp_channels, dropout=self.seg_head_dropout),
+                         nn.Conv1d(self.mlp_channels[-1], self.out_channels, kernel_size=1, bias=True)]
+        self.seg_head = nn.Sequential(*seg_head_list)
         if self.pretrained_minkunet_ckpt is not None:
             # print(self.model)
             pretrained_ckpt = torch.load(self.pretrained_minkunet_ckpt)
@@ -72,15 +74,11 @@ class MinkowskiSegmentationModuleLIG(BaseSegmentationModule):
 
     def forward(self, x, pts, feats, rand_shift=None):
         bs = len(pts)
-        # print(bs)
         if self.mink_sdf_to_seg:
             sparse_lats = self.model(x)
         else:
             sparse_lats = x
 
-        # list_of_coords, list_of_feats = sparse_lats.decomposed_coordinates_and_features
-        # print("sparse lats: ", list_of_coords[0].max(dim=0)[0], list_of_coords[0].min(dim=0)[0])
-        # print(rand_shift)
         if rand_shift is not None:
             list_of_coords, list_of_feats = sparse_lats.decomposed_coordinates_and_features
             for i in range(bs):
@@ -93,32 +91,27 @@ class MinkowskiSegmentationModuleLIG(BaseSegmentationModule):
         else:
 
             seg_lats, min_coord, _ = sparse_lats.dense(min_coordinate=torch.tensor([0,0,0], dtype=torch.int)) # (b, *sizes, c)
-        lats_list = []
-        pt_feats_list = []
+        seg_occ_in_list = []
         weights_list = []
         for i in range(bs):
-            cur_lats, xloc = interpolate_grid_feats(pts[i], seg_lats[i].permute([1,2,3,0])) # (num_pts, 2**dim, c), (num_pts, 2**dim, 3)
+            lat, xloc = interpolate_grid_feats(pts[i], seg_lats[i].permute([1,2,3,0])) # (num_pts, 2**dim, c), (num_pts, 2**dim, 3)
             cur_weights = torch.prod(1-torch.abs(xloc), axis=-1)
             if self.interpolate_grid_feats and self.average_xlocs:
-                xloc = xloc.mean(axis=1, keepdim=False) # (num_pts, 3)
+                xloc = xloc.mean(axis=1, keepdim=True).repeat(1, lat.shape[1], 1)
             if feats[i] is not None:
-                cur_pt_feats = torch.cat([xloc, feats[i]], dim=-1) # (num_pts, d)
+                cur_seg_occ_in = torch.cat([lat, xloc, feats[i].unsqueeze(1).repeat(1,lat.shape[1],1)], dim=-1)
             else:
-                cur_pt_feats = xloc # (num_pts, d)
-            lats_list.append(cur_lats)
+                cur_seg_occ_in = torch.cat([lat, xloc], dim=-1)
+            
+            seg_occ_in_list.append(cur_seg_occ_in)
             weights_list.append(cur_weights)
-            pt_feats_list.append(cur_pt_feats)
-
-        lats = torch.cat(lats_list, dim=0).transpose(1,2) # (b x num_pts, c, 2**dim)
-        pt_feats = torch.cat(pt_feats_list, dim=0) # (b x num_pts, d)
+        seg_occ_in = torch.cat(seg_occ_in_list, dim=0).transpose(1,2) # (b x num_pts, c + 3, 2**dim)
         weights = torch.cat(weights_list, dim=0) # (b x num_pts, 2**dim)
         weights = weights.unsqueeze(dim=-1) # (b x num_pts, 2**dim, 1)
         if self.interpolate_grid_feats:
-            weighted_lats = torch.bmm(lats, weights) # (b x num_pts, c, 1)
-            seg_occ_in = torch.cat([weighted_lats, pt_feats.unsqueeze(-1)], dim=1) # (b x num_pts, c + d, 1)
-            logits = self.seg_head(seg_occ_in).squeeze(dim=-1) # (b x num_pts, out_c, 1)
+            weighted_feats = torch.bmm(seg_occ_in, weights) # (b x num_pts, c + 3, 1)
+            logits = self.seg_head(weighted_feats).squeeze(dim=-1) # (b x num_pts, out_c, 1)
         else:
-            seg_occ_in = torch.cat([lats, pt_feats.unsqueeze(-1).repeat(1,1,lats.shape[-1])], dim=1) # (b x num_pts, c + d, 1)
             seg_probs = self.seg_head(seg_occ_in) # (b x num_pts, out_c, 2**dim)
             logits = torch.bmm(seg_probs, weights).squeeze(dim=-1) # (b x num_pts, out_c)
         return logits
@@ -189,6 +182,7 @@ class MinkowskiSegmentationModuleLIG(BaseSegmentationModule):
         parser.add_argument("--odd_model", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument("--shallow_model", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument("--mink_sdf_to_seg", type=str2bool, nargs='?', const=True, default=True)
+        parser.add_argument("--seg_head_in_bn", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument('--seg_head_dropout', type=float, default=0.3)
         parser.add_argument("--mlp_channels", type=str, default='1,4,8,4')
         parser.add_argument("--relative_mlp_channels", type=str2bool, nargs='?', const=True, default=True)
