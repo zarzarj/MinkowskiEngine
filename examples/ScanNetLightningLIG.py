@@ -29,6 +29,7 @@ class ScanNetLIG(ScanNet):
     def process_input(self, input_dict):
         # print(input_dict)
         input_dict['coords'], input_dict['lats'] = input_dict['implicit_feats']
+        input_dict['colors'] = (input_dict['colors'] / 255.) - 0.5
         if self.shift_coords and self.trainer.training:
             input_dict['rand_shift'] = (torch.rand(3) * 100).type_as(input_dict['coords'])
             input_dict['coords'] += input_dict['rand_shift']

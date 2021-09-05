@@ -96,25 +96,15 @@ class MinkowskiSegmentationModuleLIG(BaseSegmentationModule):
         seg_occ_in_list = []
         weights_list = []
         for i in range(bs):
-            # print(pts[i].shape, feats[i].shape)
-            # print(x.shape)
             lat, xloc = interpolate_grid_feats(pts[i], seg_lats[i].permute([1,2,3,0])) # (num_pts, 2**dim, c), (num_pts, 2**dim, 3)
-            # print(lat[:,0])
+            cur_weights = torch.prod(1-torch.abs(xloc), axis=-1)
             if self.interpolate_grid_feats and self.average_xlocs:
                 xloc = xloc.mean(axis=1, keepdim=True).repeat(1, lat.shape[1], 1)
-                # print(xloc.shape)
             if feats[i] is not None:
-                # print(feats[i].shape, lat.shape, xloc.shape)
                 cur_seg_occ_in = torch.cat([lat, xloc, feats[i].unsqueeze(1).repeat(1,lat.shape[1],1)], dim=-1)
-                # cur_seg_occ_in = torch.cat([lat, feats[i].unsqueeze(1).repeat(1,lat.shape[1],1)], dim=-1)
             else:
                 cur_seg_occ_in = torch.cat([lat, xloc], dim=-1)
-                # cur_seg_occ_in = lat
-
-            # print(seg_lats, pts, cur_seg_occ_in, lat)
-            # break
-            # print(cur_seg_occ_in.shape, feats[i])
-            cur_weights = torch.prod(1-torch.abs(xloc), axis=-1)
+            
             seg_occ_in_list.append(cur_seg_occ_in)
             weights_list.append(cur_weights)
         seg_occ_in = torch.cat(seg_occ_in_list, dim=0).transpose(1,2) # (b x num_pts, c + 3, 2**dim)
@@ -124,14 +114,9 @@ class MinkowskiSegmentationModuleLIG(BaseSegmentationModule):
             weighted_feats = torch.bmm(seg_occ_in, weights) # (b x num_pts, c + 3, 1)
             logits = self.seg_head(weighted_feats).squeeze(dim=-1) # (b x num_pts, out_c, 1)
         else:
-            # seg_occ_in = seg_occ_in.reshape(seg_occ_in.shape[])
             seg_probs = self.seg_head(seg_occ_in) # (b x num_pts, out_c, 2**dim)
             logits = torch.bmm(seg_probs, weights).squeeze(dim=-1) # (b x num_pts, out_c)
         return logits
-
-    # def on_after_backward(self):
-    #     for k, v in self.named_parameters():
-    #         print(k, v.grad)
 
     def training_step(self, batch, batch_idx):
         coords, lats, pts, feats, target = batch['coords'], batch['lats'], batch['pts'], batch['feats'], batch['labels']
@@ -141,8 +126,6 @@ class MinkowskiSegmentationModuleLIG(BaseSegmentationModule):
         else:
             rand_shift = None
         target = torch.cat(target, dim=0).long()
-        # print('coords', coords.max(dim=0)[0])
-        # print("preinfield", coords.max(dim=0)[0], coords.min(dim=0)[0])
         in_field = ME.TensorField(
             features=lats,
             coordinates=coords,
@@ -151,10 +134,7 @@ class MinkowskiSegmentationModuleLIG(BaseSegmentationModule):
             # minkowski_algorithm=ME.MinkowskiAlgorithm.MEMORY_EFFICIENT,
             device=self.device,
         )
-        # print("infield", in_field.coordinates.max(dim=0)[0], in_field.coordinates.min(dim=0)[0])
         sinput = in_field.sparse()
-        # print("sparse", sinput.coordinates.max(dim=0)[0], sinput.coordinates.min(dim=0)[0])
-        # print('coords2', sinput.coordinates.max(dim=0)[0])
         logits = self(sinput, pts, feats, rand_shift)
         train_loss = self.criterion(logits, target)
 

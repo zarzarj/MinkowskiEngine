@@ -198,10 +198,12 @@ class ScanNet(LightningDataModule):
             labels = resampled_labels[valid_face_labels]
 
         if self.trainer.training and self.max_num_pts > 0 and self.max_num_pts < pts.shape[0]:
-            subsample_idx = torch.randperm(pts.shape[0])[:self.max_num_pts]
-            pts = pts[subsample_idx]
-            colors = colors[subsample_idx]
-            labels = labels[subsample_idx]
+            randperm = torch.randperm(pts.shape[0])[:self.max_num_pts]
+        else:
+            randperm = torch.randperm(pts.shape[0])
+        pts = pts[randperm]
+        colors = colors[randperm]
+        labels = labels[randperm]
         return pts, colors, labels
 
     def load_ply(self, idx):
