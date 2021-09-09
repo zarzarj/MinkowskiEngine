@@ -94,17 +94,15 @@ class MinkowskiSegmentationModuleLIG(BaseSegmentationModule):
         seg_occ_in_list = []
         weights_list = []
         for i in range(bs):
-            lat, xloc = interpolate_grid_feats(pts[i], seg_lats[i].permute([1,2,3,0])) # (num_pts, 2**dim, c), (num_pts, 2**dim, 3)
-            cur_weights = torch.prod(1-torch.abs(xloc), axis=-1)
+            lat, xloc, weights = interpolate_grid_feats(pts[i], seg_lats[i].permute([1,2,3,0])) # (num_pts, 2**dim, c), (num_pts, 2**dim, 3)
             if self.interpolate_grid_feats and self.average_xlocs:
                 xloc = xloc.mean(axis=1, keepdim=True).repeat(1, lat.shape[1], 1)
             if feats[i] is not None:
                 cur_seg_occ_in = torch.cat([lat, xloc, feats[i].unsqueeze(1).repeat(1,lat.shape[1],1)], dim=-1)
             else:
                 cur_seg_occ_in = torch.cat([lat, xloc], dim=-1)
-            
             seg_occ_in_list.append(cur_seg_occ_in)
-            weights_list.append(cur_weights)
+            weights_list.append(weights)
         seg_occ_in = torch.cat(seg_occ_in_list, dim=0).transpose(1,2) # (b x num_pts, c + 3, 2**dim)
         weights = torch.cat(weights_list, dim=0) # (b x num_pts, 2**dim)
         weights = weights.unsqueeze(dim=-1) # (b x num_pts, 2**dim, 1)

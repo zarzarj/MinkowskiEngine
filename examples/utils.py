@@ -1,7 +1,7 @@
 import torch
-# import numpy as np
+import numpy as np
 
-def interpolate_grid_feats(pts, grid, part_size=0.25):
+def interpolate_grid_feats(pts, grid, part_size=0.25, overlap_factor=2):
     """Regular grid interpolator, returns inpterpolation coefficients.
     Args:
     pts: `[num_points, dim]` tensor, coordinates of points
@@ -15,49 +15,31 @@ def interpolate_grid_feats(pts, grid, part_size=0.25):
     npts = pts.shape[0]
     dim = pts.shape[1]
     xmin = torch.min(pts, dim=0)[0] - (part_size * 1.1)
-    half_part_size = part_size / 2
+    half_part_size = part_size / overlap_factor
     # normalize coords for interpolation
     pts = (pts - xmin) / half_part_size
 
     # find neighbor indices
     ind0 = torch.floor(pts)  # `[num_points, dim]`
-    ind1 = torch.ceil(pts)  # `[num_points, dim]`
-    ind01 = torch.stack([ind0, ind1], dim=0)  # `[2, num_points, dim]`
+    inds = [ind0 + i for i in range(overlap_factor)]
+    ind01 = torch.stack(inds, dim=0)  # `[2, num_points, dim]`
     ind01 = torch.transpose(ind01, 1, 2)  # `[2, dim, num_points]`
-    # print(grid.shape, ind1.max(dim=0)[0])
-
-    # generate combinations for enumerating neighbors
-    com_ = torch.stack(torch.meshgrid(*tuple(torch.tensor([[0,1]] * dim))), dim=-1)
+    com_ = torch.stack(torch.meshgrid(*tuple(torch.tensor([np.arange(overlap_factor)] * dim))), dim=-1)
     com_ = torch.reshape(com_, [-1, dim])  # `[2**dim, dim]`
     dim_ = torch.reshape(torch.arange(0,dim), [1, -1])
-    dim_ = torch.tile(dim_, [2**dim, 1])  # `[2**dim, dim]`
+    dim_ = torch.tile(dim_, [overlap_factor**dim, 1])  # `[2**dim, dim]`
     gather_ind = torch.stack([com_, dim_], dim=-1)  # `[2**dim, dim, 2]`
     ind_ = gather_nd(ind01, gather_ind)  # [2**dim, dim, num_pts]
     ind_n = torch.transpose(ind_, 0,2).transpose(1,2)  # neighbor indices `[num_pts, 2**dim, dim]`
-    # print(grid.shape, ind1.max(dim=0)[0], ind1.min(dim=0)[0], min_coord)
-    # print(grid.shape)
-    # print(grid.shape)
     grid = torch.nn.functional.pad(grid, (0,0,0,1,0,1,0,1), mode='constant', value=0)
     # print(grid.shape)
     lat = gather_nd(grid, ind_n) # `[num_points, 2**dim, in_features]
 
-
-    # weights of neighboring nodes
-    xyz0 = ind0  # `[num_points, dim]`
-    xyz1 = ind0 + 1  # `[num_points, dim]`
-    xyz01 = torch.stack([xyz0, xyz1], dim=-1)  # [num_points, dim, 2]`
-    xyz01 = torch.transpose(xyz01, 0,2)  # [2, dim, num_points]
-    pos = gather_nd(xyz01, gather_ind)  # `[2**dim, dim, num_points]`
-    pos = torch.transpose(pos, 0,2).transpose(1,2) # `[num_points, 2**dim, dim]`
-    xloc = (torch.unsqueeze(pts, -2) - pos) # `[num_points, 2**dim, dim]`
-    # np.save('test_lat.npy', lat.cpu().numpy())
-    # np.save('test_xloc.npy', xloc.cpu().numpy())
-    
-    # print(grid.shape)
-    # assert(True==False)
-
-    # print(lat)
-    return lat, xloc
+    pos = ind_n.float() + 1 - overlap_factor/2.
+    xloc = torch.unsqueeze(pts, -2) - pos # `[num_points, 2**dim, dim]`
+    weights = torch.abs(torch.prod((overlap_factor - 1) - torch.abs(xloc), axis=-1))
+    # print(xloc.min(), xloc.max())
+    return lat, xloc, weights
 
 def gather_nd(params, indices):
     orig_shape = list(indices.shape)
@@ -70,10 +52,7 @@ def gather_nd(params, indices):
         raise ValueError(
             f'the last dimension of indices must less or equal to the rank of params. Got indices:{indices.shape}, params:{params.shape}. {m} > {n}'
         )
-
-    # print(indices.shape, params.shape, indices.max(), indices.min())
     indices = indices.reshape((num_samples, m)).transpose(0, 1).tolist()
-    # print(indices.shape, params.shape, indices.max(), indices.min())
     output = params[indices] 
     return output.reshape(out_shape).contiguous()
 

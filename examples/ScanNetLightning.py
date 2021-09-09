@@ -252,25 +252,22 @@ class ScanNet(LightningDataModule):
         if len(feats) == 0:
             feats.append(torch.ones((input_dict['pts'].shape[0], 1)))
         out_feats = torch.cat(feats, dim=-1)
+        # print(out_feats.shape)
         return out_feats
 
 
     def load_implicit_feats(self, file_name, pts):
         scene_name = file_name.split('/')[-2]
-        # implicit_feat_file = os.path.join(self.data_dir, 'implicit_feats', scene_name+'-d1e-05-ps0.pt')
-        # lats_file = os.path.join(self.data_dir, 'lats', scene_name+'-d1e-05-ps0.npy')
         lats_file = os.path.join(self.data_dir, 'lats', scene_name+'-d1e-05-vertices-st20000.npy')
         grid = torch.from_numpy(np.load(lats_file))
-        # print(grid.shape)
-        lat, xloc = interpolate_grid_feats(pts, grid)
-        # print(lat)
-        implicit_feats = torch.cat([lat, xloc], dim=-1)
-        # if not os.path.exists(implicit_feat_file):
-        #     os.makedirs(os.path.join(self.data_dir, 'implicit_feats'), exist_ok=True)
-            
-        #     torch.save(implicit_feats, implicit_feat_file)
-        # else:
-        #     implicit_feats = torch.load(implicit_feat_file)
+        lat, xloc, weights = interpolate_grid_feats(pts, grid)
+        if self.interp_grid_feats:
+            # print(lat.shape, xloc.shape, weights.shape)
+            implicit_feats = torch.bmm(weights.unsqueeze(dim=1), lat).squeeze(1)
+            # print(implicit_feats.shape)
+            # implicit_feats = torch.cat([implicit_feats, xloc.mean(axis=1, keepdim=False)], dim=-1)
+        else:
+            implicit_feats = torch.cat([lat, xloc], dim=-1)
         return implicit_feats
 
     @staticmethod
@@ -284,6 +281,7 @@ class ScanNet(LightningDataModule):
         parser.add_argument("--save_preds", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument("--train_percent", type=float, default=0.8)
         parser.add_argument("--train_subset", type=float, default=1.0)
+        parser.add_argument("--interp_grid_feats", type=str2bool, nargs='?', const=True, default=False)
 
         parser.add_argument("--point_subsampling_percent", type=float, default=1.0)
         parser.add_argument("--voxel_size", type=float, default=0.02)
