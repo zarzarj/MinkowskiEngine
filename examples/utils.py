@@ -18,7 +18,6 @@ def interpolate_grid_feats(pts, grid, part_size=0.25, overlap_factor=2):
     half_part_size = part_size / overlap_factor
     # normalize coords for interpolation
     pts = (pts - xmin) / half_part_size
-
     # find neighbor indices
     ind0 = torch.floor(pts)  # `[num_points, dim]`
     inds = [ind0 + i for i in range(overlap_factor)]
@@ -55,6 +54,7 @@ def gather_nd(params, indices):
     indices = indices.reshape((num_samples, m)).transpose(0, 1).tolist()
     output = params[indices] 
     return output.reshape(out_shape).contiguous()
+
 
 
 class Embedder:

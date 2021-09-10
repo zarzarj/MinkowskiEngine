@@ -94,7 +94,7 @@ class MinkowskiSegmentationModuleLIG(BaseSegmentationModule):
         seg_occ_in_list = []
         weights_list = []
         for i in range(bs):
-            lat, xloc, weights = interpolate_grid_feats(pts[i], seg_lats[i].permute([1,2,3,0])) # (num_pts, 2**dim, c), (num_pts, 2**dim, 3)
+            lat, xloc, weights = interpolate_grid_feats(pts[i], seg_lats[i].permute([1,2,3,0]), self.overlap_factor) # (num_pts, 2**dim, c), (num_pts, 2**dim, 3)
             if self.interpolate_grid_feats and self.average_xlocs:
                 xloc = xloc.mean(axis=1, keepdim=True).repeat(1, lat.shape[1], 1)
             if feats[i] is not None:
@@ -117,6 +117,7 @@ class MinkowskiSegmentationModuleLIG(BaseSegmentationModule):
     def training_step(self, batch, batch_idx):
         coords, lats, pts, feats, target = batch['coords'], batch['lats'], batch['pts'], batch['feats'], batch['labels']
         coords, lats, pts, feats = to_precision((coords, lats, pts, feats), self.trainer.precision)
+        # print(coords.shape, lats.shape, pts.shape, feats.shape)
         if self.trainer.datamodule.shift_coords:
             rand_shift = batch['rand_shift']
         else:
@@ -185,5 +186,6 @@ class MinkowskiSegmentationModuleLIG(BaseSegmentationModule):
         parser.add_argument("--mlp_channels", type=str, default='1,4,8,4')
         parser.add_argument("--relative_mlp_channels", type=str2bool, nargs='?', const=True, default=True)
         parser.add_argument("--mlp_extra_in_channels", type=int, default=3)
+        parser.add_argument("--overlap_factor", type=int, default=2)
         return parent_parser
 

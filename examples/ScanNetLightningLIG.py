@@ -41,7 +41,7 @@ class ScanNetLIG(ScanNet):
         scene_name = file_name.split('/')[-2]
         # mask_file = os.path.join(self.data_dir, 'masks', scene_name+'-d1e-05-ps0.npy')
         # lats_file = os.path.join(self.data_dir, 'lats', scene_name+'-d1e-05-ps0.npy')
-        lats_file = os.path.join(self.data_dir, 'lats', scene_name+'-d1e-05-vertices-st20000.npy')
+        lats_file = os.path.join(self.data_dir, 'lats', scene_name + self.lats_file_suffix + '.npy')
         # mask = torch.from_numpy(np.load(mask_file))
         grid = torch.from_numpy(np.load(lats_file))
         # print(grid.shape)
@@ -76,6 +76,7 @@ class ScanNetLIG(ScanNet):
         if len(feats) == 0:
             return None
         out_feats = torch.cat(feats, dim=-1)
+        print(out_feats.shape)
         return out_feats
 
     def convert_batch(self, idxs):
@@ -101,4 +102,5 @@ class ScanNetLIG(ScanNet):
         parent_parser = ScanNet.add_argparse_args(parent_parser)
         parser = parent_parser.add_argument_group("ScanNetLIG")
         parser.add_argument("--occupancy_lats", type=str2bool, nargs='?', const=True, default=False)
+        parser.add_argument("--lats_file_suffix", type=str, default='-d1e-05-vertices-st20000')
         return parent_parser

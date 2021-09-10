@@ -20,6 +20,12 @@ class MinkowskiSegmentationModule(BaseSegmentationModule):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.model = MinkUNet34C(self.in_channels, self.out_channels)
+        if self.pretrained_minkunet_ckpt is not None:
+            pretrained_ckpt = torch.load(self.pretrained_minkunet_ckpt)
+            del pretrained_ckpt['conv0p1s1.kernel']
+            del pretrained_ckpt['final.kernel']
+            del pretrained_ckpt['final.bias']
+            self.model.load_state_dict(pretrained_ckpt, strict=False)
         if self.use_seg_head:
             self.seg_head = nn.Sequential(MLP(self.mlp_channels, dropout=self.seg_head_dropout),
                                       nn.Conv1d(self.mlp_channels[-1], self.out_channels, kernel_size=1, bias=True)
@@ -57,6 +63,7 @@ class MinkowskiSegmentationModule(BaseSegmentationModule):
     def validation_step(self, batch, batch_idx):
         # print("Val ", batch)
         coords, feats, target = batch['coords'], batch['feats'], batch['labels']
+        # print(feats.shape)
         coords, feats = to_precision((coords, feats), self.trainer.precision)
         # print(target.min(), target.max(), target)
         in_field = ME.TensorField(
@@ -82,6 +89,7 @@ class MinkowskiSegmentationModule(BaseSegmentationModule):
         parent_parser = BaseSegmentationModule.add_argparse_args(parent_parser)
         parser = parent_parser.add_argument_group("MinkSegModel")
         parser.add_argument("--use_seg_head", type=str2bool, nargs='?', const=True, default=False)
+        parser.add_argument("--pretrained_minkunet_ckpt", type=str, default=None)
         return parent_parser
 
 
