@@ -76,7 +76,7 @@ class ScanNetLIG(ScanNet):
         if len(feats) == 0:
             return None
         out_feats = torch.cat(feats, dim=-1)
-        print(out_feats.shape)
+        # print(out_feats.shape)
         return out_feats
 
     def convert_batch(self, idxs):

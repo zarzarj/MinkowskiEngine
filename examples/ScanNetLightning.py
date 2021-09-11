@@ -95,47 +95,57 @@ class ScanNet(LightningDataModule):
     def prepare_data(self):
         if self.save_preds:
             os.makedirs(os.path.join(self.data_dir, 'output'), exist_ok=True)
-        train_filename = os.path.join(self.data_dir, 'train_idx.npy')
-        val_filename = os.path.join(self.data_dir, 'val_idx.npy')
-        if not os.path.exists(train_filename) or not os.path.exists(val_filename):
-            scan_files = glob.glob(os.path.join(self.scans_dir, '*'))
-            idxs = np.random.permutation(len(scan_files))
-            num_training = math.ceil(idxs.shape[0] * self.train_percent)
-            train_idx, val_idx = idxs[:num_training], idxs[num_training:]
-            np.save(train_filename, train_idx)
-            np.save(val_filename, val_idx)
+        # train_filename = os.path.join(self.data_dir, 'train_idx.npy')
+        # val_filename = os.path.join(self.data_dir, 'val_idx.npy')
+        # if not os.path.exists(train_filename) or not os.path.exists(val_filename):
+        #     scan_files = glob.glob(os.path.join(self.scans_dir, '*'))
+        #     idxs = np.random.permutation(len(scan_files))
+        #     num_training = math.ceil(idxs.shape[0] * self.train_percent)
+        #     train_idx, val_idx = idxs[:num_training], idxs[num_training:]
+        #     np.save(train_filename, train_idx)
+        #     np.save(val_filename, val_idx)
         # scan_test_filenames = glob.glob(os.path.join(self.scans_test_dir, '*'))
 
     def setup(self, stage: Optional[str] = None):
         if stage == 'fit' or stage =='validate':
-            self.scan_files = glob.glob(os.path.join(self.scans_dir, '*', '*_vh_clean_2.ply'))
-            self.train_idx = torch.from_numpy(np.load(os.path.join(self.data_dir, 'train_idx.npy')))
-            if self.train_subset != 1:
-                num_train_samples = int(self.train_idx.shape[0] * self.train_subset)
-                self.train_idx = self.train_idx[:num_train_samples]
-            self.val_idx = torch.from_numpy(np.load(os.path.join(self.data_dir, 'val_idx.npy')))
+            # self.scan_files = glob.glob(os.path.join(self.scans_dir, '*', '*_vh_clean_2.ply'))
+            # self.train_idx = torch.from_numpy(np.load(os.path.join(self.data_dir, 'train_idx.npy')))
+            # if self.train_subset != 1:
+            #     num_train_samples = int(self.train_idx.shape[0] * self.train_subset)
+            #     self.train_idx = self.train_idx[:num_train_samples]
+            # self.val_idx = torch.from_numpy(np.load(os.path.join(self.data_dir, 'val_idx.npy')))
+            with open(os.path.join(self.data_dir, 'splits', 'scannetv2_train.txt'), 'r') as f:
+                self.train_files = f.readlines()
+                self.train_files = [file[:-5] for file in self.train_files]
+            # print(self.train_files)
+            with open(os.path.join(self.data_dir, 'splits', 'scannetv2_val.txt'), 'r') as f:
+                self.val_files = f.readlines()
+                self.val_files = [file[:-5] for file in self.val_files]
         else:
-            self.scan_files = glob.glob(os.path.join(self.scans_test_dir, '*', '_vh_clean_2.ply'))
-            self.test_idx = torch.from_numpy(np.arange(len(self.scan_files)))
-        self.scan_files.sort()
+            # self.scan_files = glob.glob(os.path.join(self.scans_test_dir, '*', '_vh_clean_2.ply'))
+            # self.test_idx = torch.from_numpy(np.arange(len(self.scan_files)))
+            with open(os.path.join(self.data_dir, 'splits', 'scannetv2_test.txt'), 'r') as f:
+                self.test_files = f.readlines()
+                self.test_files = [file[:-5] for file in self.test_files]
+        # self.scan_files.sort()
         # print(self.scan_files[97])
         if self.use_coord_pos_encoding:
             self.embedder, _ = get_embedder(self.coord_pos_encoding_multires)
     
     def train_dataloader(self):
-        train_dataloader = DataLoader(self.train_idx, collate_fn=self.convert_batch,
+        train_dataloader = DataLoader(self.train_files, collate_fn=self.convert_batch,
                           batch_size=self.batch_size, shuffle=True,
                           num_workers=self.num_workers, pin_memory=True)
         return train_dataloader
 
     def val_dataloader(self):
-        val_dataloader = DataLoader(self.val_idx, collate_fn=self.convert_batch,
+        val_dataloader = DataLoader(self.val_files, collate_fn=self.convert_batch,
                           batch_size=self.val_batch_size, shuffle=False,
                           num_workers=self.num_workers, pin_memory=True)
         return val_dataloader
 
     def test_dataloader(self):  # Test best validation model once again.
-        return DataLoader(self.test_idx, collate_fn=self.convert_batch,
+        return DataLoader(self.test_files, collate_fn=self.convert_batch,
                           batch_size=self.test_batch_size, shuffle=False,
                           num_workers=self.num_workers, pin_memory=True)
 
@@ -210,7 +220,9 @@ class ScanNet(LightningDataModule):
         return pts, colors, labels
 
     def load_ply(self, idx):
-        scan_file = self.scan_files[idx]
+        # scan_file = self.scan_files[idx]
+        # print("idx", idx)
+        scan_file = os.path.join(self.data_dir, 'scans', idx, idx + '_vh_clean_2.ply')
         pts, colors, labels = self.load_ply_file(scan_file,
                                                     load_labels=(self.trainer.training
                                                                  or self.trainer.validating)
