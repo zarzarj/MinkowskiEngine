@@ -22,6 +22,8 @@ class MinkowskiSegmentationModule(BaseSegmentationModule):
         self.model = MinkUNet34C(self.in_channels, self.out_channels)
         if self.pretrained_minkunet_ckpt is not None:
             pretrained_ckpt = torch.load(self.pretrained_minkunet_ckpt)
+            if 'state_dict' in pretrained_ckpt:
+                pretrained_ckpt = pretrained_ckpt['state_dict']
             del pretrained_ckpt['conv0p1s1.kernel']
             del pretrained_ckpt['final.kernel']
             del pretrained_ckpt['final.bias']
