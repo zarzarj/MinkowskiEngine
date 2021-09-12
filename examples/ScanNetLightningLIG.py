@@ -103,5 +103,4 @@ class ScanNetLIG(ScanNet):
         parent_parser = ScanNet.add_argparse_args(parent_parser)
         parser = parent_parser.add_argument_group("ScanNetLIG")
         parser.add_argument("--occupancy_lats", type=str2bool, nargs='?', const=True, default=False)
-        parser.add_argument("--lats_file_suffix", type=str, default='-d1e-05-vertices-st20000')
         return parent_parser
