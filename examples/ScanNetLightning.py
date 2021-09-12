@@ -158,6 +158,7 @@ class ScanNet(LightningDataModule):
                 "feats": feats_batch,
                 "labels": labels_batch.long(),
                 "idxs": idxs,
+                "pts": input_dict['pts']
                 }
 
     def load_scan_files(self, idxs):
@@ -246,9 +247,10 @@ class ScanNet(LightningDataModule):
         input_dict['coords'] = input_dict['pts'] / self.voxel_size
         if self.shift_coords and self.trainer.training:
             input_dict['coords'] += (torch.rand(3) * 100).type_as(input_dict['coords'])
+        input_dict['coords'] = torch.floor(input_dict['coords'])
         input_dict['colors'] = (input_dict['colors'] / 255.) - 0.5
         input_dict['feats'] = self.get_features(input_dict)
-        del input_dict['pts']
+        # del input_dict['pts']
         return input_dict
 
     def get_features(self, input_dict):

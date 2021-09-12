@@ -18,6 +18,8 @@ def interpolate_grid_feats(pts, grid, part_size=0.25, overlap_factor=2):
     half_part_size = part_size / overlap_factor
     # normalize coords for interpolation
     pts = (pts - xmin) / half_part_size
+    if overlap_factor != 2:
+        pts-= overlap_factor - 1
     # find neighbor indices
     ind0 = torch.floor(pts)  # `[num_points, dim]`
     inds = [ind0 + i for i in range(overlap_factor)]
@@ -34,7 +36,10 @@ def interpolate_grid_feats(pts, grid, part_size=0.25, overlap_factor=2):
     # print(grid.shape)
     lat = gather_nd(grid, ind_n) # `[num_points, 2**dim, in_features]
 
-    pos = ind_n.float() + 1 - overlap_factor/2.
+    if overlap_factor == 2:
+        pos = ind_n.float()
+    else:
+        pos = ind_n.float() + 1 - overlap_factor/2.
     xloc = torch.unsqueeze(pts, -2) - pos # `[num_points, 2**dim, dim]`
     weights = torch.abs(torch.prod((overlap_factor - 1) - torch.abs(xloc), axis=-1))
     # print(xloc.min(), xloc.max())

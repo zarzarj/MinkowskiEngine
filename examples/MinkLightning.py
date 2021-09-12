@@ -21,20 +21,31 @@ class MinkowskiSegmentationModule(BaseSegmentationModule):
         super().__init__(**kwargs)
         self.model = MinkUNet34C(self.in_channels, self.out_channels)
         if self.pretrained_minkunet_ckpt is not None:
+            print("Loading checkpoint from ", self.pretrained_minkunet_ckpt)
             pretrained_ckpt = torch.load(self.pretrained_minkunet_ckpt)
             if 'state_dict' in pretrained_ckpt:
                 pretrained_ckpt = pretrained_ckpt['state_dict']
             del pretrained_ckpt['conv0p1s1.kernel']
-            del pretrained_ckpt['final.kernel']
-            del pretrained_ckpt['final.bias']
-            self.model.load_state_dict(pretrained_ckpt, strict=False)
-        if self.use_seg_head:
-            self.seg_head = nn.Sequential(MLP(self.mlp_channels, dropout=self.seg_head_dropout),
-                                      nn.Conv1d(self.mlp_channels[-1], self.out_channels, kernel_size=1, bias=True)
-                                      # nn.Linear(self.mlp_channels[-1], self.out_channels)
-                                      )
+            # del pretrained_ckpt['final.kernel']
+            # del pretrained_ckpt['final.bias']
+            # for name, val in self.model.named_parameters():
+            #     print(name, val)
+            #     break
+            self.model.load_state_dict(pretrained_ckpt, strict=True)
+            # for name, val in self.model.named_parameters():
+            #     print(name, val)
+            #     break
+
+        # if self.use_seg_head:
+        #     self.seg_head = nn.Sequential(MLP(self.mlp_channels, dropout=self.seg_head_dropout),
+        #                               nn.Conv1d(self.mlp_channels[-1], self.out_channels, kernel_size=1, bias=True)
+        #                               # nn.Linear(self.mlp_channels[-1], self.out_channels)
+        #                               )
 
     def forward(self, x):
+        # for name, val in self.model.named_parameters():
+            # print(name, val)
+            # break
         return self.model(x)
 
     def training_step(self, batch, batch_idx):
@@ -67,6 +78,8 @@ class MinkowskiSegmentationModule(BaseSegmentationModule):
         coords, feats, target = batch['coords'], batch['feats'], batch['labels']
         # print(feats.shape)
         coords, feats = to_precision((coords, feats), self.trainer.precision)
+
+        # print(coords, feats)
         # print(target.min(), target.max(), target)
         in_field = ME.TensorField(
             features=feats,
@@ -76,12 +89,13 @@ class MinkowskiSegmentationModule(BaseSegmentationModule):
             device=self.device,
         )
         sinput = in_field.sparse()
-        logits = self(sinput).slice(in_field).F
+        logits = self.model(sinput).slice(in_field).F
         val_loss = self.criterion(logits, target)
         self.log('val_loss', val_loss, sync_dist=True, prog_bar=True, on_step=False, on_epoch=True)
         preds = logits.argmax(dim=-1)
+        # print(preds)
         valid_targets = target != -100
-        return {'loss': val_loss, 'preds': preds[valid_targets], 'target': target[valid_targets]}
+        return {'loss': val_loss, 'preds': preds[valid_targets], 'target': target[valid_targets], 'pts': torch.cat(batch['pts'], axis=0)[valid_targets]}
 
     def convert_sync_batchnorm(self):
         self.model = ME.MinkowskiSyncBatchNorm.convert_sync_batchnorm(self.model)

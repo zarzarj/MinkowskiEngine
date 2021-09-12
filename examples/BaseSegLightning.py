@@ -12,6 +12,8 @@ from examples.MeanIoU import MeanIoU
 from examples.str2bool import str2bool
 from examples.basic_blocks import MLP
 
+from examples.utils import save_pc
+
 class LambdaStepLR(LambdaLR):
   def __init__(self, optimizer, lr_lambda, last_step=-1):
     super(LambdaStepLR, self).__init__(optimizer, lr_lambda, last_step)
@@ -69,11 +71,19 @@ class BaseSegmentationModule(LightningModule):
         self.log_dict(self.train_conf_metrics, prog_bar=False, on_step=False, on_epoch=False)
 
     def validation_step_end(self, outputs):
+
         #update and log
         self.val_metrics(outputs['preds'], outputs['target'])
         self.log_dict(self.val_metrics, prog_bar=True, on_step=False, on_epoch=True)
         self.val_conf_metrics(outputs['preds'], outputs['target'])
         self.log_dict(self.val_conf_metrics, prog_bar=False, on_step=False, on_epoch=False)
+        if self.save_pcs:
+            print(outputs['preds'])
+            colors_preds = [self.trainer.datamodule.scannet_color_map[self.trainer.datamodule.valid_class_ids[out]] for out in outputs['preds'].cpu().numpy()]
+            colors_target = [self.trainer.datamodule.scannet_color_map[self.trainer.datamodule.valid_class_ids[out]] for out in outputs['target'].cpu().numpy()]
+            save_pc(outputs['pts'].cpu().numpy(), colors_preds, 'test_preds.ply')
+            save_pc(outputs['pts'].cpu().numpy(), colors_target, 'test_target.ply')
+            assert(True==False)
 
     def configure_optimizers(self):
         if self.optimizer == 'SGD':
@@ -128,6 +138,7 @@ class BaseSegmentationModule(LightningModule):
         parser = parent_parser.add_argument_group("BaseSegModel")
         parser.add_argument("--in_channels", type=int, default=3)
         parser.add_argument("--out_channels", type=int, default=20)
+        parser.add_argument("--save_pcs", type=str2bool, nargs='?', const=True, default=False)
 
         # Optimizer arguments
         parser.add_argument('--optimizer', type=str, default='SGD', choices=['SGD', 'Adam'])

@@ -63,6 +63,7 @@ class ScanNetLIG(ScanNet):
         # print("Loading: ", file_name, grid.shape, coords.max(dim=0)[0], coords.min(dim=0)[0])
         # print(mask_file, grid.shape, coords.max(dim=0)[0], coords.min(dim=0)[0], pts.max(dim=0)[0], pts.min(dim=0)[0])
         # sptensor = ME.SparseTensor(features=lats, coordinates=mask)
+        # print(coords, lats)
         return (coords, lats)
 
     def get_features(self, input_dict):
