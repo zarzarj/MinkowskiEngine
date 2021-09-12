@@ -97,7 +97,7 @@ class MinkowskiSegmentationModuleLIG(BaseSegmentationModule):
         seg_occ_in_list = []
         weights_list = []
         for i in range(bs):
-            lat, xloc, weights = interpolate_grid_feats(pts[i], seg_lats[i].permute([1,2,3,0]), self.overlap_factor) # (num_pts, 2**dim, c), (num_pts, 2**dim, 3)
+            lat, xloc, weights = interpolate_grid_feats(pts[i], seg_lats[i].permute([1,2,3,0]), overlap_factor=self.overlap_factor) # (num_pts, 2**dim, c), (num_pts, 2**dim, 3)
             if self.interpolate_grid_feats and self.average_xlocs:
                 xloc = xloc.mean(axis=1, keepdim=True).repeat(1, lat.shape[1], 1)
             if feats[i] is not None:
