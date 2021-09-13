@@ -31,7 +31,7 @@ class MinkowskiSegmentationModule(BaseSegmentationModule):
             # for name, val in self.model.named_parameters():
             #     print(name, val)
             #     break
-            self.model.load_state_dict(pretrained_ckpt, strict=True)
+            self.model.load_state_dict(pretrained_ckpt, strict=False)
             # for name, val in self.model.named_parameters():
             #     print(name, val)
             #     break
