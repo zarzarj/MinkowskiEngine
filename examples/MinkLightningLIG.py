@@ -13,7 +13,7 @@ from pytorch_lightning.metrics import Accuracy, ConfusionMatrix, MetricCollectio
 from examples.BaseSegLightning import BaseSegmentationModule
 from examples.str2bool import str2bool
 from examples.basic_blocks import MLP, norm_layer
-from examples.utils import interpolate_grid_feats
+from examples.utils import interpolate_grid_feats, interpolate_grid_feats_sparsegrid
 import numpy as np
 
 def to_precision(inputs, precision):
@@ -82,22 +82,10 @@ class MinkowskiSegmentationModuleLIG(BaseSegmentationModule):
         else:
             sparse_lats = x
 
-        if rand_shift is not None:
-            list_of_coords, list_of_feats = sparse_lats.decomposed_coordinates_and_features
-            for i in range(bs):
-                list_of_coords[i] -= rand_shift[i]
-            collated_coords, collated_feats = ME.utils.sparse_collate(list_of_coords,
-                                                            list_of_feats,
-                                                            dtype=x.dtype)
-            new_sparse_lats = ME.SparseTensor(features=collated_feats.to(self.device), coordinates=collated_coords.int().to(self.device))
-            seg_lats, min_coord, _ = new_sparse_lats.dense(min_coordinate=torch.tensor([0,0,0], dtype=torch.int)) # (b, *sizes, c)
-        else:
-
-            seg_lats, min_coord, _ = sparse_lats.dense(min_coordinate=torch.tensor([0,0,0], dtype=torch.int)) # (b, *sizes, c)
         seg_occ_in_list = []
         weights_list = []
         for i in range(bs):
-            lat, xloc, weights = interpolate_grid_feats(pts[i], seg_lats[i].permute([1,2,3,0]), overlap_factor=self.overlap_factor) # (num_pts, 2**dim, c), (num_pts, 2**dim, 3)
+            lat, xloc, weights = interpolate_grid_feats_sparsegrid(pts[i], sparse_lats, overlap_factor=self.overlap_factor) # (num_pts, 2**dim, c), (num_pts, 2**dim, 3)
             if self.interpolate_grid_feats and self.average_xlocs:
                 xloc = xloc.mean(axis=1, keepdim=True).repeat(1, lat.shape[1], 1)
             if feats[i] is not None:
