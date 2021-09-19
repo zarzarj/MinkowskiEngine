@@ -183,7 +183,11 @@ class MinkowskiSegmentationModuleLIG(BaseSegmentationModule):
         parser.add_argument("--shallow_model", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument("--mink_sdf_to_seg", type=str2bool, nargs='?', const=True, default=True)
         
-        
+        parser.add_argument("--seg_head_in_bn", type=str2bool, nargs='?', const=True, default=False)
+        parser.add_argument('--seg_head_dropout', type=float, default=0.3)
+        parser.add_argument("--mlp_channels", type=str, default='1,4,8,4')
+        parser.add_argument("--relative_mlp_channels", type=str2bool, nargs='?', const=True, default=True)
+        parser.add_argument("--mlp_extra_in_channels", type=int, default=3)
         parser.add_argument("--overlap_factor", type=int, default=2)
         return parent_parser
 
