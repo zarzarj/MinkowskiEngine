@@ -179,6 +179,7 @@ class ScanNet(LightningDataModule):
         pts = torch.from_numpy(np.stack((plydata['vertex']['x'],
                                plydata['vertex']['y'],
                                plydata['vertex']['z'])).T)
+        pts_min = pts.min(axis=0)[0]
         colors = torch.from_numpy(np.stack((plydata['vertex']['red'],
                            plydata['vertex']['green'],
                            plydata['vertex']['blue'])).T)
@@ -215,7 +216,7 @@ class ScanNet(LightningDataModule):
             randperm = torch.randperm(pts.shape[0])[:self.max_num_pts]
         else:
             randperm = torch.randperm(pts.shape[0])
-        pts = pts[randperm]
+        pts = pts[randperm] - pts_min
         colors = colors[randperm]
         labels = labels[randperm]
         return pts, colors, labels

@@ -13,7 +13,7 @@ from pytorch_lightning.metrics import Accuracy, ConfusionMatrix, MetricCollectio
 from examples.BaseSegLightning import BaseSegmentationModule
 from examples.str2bool import str2bool
 from examples.basic_blocks import MLP, norm_layer
-from examples.utils import interpolate_grid_feats, interpolate_grid_feats_sparsegrid
+from examples.utils import interpolate_grid_feats, interpolate_sparsegrid_feats
 import numpy as np
 
 def to_precision(inputs, precision):
@@ -84,8 +84,18 @@ class MinkowskiSegmentationModuleLIG(BaseSegmentationModule):
 
         seg_occ_in_list = []
         weights_list = []
+
         for i in range(bs):
-            lat, xloc, weights = interpolate_grid_feats_sparsegrid(pts[i], sparse_lats, overlap_factor=self.overlap_factor) # (num_pts, 2**dim, c), (num_pts, 2**dim, 3)
+            # pts_min = torch.min(pts[i], dim=0)[0]
+            # print(cur_rand_shift)
+            if rand_shift is not None:
+                cur_rand_shift = rand_shift[i]
+            else:
+                cur_rand_shift=None
+
+            lat, xloc, weights = interpolate_sparsegrid_feats(pts[i], sparse_lats.coordinates_at(batch_index=i),
+                                                                   sparse_lats.features_at(batch_index=i),
+                                                                   overlap_factor=self.overlap_factor, rand_shift=cur_rand_shift) # (num_pts, 2**dim, c), (num_pts, 2**dim, 3)
             if self.interpolate_grid_feats and self.average_xlocs:
                 xloc = xloc.mean(axis=1, keepdim=True).repeat(1, lat.shape[1], 1)
             if feats[i] is not None:

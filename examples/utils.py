@@ -2,7 +2,30 @@ import torch
 import numpy as np
 import copy
 
-def interpolate_grid_feats_sparsegrid(pts, sparse_grid, part_size=0.25, overlap_factor=2):
+def coord_to_linear_idx(pts, dense_dim):
+    linear_idx = pts[:,0] * dense_dim[1] * dense_dim[2] + \
+                 pts[:,1] * dense_dim[2] + \
+                 pts[:,2]
+    return linear_idx.long()
+
+def coord_mapping(tensor_coords):
+    num_coords = tensor_coords.shape[0]
+    dense_dim = tensor_coords.max(axis=0)[0]+2
+    tensor_coord_idx = -torch.ones(torch.prod(dense_dim), dtype=torch.long) 
+    linear_idx = coord_to_linear_idx(tensor_coords, dense_dim)
+    tensor_coord_idx[linear_idx] = torch.arange(linear_idx.shape[0], dtype=torch.long)
+    return tensor_coord_idx, dense_dim
+
+def features_at_coordinates(pts, coords, tensor_features):
+    tensor_mapping, dense_dim = coord_mapping(coords)
+    out_tensor = torch.zeros(pts.shape[0], tensor_features.shape[1]).type_as(tensor_features)
+    pts_idx = tensor_mapping[coord_to_linear_idx(pts, dense_dim)]
+    valid_pts = pts_idx != -1
+    out_tensor[valid_pts] = tensor_features[pts_idx[valid_pts]]
+    return out_tensor
+
+
+def interpolate_sparsegrid_feats(pts, coords, feats, part_size=0.25, overlap_factor=2, xmin=None, rand_shift=None):
     """Regular grid interpolator, returns inpterpolation coefficients.
     Args:
     pts: `[num_points, dim]` tensor, coordinates of points
@@ -16,12 +39,16 @@ def interpolate_grid_feats_sparsegrid(pts, sparse_grid, part_size=0.25, overlap_
     pts = copy.deepcopy(pts)
     npts = pts.shape[0]
     dim = pts.shape[1]
-    xmin = torch.min(pts, dim=0)[0] - (part_size * 1.1)
+    if xmin is not None:
+        xmin -= (part_size * 1.1)
+    else:
+        xmin = -(part_size * 1.1)
     half_part_size = part_size / overlap_factor
     # normalize coords for interpolation
     pts = (pts - xmin) / half_part_size
-    if overlap_factor != 2:
-        pts-= overlap_factor - 1
+    if rand_shift is not None:
+        pts += rand_shift
+
     # find neighbor indices
     ind0 = torch.floor(pts)  # `[num_points, dim]`
     inds = [ind0 + i for i in range(overlap_factor)]
@@ -35,17 +62,13 @@ def interpolate_grid_feats_sparsegrid(pts, sparse_grid, part_size=0.25, overlap_
     ind_ = gather_nd(ind01, gather_ind)  # [2**dim, dim, num_pts]
     ind_n = torch.transpose(ind_, 0,2).transpose(1,2)  # neighbor indices `[num_pts, 2**dim, dim]`
     ind_m = ind_n.reshape(-1, dim)
-    lat = sparse_grid.features_at_coordinates(torch.cat([torch.zeros(ind_m.shape[0], 1).type_as(ind_m), ind_m], axis=-1)).reshape(ind_n.shape[0], ind_n.shape[1], -1)
 
-    if overlap_factor == 2:
-        pos = ind_n.float()
-    else:
-        pos = ind_n.float() + 1 - overlap_factor/2.
-
+    lat = features_at_coordinates(ind_m, coords, feats).reshape(ind_n.shape[0], ind_n.shape[1], -1)
     pos = ind_n.float() + 1 - overlap_factor/2.
     xloc = torch.unsqueeze(pts, -2) - pos # `[num_points, 2**dim, dim]`
     weights = torch.abs(torch.prod((overlap_factor - 1) - torch.abs(xloc), axis=-1))
     # print(xloc.min(), xloc.max())
+    
     return lat, xloc, weights
 
 def interpolate_grid_feats(pts, grid, part_size=0.25, overlap_factor=2):
@@ -107,7 +130,6 @@ def gather_nd(params, indices):
     indices = indices.reshape((num_samples, m)).transpose(0, 1).tolist()
     output = params[indices] 
     return output.reshape(out_shape).contiguous()
-
 
 
 class Embedder:
