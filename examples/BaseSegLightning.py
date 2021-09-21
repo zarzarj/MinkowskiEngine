@@ -52,9 +52,9 @@ class BaseSegmentationModule(LightningModule):
                 except:
                     print(name, value)
         self.criterion = nn.CrossEntropyLoss(ignore_index=-100)
-        metrics = MetricCollection({'acc': Accuracy(),
-                                    'macc': MeanAccuracy(num_classes=self.out_channels),
-                                    'miou': MeanIoU(num_classes=self.out_channels)})
+        metrics = MetricCollection({'acc': Accuracy(dist_sync_on_step=True),
+                                    'macc': MeanAccuracy(num_classes=self.out_channels, dist_sync_on_step=True),
+                                    'miou': MeanIoU(num_classes=self.out_channels, dist_sync_on_step=True)})
         self.train_metrics = metrics.clone(prefix='train_')
         self.val_metrics = metrics.clone(prefix='val_')
         conf_metrics = MetricCollection({'ConfusionMatrix': ConfusionMatrix(num_classes=self.out_channels),
