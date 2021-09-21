@@ -75,6 +75,7 @@ class MinkowskiSegmentationModule(BaseSegmentationModule):
         sinput = in_field.sparse()
 
         logits = self(sinput).slice(in_field).F
+        # print(logits.shape)
         train_loss = self.criterion(logits, target)
 
         self.log('train_loss', train_loss, sync_dist=True, prog_bar=True, on_step=False, on_epoch=True)
@@ -102,7 +103,8 @@ class MinkowskiSegmentationModule(BaseSegmentationModule):
             device=self.device,
         )
         sinput = in_field.sparse()
-        logits = self.model(sinput).slice(in_field).F
+        logits = self(sinput).slice(in_field).F
+        # print(logits.shape)
         val_loss = self.criterion(logits, target)
         self.log('val_loss', val_loss, sync_dist=True, prog_bar=True, on_step=False, on_epoch=True)
         preds = logits.argmax(dim=-1)

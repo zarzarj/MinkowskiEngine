@@ -91,41 +91,29 @@ class RevGNN_Rooms(BaseSegmentationModule):
         return out
 
     def training_step(self, batch, batch_idx: int):
-        y_hat = self(batch.x, batch.adj)
-        if self.weighted_loss:
-            classes, class_counts = torch.unique(batch.y, return_counts=True)
-            samples_per_class = torch.zeros(y_hat.shape[-1]).type_as(y_hat)
-            samples_per_class[classes] = class_counts.type_as(y_hat)
-            total_samples = samples_per_class.sum()
-            loss_weights = total_samples / (samples_per_class * samples_per_class.shape[0])
-            loss_weights[samples_per_class == 0] = 0
-            train_loss = F.cross_entropy(y_hat, batch.y, weight=loss_weights)
-        elif self.weighted_pred_loss:
-            classes, class_counts = torch.unique(batch.y, return_counts=True)
-            samples_per_class = torch.zeros(y_hat.shape[-1]).type_as(y_hat)
-            samples_per_class[classes] = class_counts.type_as(y_hat)
-            total_samples = samples_per_class.sum()
-
-            preds = y_hat.argmax(dim=-1)
-            pred_classes, pred_class_counts = torch.unique(preds, return_counts=True)
-            pred_samples_per_class = torch.zeros(y_hat.shape[-1]).type_as(y_hat)
-            pred_samples_per_class[pred_classes] = pred_class_counts.type_as(y_hat)
-            pred_total_samples = pred_samples_per_class.sum()
-
-            loss_weights = (total_samples + pred_total_samples) / ((samples_per_class  + pred_samples_per_class ) * samples_per_class.shape[0])
-            loss_weights[samples_per_class == 0] = 0
-            train_loss = F.cross_entropy(y_hat, batch.y, weight=loss_weights)
-        else:
-            train_loss = F.cross_entropy(y_hat, batch.y)
+        coords, feats, target = batch['coords'], batch['feats'], batch['labels']
+        coords, feats = to_precision((coords, feats), self.trainer.precision)
+        batch_idx = coords[:,0]
+        edge_idx = torch_geometric.nn.pool.knn_graph(x=feats, k=16, batch=batch_idx,
+                                                    loop=False, flow='source_to_target',
+                                                    cosine=False, num_workers=1)
+        y_hat = self(feats, edge_idx)
+        train_loss = F.cross_entropy(y_hat, target)
         self.log('train_loss', train_loss, prog_bar=True, on_step=False,
                  on_epoch=True)
         preds = y_hat.argmax(dim=-1)
-        return {'loss': train_loss, 'preds': preds, 'target': batch.y}
+        return {'loss': train_loss, 'preds': preds, 'target': target}
 
     def validation_step(self, batch, batch_idx: int):
-        y_hat = self(batch.x, batch.adj)
+        coords, feats, target = batch['coords'], batch['feats'], batch['labels']
+        coords, feats = to_precision((coords, feats), self.trainer.precision)
+        batch_idx = coords[:,0]
+        edge_idx = torch_geometric.nn.pool.knn_graph(x=feats, k=16, batch=batch_idx,
+                                                    loop=False, flow='source_to_target',
+                                                    cosine=False, num_workers=1)
+        y_hat = self(feats, edge_idx)
         preds = y_hat.argmax(dim=-1)
-        return {'loss': train_loss, 'preds': preds, 'target': batch.y}
+        return {'loss': train_loss, 'preds': preds, 'target': target}
 
     def convert_sync_batchnorm(self):
         pass

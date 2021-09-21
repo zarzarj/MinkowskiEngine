@@ -78,7 +78,7 @@ class BaseSegmentationModule(LightningModule):
         self.val_conf_metrics(outputs['preds'], outputs['target'])
         self.log_dict(self.val_conf_metrics, prog_bar=False, on_step=False, on_epoch=False)
         if self.save_pcs:
-            print(outputs['preds'])
+            # print(outputs['preds'])
             colors_preds = [self.trainer.datamodule.scannet_color_map[self.trainer.datamodule.valid_class_ids[out]] for out in outputs['preds'].cpu().numpy()]
             colors_target = [self.trainer.datamodule.scannet_color_map[self.trainer.datamodule.valid_class_ids[out]] for out in outputs['target'].cpu().numpy()]
             save_pc(outputs['pts'].cpu().numpy(), colors_preds, 'test_preds.ply')
