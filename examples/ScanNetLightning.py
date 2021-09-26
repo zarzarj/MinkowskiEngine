@@ -293,7 +293,7 @@ class ScanNet(LightningDataModule):
         parser.add_argument("--batch_size", type=int, default=6)
         parser.add_argument("--val_batch_size", type=int, default=6)
         parser.add_argument("--test_batch_size", type=int, default=6)
-        parser.add_argument("--num_workers", type=int, default=5)
+        parser.add_argument("--num_workers", type=int, default=0)
         parser.add_argument("--save_preds", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument("--train_percent", type=float, default=0.8)
         parser.add_argument("--train_subset", type=float, default=1.0)
