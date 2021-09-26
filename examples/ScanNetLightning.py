@@ -15,8 +15,9 @@ from tqdm import tqdm
 from plyfile import PlyElement, PlyData
 # import examples.transforms as t
 from examples.str2bool import str2bool
-from examples.utils import interpolate_grid_feats, get_embedder, gather_nd
-import MinkowskiEngine as ME
+from examples.utils import interpolate_grid_feats, get_embedder, gather_nd, sparse_collate
+
+# import MinkowskiEngine as ME
 
 
 class ScanNet(LightningDataModule):
@@ -151,7 +152,7 @@ class ScanNet(LightningDataModule):
 
     def convert_batch(self, idxs):
         input_dict = self.load_scan_files(idxs)
-        coords_batch, feats_batch, labels_batch = ME.utils.sparse_collate(input_dict['coords'],
+        coords_batch, feats_batch, labels_batch = sparse_collate(input_dict['coords'],
                                                                           input_dict['feats'], input_dict['labels'],
                                                                           dtype=torch.float32)
         return {"coords": coords_batch,

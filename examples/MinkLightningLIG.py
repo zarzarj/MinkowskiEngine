@@ -82,9 +82,9 @@ class MinkowskiSegmentationModuleLIG(BaseSegmentationModule):
         else:
             sparse_lats = x
 
-        seg_occ_in_list = []
-        weights_list = []
-
+        # seg_occ_in_list = []
+        # weights_list = []
+        logits_list = []
         for i in range(bs):
             # pts_min = torch.min(pts[i], dim=0)[0]
             # print(cur_rand_shift)
@@ -99,20 +99,26 @@ class MinkowskiSegmentationModuleLIG(BaseSegmentationModule):
             if self.interpolate_grid_feats and self.average_xlocs:
                 xloc = xloc.mean(axis=1, keepdim=True).repeat(1, lat.shape[1], 1)
             if feats[i] is not None:
-                cur_seg_occ_in = torch.cat([lat, xloc, feats[i].unsqueeze(1).repeat(1,lat.shape[1],1)], dim=-1)
+                seg_occ_in = torch.cat([lat, xloc, feats[i].unsqueeze(1).repeat(1,lat.shape[1],1)], dim=-1)
             else:
-                cur_seg_occ_in = torch.cat([lat, xloc], dim=-1)
-            seg_occ_in_list.append(cur_seg_occ_in)
-            weights_list.append(weights)
-        seg_occ_in = torch.cat(seg_occ_in_list, dim=0).transpose(1,2) # (b x num_pts, c + 3, 2**dim)
-        weights = torch.cat(weights_list, dim=0) # (b x num_pts, 2**dim)
-        weights = weights.unsqueeze(dim=-1) # (b x num_pts, 2**dim, 1)
-        if self.interpolate_grid_feats:
-            weighted_feats = torch.bmm(seg_occ_in, weights) # (b x num_pts, c + 3, 1)
-            logits = self.seg_head(weighted_feats).squeeze(dim=-1) # (b x num_pts, out_c, 1)
-        else:
-            seg_probs = self.seg_head(seg_occ_in) # (b x num_pts, out_c, 2**dim)
-            logits = torch.bmm(seg_probs, weights).squeeze(dim=-1) # (b x num_pts, out_c)
+                seg_occ_in = torch.cat([lat, xloc], dim=-1)
+
+            weights = weights.unsqueeze(dim=-1)
+            seg_occ_in = seg_occ_in.transpose(1,2)
+            # print(weights.shape, seg_occ_in.shape)
+            if self.interpolate_grid_feats:
+                weighted_feats = torch.bmm(seg_occ_in, weights) # (num_pts, c + 3, 1)
+                logits = self.seg_head(weighted_feats).squeeze(dim=-1) # (num_pts, out_c, 1)
+            else:
+                seg_probs = self.seg_head(seg_occ_in) # (num_pts, out_c, 2**dim)
+                logits = torch.bmm(seg_probs, weights).squeeze(dim=-1) # (num_pts, out_c)
+            logits_list.append(logits)
+        #     seg_occ_in_list.append(cur_seg_occ_in)
+        #     weights_list.append(weights)
+        # seg_occ_in = torch.cat(seg_occ_in_list, dim=0).transpose(1,2) # (b x num_pts, c + 3, 2**dim)
+        # weights = torch.cat(weights_list, dim=0) # (b x num_pts, 2**dim)
+        # weights = weights.unsqueeze(dim=-1) # (b x num_pts, 2**dim, 1)
+        logits = torch.cat(logits_list, dim=0) # (b x num_pts, out_c)
         return logits
 
     def training_step(self, batch, batch_idx):

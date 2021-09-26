@@ -1,6 +1,7 @@
 import torch
 import numpy as np
 import copy
+import collections.abc
 
 def coord_to_linear_idx(pts, dense_dim):
     linear_idx = pts[:,0] * dense_dim[1] * dense_dim[2] + \
@@ -67,6 +68,8 @@ def interpolate_sparsegrid_feats(pts, coords, feats, part_size=0.25, overlap_fac
     pos = ind_n.float() + 1 - overlap_factor/2.
     xloc = torch.unsqueeze(pts, -2) - pos # `[num_points, 2**dim, dim]`
     weights = torch.abs(torch.prod((overlap_factor - 1) - torch.abs(xloc), axis=-1))
+    if overlap_factor > 1:
+        weights /= (3 * (overlap_factor/2)**2 - overlap_factor)
     # print(xloc.min(), xloc.max())
     
     return lat, xloc, weights
@@ -113,6 +116,8 @@ def interpolate_grid_feats(pts, grid, part_size=0.25, overlap_factor=2):
         pos = ind_n.float() + 1 - overlap_factor/2.
     xloc = torch.unsqueeze(pts, -2) - pos # `[num_points, 2**dim, dim]`
     weights = torch.abs(torch.prod((overlap_factor - 1) - torch.abs(xloc), axis=-1))
+    if overlap_factor > 1:
+        weights /= (3 * (overlap_factor/2)**2 - overlap_factor)
     # print(xloc.min(), xloc.max())
     return lat, xloc, weights
 
@@ -189,3 +194,94 @@ def save_pc(PC, PC_color, filename):
     PC = [tuple(element) for element in PC]
     el = PlyElement.describe(np.array(PC, dtype=[('x', 'f4'), ('y', 'f4'), ('z', 'f4'), ('red', 'u1'), ('green', 'u1'), ('blue', 'u1')]), 'vertex')
     PlyData([el]).write(filename)
+
+
+
+def sparse_collate(coords, feats, labels=None, dtype=torch.int32, device=None):
+    r"""Create input arguments for a sparse tensor `the documentation
+    <https://nvidia.github.io/MinkowskiEngine/sparse_tensor.html>`_.
+    Convert a set of coordinates and features into the batch coordinates and
+    batch features.
+    Args:
+        :attr:`coords` (set of `torch.Tensor` or `numpy.ndarray`): a set of coordinates.
+        :attr:`feats` (set of `torch.Tensor` or `numpy.ndarray`): a set of features.
+        :attr:`labels` (set of `torch.Tensor` or `numpy.ndarray`): a set of labels
+        associated to the inputs.
+    """
+    use_label = False if labels is None else True
+    feats_batch, labels_batch = [], []
+    assert isinstance(
+        coords, collections.abc.Sequence
+    ), "The coordinates must be a sequence of arrays or tensors."
+    assert isinstance(
+        feats, collections.abc.Sequence
+    ), "The features must be a sequence of arrays or tensors."
+    D = np.unique(np.array([cs.shape[1] for cs in coords]))
+    assert len(D) == 1, f"Dimension of the array mismatch. All dimensions: {D}"
+    D = D[0]
+    if device is None:
+        if isinstance(coords, torch.Tensor):
+            device = coords[0].device
+        else:
+            device = "cpu"
+    assert dtype in [
+        torch.int32,
+        torch.float32,
+    ], "Only torch.int32, torch.float32 supported for coordinates."
+
+    if use_label:
+        assert isinstance(
+            labels, collections.abc.Sequence
+        ), "The labels must be a sequence of arrays or tensors."
+
+    N = np.array([len(cs) for cs in coords]).sum()
+    Nf = np.array([len(fs) for fs in feats]).sum()
+    assert N == Nf, f"Coordinate length {N} != Feature length {Nf}"
+
+    batch_id = 0
+    s = 0  # start index
+    bcoords = torch.zeros((N, D + 1), dtype=dtype, device=device)  # uninitialized
+    for coord, feat in zip(coords, feats):
+        if isinstance(coord, np.ndarray):
+            coord = torch.from_numpy(coord)
+        else:
+            assert isinstance(
+                coord, torch.Tensor
+            ), "Coords must be of type numpy.ndarray or torch.Tensor"
+        if dtype == torch.int32 and coord.dtype in [torch.float32, torch.float64]:
+            coord = coord.floor()
+
+        if isinstance(feat, np.ndarray):
+            feat = torch.from_numpy(feat)
+        else:
+            assert isinstance(
+                feat, torch.Tensor
+            ), "Features must be of type numpy.ndarray or torch.Tensor"
+
+        # Labels
+        if use_label:
+            label = labels[batch_id]
+            if isinstance(label, np.ndarray):
+                label = torch.from_numpy(label)
+            labels_batch.append(label)
+
+        cn = coord.shape[0]
+        # Batched coords
+        bcoords[s : s + cn, 1:] = coord
+        bcoords[s : s + cn, 0] = batch_id
+
+        # Features
+        feats_batch.append(feat)
+
+        # Post processing steps
+        batch_id += 1
+        s += cn
+
+    # Concatenate all lists
+    feats_batch = torch.cat(feats_batch, 0)
+    if use_label:
+        if isinstance(labels_batch[0], torch.Tensor):
+            labels_batch = torch.cat(labels_batch, 0)
+        return bcoords, feats_batch, labels_batch
+    else:
+        return bcoords, feats_batch
