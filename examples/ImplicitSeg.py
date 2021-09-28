@@ -40,7 +40,10 @@ class ImplicitSegmentationModule(BaseSegmentationModule):
         
 
     def forward(self, in_dict):
-        seg_lats = self.backbone(in_dict)
+        if self.sdf_to_seg:
+            seg_lats = self.backbone(in_dict)
+        else:
+            seg_lats = in_dict['lats']
 
         # print(seg_lats.shape)
 

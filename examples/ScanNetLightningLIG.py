@@ -78,9 +78,8 @@ class ScanNetLIG(ScanNet):
                     "pts": input_dict['pts'],
                     "labels": input_dict['labels'],
                     "idxs": idxs,
+                    "rand_shift": input_dict['rand_shift'],
                     }
-        if self.shift_coords and self.trainer.training:
-            out_dict["rand_shift"] = input_dict['rand_shift']
         return out_dict
 
     @staticmethod
