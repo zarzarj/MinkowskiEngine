@@ -96,25 +96,9 @@ class ScanNet(LightningDataModule):
     def prepare_data(self):
         if self.save_preds:
             os.makedirs(os.path.join(self.data_dir, 'output'), exist_ok=True)
-        # train_filename = os.path.join(self.data_dir, 'train_idx.npy')
-        # val_filename = os.path.join(self.data_dir, 'val_idx.npy')
-        # if not os.path.exists(train_filename) or not os.path.exists(val_filename):
-        #     scan_files = glob.glob(os.path.join(self.scans_dir, '*'))
-        #     idxs = np.random.permutation(len(scan_files))
-        #     num_training = math.ceil(idxs.shape[0] * self.train_percent)
-        #     train_idx, val_idx = idxs[:num_training], idxs[num_training:]
-        #     np.save(train_filename, train_idx)
-        #     np.save(val_filename, val_idx)
-        # scan_test_filenames = glob.glob(os.path.join(self.scans_test_dir, '*'))
 
     def setup(self, stage: Optional[str] = None):
         if stage == 'fit' or stage =='validate':
-            # self.scan_files = glob.glob(os.path.join(self.scans_dir, '*', '*_vh_clean_2.ply'))
-            # self.train_idx = torch.from_numpy(np.load(os.path.join(self.data_dir, 'train_idx.npy')))
-            # if self.train_subset != 1:
-            #     num_train_samples = int(self.train_idx.shape[0] * self.train_subset)
-            #     self.train_idx = self.train_idx[:num_train_samples]
-            # self.val_idx = torch.from_numpy(np.load(os.path.join(self.data_dir, 'val_idx.npy')))
             with open(os.path.join(self.data_dir, 'splits', 'scannetv2_train.txt'), 'r') as f:
                 self.train_files = f.readlines()
                 self.train_files = [file[:-5] for file in self.train_files]
@@ -123,13 +107,9 @@ class ScanNet(LightningDataModule):
                 self.val_files = f.readlines()
                 self.val_files = [file[:-5] for file in self.val_files]
         else:
-            # self.scan_files = glob.glob(os.path.join(self.scans_test_dir, '*', '_vh_clean_2.ply'))
-            # self.test_idx = torch.from_numpy(np.arange(len(self.scan_files)))
             with open(os.path.join(self.data_dir, 'splits', 'scannetv2_test.txt'), 'r') as f:
                 self.test_files = f.readlines()
                 self.test_files = [file[:-5] for file in self.test_files]
-        # self.scan_files.sort()
-        # print(self.scan_files[97])
         if self.use_coord_pos_encoding:
             self.embedder, _ = get_embedder(self.coord_pos_encoding_multires)
     
@@ -278,10 +258,7 @@ class ScanNet(LightningDataModule):
         grid = torch.from_numpy(np.load(lats_file))
         lat, xloc, weights = interpolate_grid_feats(pts, grid)
         if self.interp_grid_feats:
-            # print(lat.shape, xloc.shape, weights.shape)
             implicit_feats = torch.bmm(weights.unsqueeze(dim=1), lat).squeeze(1)
-            # print(implicit_feats.shape)
-            # implicit_feats = torch.cat([implicit_feats, xloc.mean(axis=1, keepdim=False)], dim=-1)
         else:
             implicit_feats = torch.cat([lat, xloc], dim=-1)
         return implicit_feats
@@ -293,7 +270,7 @@ class ScanNet(LightningDataModule):
         parser.add_argument("--batch_size", type=int, default=6)
         parser.add_argument("--val_batch_size", type=int, default=6)
         parser.add_argument("--test_batch_size", type=int, default=6)
-        parser.add_argument("--num_workers", type=int, default=0)
+        parser.add_argument("--num_workers", type=int, default=5)
         parser.add_argument("--save_preds", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument("--train_percent", type=float, default=0.8)
         parser.add_argument("--train_subset", type=float, default=1.0)

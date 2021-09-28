@@ -162,7 +162,17 @@ class MinkUNetBase(ResNetBase):
             dimension=D)
         self.relu = ME.MinkowskiReLU(inplace=True)
 
-    def forward(self, x):
+    def forward(self, in_dict):
+        in_field = ME.TensorField(
+            features=in_dict['lats'],
+            coordinates=in_dict['coords'],
+            quantization_mode=ME.SparseTensorQuantizationMode.UNWEIGHTED_AVERAGE,
+            minkowski_algorithm=ME.MinkowskiAlgorithm.SPEED_OPTIMIZED,
+            # minkowski_algorithm=ME.MinkowskiAlgorithm.MEMORY_EFFICIENT,
+            # device=self.device,
+        )
+        # print(in_field)
+        x = in_field.sparse()
         out = self.conv0p1s1(x)
         out = self.bn0(out)
         out_p1 = self.relu(out)
@@ -219,8 +229,27 @@ class MinkUNetBase(ResNetBase):
 
         out = ME.cat(out, out_p1)
         out = self.block8(out)
+        out = self.final(out)
 
-        return self.final(out)
+        # if in_dict['rand_shift'] is not None:
+        #     coords = []
+        #     for i in range(len(in_dict['rand_shift'])):
+        #         coords.append( out.coordinates_at(i) - in_dict['rand_shift'][i])
+        #     feats = out.decomposed_features
+        # else:
+        #     coords, feats = out.decomposed_coordinates_and_features
+        feats = out.decomposed_features
+        return torch.cat(feats, axis=0)
+
+    @staticmethod
+    def add_argparse_args(parent_parser):
+        parser = parent_parser.add_argument_group("MinkUNet")
+        parser.add_argument("--in_channels", type=int, default=3)
+        parser.add_argument("--out_channels", type=int, default=32)
+        return parent_parser
+
+    def convert_sync_batchnorm(self):
+        self = ME.MinkowskiSyncBatchNorm.convert_sync_batchnorm(self)
 
 
 class MinkUNet14(MinkUNetBase):

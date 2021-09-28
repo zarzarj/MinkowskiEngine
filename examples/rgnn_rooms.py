@@ -10,6 +10,7 @@ from torch.nn import ModuleList, Sequential, Linear, BatchNorm1d, ReLU, Dropout,
 
 from torch_sparse import SparseTensor
 from torch_geometric.nn import SAGEConv, GATConv, EdgeConv
+import torch_geometric
 
 from examples.EdgeConvs import EdgeConvZ, EdgeOnlyConv, DenseEdgeOnlyConv, EdgeOnlyConvPos, EffSparseEdgeConv, DenseEdgeConvTriplets, DenseEdgeConv, DenseMRConv
 from examples.model_rev import RevGCN
@@ -18,6 +19,16 @@ from examples.MeanIoU import MeanIoU
 from examples.str2bool import str2bool
 from examples.BaseSegLightning import BaseSegmentationModule
 from examples.basic_blocks import MLP, BasicGCNBlock
+from pytorch_lightning.core import LightningModule
+
+def to_precision(inputs, precision):
+    if precision == 16:
+        dtype = torch.float16
+    elif precision == 32:
+        dtype = torch.float32
+    elif precision == 64:
+        dtype = torch.float64
+    return tuple([input.to(dtype) for input in inputs])
 
 class LinearWrap(nn.Module):
     def __init__(self, in_channels, out_channels):
@@ -42,9 +53,17 @@ class GCNWrap(nn.Module):
         self.gcn.reset_parameters()
 
 
-class RevGNN_Rooms(BaseSegmentationModule):
+class RevGNN_Rooms(LightningModule):
     def __init__(self, **kwargs):
-        super().__init__(**kwargs)
+        super().__init__()
+        self.save_hyperparameters()
+        for name, value in kwargs.items():
+            if name != "self":
+                try:
+                    setattr(self, name, value)
+                except:
+                    print(name, value)
+
         self.convs = ModuleList()
         if self.model == 'rgat':
             in_conv = GATConv(self.in_channels, self.hidden_channels // self.heads, self.heads,
@@ -73,16 +92,27 @@ class RevGNN_Rooms(BaseSegmentationModule):
             for _ in range(self.num_layers - 1):
                 self.skips.append(Linear(self.hidden_channels, self.hidden_channels))
 
-        self.mlp_channels = [self.in_channels] + [int(i) for i in self.mlp_channels.split(',')]
-        self.mlp = Sequential(MLP(mlp_channels=self.mlp_channels,
-                                  norm=self.norm, dropout=self.dropout),
-                              Linear(self.mlp_channels[-1], self.out_channels, bias=True)
-                              )
+        # self.mlp_channels = [self.hidden_channels] + [int(i) for i in self.mlp_channels.split(',')]
+        # self.mlp = Sequential(MLP(mlp_channels=self.mlp_channels,
+        #                           norm=self.norm, dropout=self.dropout),
+        #                       nn.Conv1d(self.mlp_channels[-1], self.out_channels, kernel_size=1, bias=True)
+        #                       )
+        # print(self)
 
-    def forward(self, x: Tensor, adj) -> Tensor:
+    def forward(self, batch) -> Tensor:
+        # print(coords, coords.max(), coords.min())
+        coords = batch['coords']
+        x = batch['lats']
+        # print(x.shape)
+        adj = torch_geometric.nn.pool.knn_graph(x=coords[...,1:], k=16, batch=coords[...,0].long(),
+                                                    loop=False, flow='source_to_target',
+                                                    cosine=False)
         for i in range(len(self.convs)):
+            # print(x.shape)
             x = self.forward_single(x, adj, i)
-        return self.mlp(x)
+        # x = x.unsqueeze(-1)
+        # print(x.shape, coords.shape)
+        return x
 
     def forward_single(self, x: Tensor, adj, cur_layer: int):
         out = self.convs[cur_layer](x, adj)
@@ -90,41 +120,17 @@ class RevGNN_Rooms(BaseSegmentationModule):
             out += self.skips[cur_layer](x)
         return out
 
-    def training_step(self, batch, batch_idx: int):
-        coords, feats, target = batch['coords'], batch['feats'], batch['labels']
-        coords, feats = to_precision((coords, feats), self.trainer.precision)
-        batch_idx = coords[:,0]
-        edge_idx = torch_geometric.nn.pool.knn_graph(x=feats, k=16, batch=batch_idx,
-                                                    loop=False, flow='source_to_target',
-                                                    cosine=False, num_workers=1)
-        y_hat = self(feats, edge_idx)
-        train_loss = F.cross_entropy(y_hat, target)
-        self.log('train_loss', train_loss, prog_bar=True, on_step=False,
-                 on_epoch=True)
-        preds = y_hat.argmax(dim=-1)
-        return {'loss': train_loss, 'preds': preds, 'target': target}
-
-    def validation_step(self, batch, batch_idx: int):
-        coords, feats, target = batch['coords'], batch['feats'], batch['labels']
-        coords, feats = to_precision((coords, feats), self.trainer.precision)
-        batch_idx = coords[:,0]
-        edge_idx = torch_geometric.nn.pool.knn_graph(x=feats, k=16, batch=batch_idx,
-                                                    loop=False, flow='source_to_target',
-                                                    cosine=False, num_workers=1)
-        y_hat = self(feats, edge_idx)
-        preds = y_hat.argmax(dim=-1)
-        return {'loss': train_loss, 'preds': preds, 'target': target}
-
     def convert_sync_batchnorm(self):
         pass
 
     @staticmethod
     def add_argparse_args(parent_parser):
-        parent_parser = BaseSegmentationModule.add_argparse_args(parent_parser)
         parser = parent_parser.add_argument_group("RevGNNSegModel")
+        parser.add_argument("--in_channels", type=int, default=3)
+        parser.add_argument("--out_channels", type=int, default=3)
         parser.add_argument("--hidden_channels", type=int, default=128)
         parser.add_argument("--heads", type=int, default=4)
-        parser.add_argument("--num_layers", type=int, default=10)
+        parser.add_argument("--num_layers", type=int, default=3)
         parser.add_argument("--group", type=int, default=2)
         parser.add_argument("--dropout", type=int, default=0.0)
         parser.add_argument("--norm", type=str, default='batch', choices=['batch', 'layer', 'instance', 'none'])

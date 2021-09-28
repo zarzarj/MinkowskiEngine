@@ -2,6 +2,7 @@ import os
 import io
 import argparse
 import glob
+import importlib
 
 import numpy as np
 from urllib.request import urlretrieve
@@ -15,6 +16,10 @@ from sklearn.metrics import ConfusionMatrixDisplay
 from pytorch_lightning.callbacks import ModelCheckpoint, LearningRateMonitor, Callback
 from pytorch_lightning.plugins import DDPPlugin
 from examples.str2bool import str2bool
+
+from pytorch_lightning.loggers import WandbLogger
+
+
 
 def plot_confusion_matrix(trainer, pl_module, confusion_metric, plot_title):
     tb = pl_module.logger.experiment
@@ -43,6 +48,8 @@ class ConfusionMatrixPlotCallback(Callback):
         pl_module.val_conf_metrics.reset()
 
 def init_module_from_args(module, args=None, **kwargs):
+    if module is None:
+        return None
     parser = argparse.ArgumentParser()
     parser = module.add_argparse_args(parser)
     module_args, args = parser.parse_known_args(args=args)
@@ -66,27 +73,40 @@ class MainArgs():
         parser.add_argument("--exp_name", type=str, default='default')
         parser.add_argument('--run_mode', type=str, default='train', choices=['train','validate','test'])
         parser.add_argument('--seed', type=int, default=42)
-        parser.add_argument("--pipeline", type=str, default='default', choices=['default', 'implicit', 'revgnn'])
+        parser.add_argument("--pl_module", type=str, default='examples.ImplicitSeg.ImplicitSegmentationModule',
+                                                    choices=['examples.MinkLightning.MinkowskiSegmentationModule',
+                                                             'examples.MinkLightningLIG.MinkowskiSegmentationModuleLIG',
+                                                             'examples.ImplicitSeg.ImplicitSegmentationModule'])
+        parser.add_argument("--pl_datamodule", type=str, default='examples.ScanNetLightningLIG.ScanNetLIG',
+                                                         choices=['examples.ScanNetLightning.ScanNet',
+                                                                  'examples.ScanNetLightningLIG.ScanNetLIG'])
+        parser.add_argument("--backbone", type=str, default='examples.minkunet.MinkUNet34C')
         return parent_parser
 
+def get_obj_from_str(string):
+    # From https://github.com/CompVis/taming-transformers
+    module, cls = string.rsplit(".", 1)
+    return getattr(importlib.import_module(module, package=None), cls)
+
 if __name__ == "__main__":
+    # wandb_logger = WandbLogger()
     main_args, args, _ = init_module_from_args(MainArgs)
     seed_everything(main_args.seed, workers=True)
-    if main_args.pipeline == 'default':  
-        from examples.MinkLightning import MinkowskiSegmentationModule
-        from examples.ScanNetLightning import ScanNet
-        datamodule, module = ScanNet, MinkowskiSegmentationModule     
-    elif main_args.pipeline == 'implicit':
-        from examples.MinkLightningLIG import MinkowskiSegmentationModuleLIG
-        from examples.ScanNetLightningLIG import ScanNetLIG
-        datamodule, module = ScanNetLIG, MinkowskiSegmentationModuleLIG
-    elif main_args.pipeline == 'revgnn':
-        from examples.rgnn_rooms import RevGNN_Rooms
-        from examples.ScanNetLightning import ScanNet
-        datamodule, module = ScanNet, RevGNN_Rooms
 
-    pl_module, args, pl_module_args = init_module_from_args(module, args)
+    backbone = get_obj_from_str(main_args.backbone)
+    _, args, backbone_args = init_module_from_args(backbone, args)
+    # del backbone
+
+    module = get_obj_from_str(main_args.pl_module)
+    # print("plmodu")
+    pl_module, args, pl_module_args = init_module_from_args(module, args, backbone=backbone)
+
+    # print("done plmodu")
+    datamodule = get_obj_from_str(main_args.pl_datamodule)
     pl_datamodule, args, _ = init_module_from_args(datamodule, args)
+
+
+    # print(args)
 
     callbacks = []
     callbacks.append(ConfusionMatrixPlotCallback())
@@ -110,11 +130,15 @@ if __name__ == "__main__":
                         **pl_module_args)
             print(f'Restored {ckpt}')
             resume_from_checkpoint = ckpt
+    # print("trainer")
     pl_trainer, args, _ = init_module_from_args(Trainer, args, callbacks=callbacks,
                                              default_root_dir=os.path.join(lightning_root_dir),
                                              plugins=DDPPlugin(find_unused_parameters=False),
-                                             resume_from_checkpoint=resume_from_checkpoint)
+                                             resume_from_checkpoint=resume_from_checkpoint,
+                                             # logger=wandb_logger,
+                                             )
 
+    # print("done trainer")
     if pl_trainer.gpus > 1:
         pl_module.convert_sync_batchnorm()
 

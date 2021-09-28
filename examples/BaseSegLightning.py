@@ -33,13 +33,26 @@ class SquaredLR(LambdaStepLR):
     super(SquaredLR, self).__init__(optimizer, lambda s: (1 - s / (max_iter + 1))**2, last_step)
 
 def to_precision(inputs, precision):
-    if precision == 16:
+    # print(precision)
+    if precision == 'mixed':
         dtype = torch.float16
     elif precision == 32:
         dtype = torch.float32
     elif precision == 64:
         dtype = torch.float64
-    return tuple([input.to(dtype) for input in inputs])
+    for key, value in inputs:
+        if isinstance(value, list):
+            loutputs = []
+            for loutput in value:
+                if loutput is not None:
+                    loutputs.append(loutput.to(dtype))
+                else:
+                    loutputs.append(loutput)
+            inputs[key] = loutputs
+            # print(loutputs)
+        else:
+            inputs[key] = value.to(dtype)
+    return inputs
 
 class BaseSegmentationModule(LightningModule):
     def __init__(self, **kwargs):
@@ -53,15 +66,30 @@ class BaseSegmentationModule(LightningModule):
                     print(name, value)
         self.criterion = nn.CrossEntropyLoss(ignore_index=-100)
         metrics = MetricCollection({'acc': Accuracy(dist_sync_on_step=True),
-                                    'macc': MeanAccuracy(num_classes=self.out_channels, dist_sync_on_step=True),
-                                    'miou': MeanIoU(num_classes=self.out_channels, dist_sync_on_step=True)})
+                                    'macc': MeanAccuracy(num_classes=self.num_classes, dist_sync_on_step=True),
+                                    'miou': MeanIoU(num_classes=self.num_classes, dist_sync_on_step=True)})
         self.train_metrics = metrics.clone(prefix='train_')
         self.val_metrics = metrics.clone(prefix='val_')
-        conf_metrics = MetricCollection({'ConfusionMatrix': ConfusionMatrix(num_classes=self.out_channels),
-                                         'NormalizedConfusionMatrix': ConfusionMatrix(num_classes=self.out_channels, normalize='true')
+        conf_metrics = MetricCollection({'ConfusionMatrix': ConfusionMatrix(num_classes=self.num_classes),
+                                         'NormalizedConfusionMatrix': ConfusionMatrix(num_classes=self.num_classes, normalize='true')
                                         })
         self.train_conf_metrics = conf_metrics.clone(prefix='train_')
         self.val_conf_metrics = conf_metrics.clone(prefix='val_')
+
+    def training_step(self, batch, batch_idx):
+        logits = self(batch)
+        target = torch.cat(batch['labels'], dim=0).long()
+        train_loss = self.criterion(logits, target)
+
+        self.log('train_loss', train_loss, sync_dist=True, prog_bar=True, on_step=False, on_epoch=True)
+        preds = logits.argmax(dim=-1)
+        # target = torch.cat(target, dim=0).long()
+        valid_targets = target != -100
+
+        if self.global_step % 1 == 0:
+            torch.cuda.empty_cache()
+
+        return {'loss': train_loss, 'preds': preds[valid_targets], 'target': target[valid_targets]}
 
     def training_step_end(self, outputs):
         #update and log
@@ -70,9 +98,23 @@ class BaseSegmentationModule(LightningModule):
         self.train_conf_metrics(outputs['preds'], outputs['target'])
         self.log_dict(self.train_conf_metrics, sync_dist=True, prog_bar=False, on_step=False, on_epoch=False)
 
-    def validation_step_end(self, outputs):
+    def validation_step(self, batch, batch_idx):
+        logits = self(batch)
+        target = torch.cat(batch['labels'], dim=0).long()
+        val_loss = self.criterion(logits, target)
+        self.log('val_loss', val_loss, sync_dist=True, prog_bar=True, on_step=False, on_epoch=True)
+        preds = logits.argmax(dim=-1)
+        # 
+        valid_targets = target != -100
 
+        if self.global_step % 1 == 0:
+            torch.cuda.empty_cache()
+
+        return {'loss': val_loss, 'preds': preds[valid_targets], 'target': target[valid_targets]}
+
+    def validation_step_end(self, outputs):
         #update and log
+        # print("val step end")
         self.val_metrics(outputs['preds'], outputs['target'])
         self.log_dict(self.val_metrics, sync_dist=True, prog_bar=True, on_step=False, on_epoch=True)
         self.val_conf_metrics(outputs['preds'], outputs['target'])
@@ -136,8 +178,8 @@ class BaseSegmentationModule(LightningModule):
     @staticmethod
     def add_argparse_args(parent_parser):
         parser = parent_parser.add_argument_group("BaseSegModel")
-        parser.add_argument("--in_channels", type=int, default=3)
-        parser.add_argument("--out_channels", type=int, default=20)
+        parser.add_argument("--seg_in_channels", type=int, default=3)
+        parser.add_argument("--num_classes", type=int, default=20)
         parser.add_argument("--save_pcs", type=str2bool, nargs='?', const=True, default=False)
 
         # Optimizer arguments

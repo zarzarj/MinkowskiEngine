@@ -6,10 +6,7 @@ from torch.optim.lr_scheduler import LambdaLR, StepLR
 from pytorch_lightning.core import LightningModule
 import MinkowskiEngine as ME
 from examples.minkunet import MinkUNet34C, MinkUNet14A, MinkUNet34CShallow
-from examples.minkunetodd import MinkUNet34C as MinkUNet34Codd
-from examples.MeanAccuracy import MeanAccuracy
-from examples.MeanIoU import MeanIoU
-from pytorch_lightning.metrics import Accuracy, ConfusionMatrix, MetricCollection
+# from examples.minkunetodd import MinkUNet34C as MinkUNet34Codd
 from examples.BaseSegLightning import BaseSegmentationModule
 from examples.str2bool import str2bool
 from examples.basic_blocks import MLP, norm_layer
@@ -43,19 +40,18 @@ def to_precision(inputs, precision):
 class MinkowskiSegmentationModuleLIG(BaseSegmentationModule):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+        if self.mink_sdf_to_seg:
+            if self.shallow_model:
+                self.model = MinkUNet34CShallow(self.in_channels, self.in_channels)
+            else:
+                self.model = MinkUNet34C(self.in_channels, self.in_channels)
+                
         self.mlp_channels = [int(i) for i in self.mlp_channels.split(',')]
         if self.relative_mlp_channels:
             self.mlp_channels = (self.in_channels + self.mlp_extra_in_channels) * np.array(self.mlp_channels)
             # print(self.mlp_channels)
         else:
             self.mlp_channels = [self.in_channels + self.mlp_extra_in_channels] + self.mlp_channels
-        if self.mink_sdf_to_seg:
-            if self.odd_model:
-                self.model = MinkUNet34Codd(self.in_channels, self.in_channels)
-            elif self.shallow_model:
-                self.model = MinkUNet34CShallow(self.in_channels, self.in_channels)
-            else:
-                self.model = MinkUNet34C(self.in_channels, self.in_channels)
         seg_head_list = []
         if self.seg_head_in_bn:
             seg_head_list.append(norm_layer(norm_type='batch', nc=self.mlp_channels[0]))
@@ -185,7 +181,6 @@ class MinkowskiSegmentationModuleLIG(BaseSegmentationModule):
         parser.add_argument("--interpolate_grid_feats", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument("--average_xlocs", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument("--pretrained_minkunet_ckpt", type=str, default=None)
-        parser.add_argument("--odd_model", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument("--shallow_model", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument("--mink_sdf_to_seg", type=str2bool, nargs='?', const=True, default=True)
         

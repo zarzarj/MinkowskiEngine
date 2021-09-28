@@ -12,6 +12,7 @@ def coord_to_linear_idx(pts, dense_dim):
 def coord_mapping(tensor_coords):
     num_coords = tensor_coords.shape[0]
     dense_dim = tensor_coords.max(axis=0)[0]+2
+    # print(dense_dim)
     tensor_coord_idx = -torch.ones(torch.prod(dense_dim), dtype=torch.long) 
     linear_idx = coord_to_linear_idx(tensor_coords, dense_dim)
     tensor_coord_idx[linear_idx] = torch.arange(linear_idx.shape[0], dtype=torch.long)
