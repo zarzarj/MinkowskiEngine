@@ -121,7 +121,7 @@ class RevGNN_Rooms(LightningModule):
         return out
 
     def convert_sync_batchnorm(self):
-        pass
+        return
 
     @staticmethod
     def add_argparse_args(parent_parser):

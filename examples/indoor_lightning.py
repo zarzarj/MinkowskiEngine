@@ -94,19 +94,13 @@ if __name__ == "__main__":
     seed_everything(main_args.seed, workers=True)
 
     backbone = get_obj_from_str(main_args.backbone)
-    _, args, backbone_args = init_module_from_args(backbone, args)
-    # del backbone
+    backbone, args, backbone_args = init_module_from_args(backbone, args)
 
-    module = get_obj_from_str(main_args.pl_module)
-    # print("plmodu")
-    pl_module, args, pl_module_args = init_module_from_args(module, args, backbone=backbone)
+    pl_module = get_obj_from_str(main_args.pl_module)
+    pl_module, args, pl_module_args = init_module_from_args(pl_module, args, backbone=backbone)
 
-    # print("done plmodu")
-    datamodule = get_obj_from_str(main_args.pl_datamodule)
-    pl_datamodule, args, _ = init_module_from_args(datamodule, args)
-
-
-    # print(args)
+    pl_datamodule = get_obj_from_str(main_args.pl_datamodule)
+    pl_datamodule, args, _ = init_module_from_args(pl_datamodule, args)
 
     callbacks = []
     callbacks.append(ConfusionMatrixPlotCallback())
@@ -130,7 +124,7 @@ if __name__ == "__main__":
                         **pl_module_args)
             print(f'Restored {ckpt}')
             resume_from_checkpoint = ckpt
-    # print("trainer")
+
     pl_trainer, args, _ = init_module_from_args(Trainer, args, callbacks=callbacks,
                                              default_root_dir=os.path.join(lightning_root_dir),
                                              plugins=DDPPlugin(find_unused_parameters=False),
