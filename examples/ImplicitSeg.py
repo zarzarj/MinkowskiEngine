@@ -50,10 +50,12 @@ class ImplicitSegmentationModule(BaseSegmentationModule):
         bs = len(in_dict['pts'])
         logits_list = []
         for i in range(bs):
+            cur_idx = in_dict['coords'][...,0] == i
+            cur_coords = in_dict['coords'][cur_idx][...,1:]
+            cur_lats = seg_lats[cur_idx]
             if in_dict['rand_shift'][i] is not None:
-                cur_idx = in_dict['coords'][...,0] == i
-                cur_coords = in_dict['coords'][cur_idx][...,1:] -  in_dict['rand_shift'][i]
-                cur_lats = seg_lats[cur_idx]
+                cur_coords -= in_dict['rand_shift'][i]
+
             # print(seg_lats.shape, in_dict['pts'][i].shape)
             lat, xloc, weights = interpolate_sparsegrid_feats(in_dict['pts'][i], cur_coords.long(), cur_lats,
                                                                    overlap_factor=self.overlap_factor) # (num_pts, 2**dim, c), (num_pts, 2**dim, 3)
