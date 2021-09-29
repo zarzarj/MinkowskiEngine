@@ -8,6 +8,8 @@ from examples.utils import interpolate_grid_feats, interpolate_sparsegrid_feats
 import numpy as np
 from examples.basic_blocks import MLP, norm_layer
 
+import importlib
+
 def get_obj_from_str(string):
     # From https://github.com/CompVis/taming-transformers
     module, cls = string.rsplit(".", 1)
