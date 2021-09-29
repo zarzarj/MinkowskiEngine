@@ -94,15 +94,15 @@ if __name__ == "__main__":
     seed_everything(main_args.seed, workers=True)
 
     pl_datamodule = get_obj_from_str(main_args.pl_datamodule)
-    pl_datamodule, args, _ = init_module_from_args(pl_datamodule, args)
+    pl_datamodule, args, pl_datamodule_args = init_module_from_args(pl_datamodule, args)
 
     backbone = get_obj_from_str(main_args.backbone)
     _, args, backbone_args = init_module_from_args(backbone, args)
 
     pl_module = get_obj_from_str(main_args.pl_module)
     pl_module, args, pl_module_args = init_module_from_args(pl_module, args,
-                                            backbone_class=backbone, backbone_args=backbone_args,
-                                            datamodule=pl_datamodule,
+                                            backbone_class=main_args.backbone, backbone_args=backbone_args,
+                                            datamodule_args=pl_datamodule_args,
                                             interpolate_LIG=main_args.pl_datamodule=='examples.ScanNetLightningLIG.ScanNetLIG')
 
     callbacks = []

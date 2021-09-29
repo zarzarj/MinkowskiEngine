@@ -142,6 +142,7 @@ class ScanNet(LightningDataModule):
         coords_batch, feats_batch = sparse_collate(input_dict['coords'],
                                                                           input_dict['feats'],
                                                                           dtype=torch.float32)
+        # print(coords_batch.shape, feats_batch.shape)
         return {"coords": coords_batch,
                 "feats": feats_batch,
                 "seg_feats": input_dict['seg_feats'],
@@ -240,7 +241,7 @@ class ScanNet(LightningDataModule):
             input_dict['rand_shift'] = None
         
         input_dict['feats'] = self.get_features(input_dict)
-
+        # print(input_dict['coords'].shape, input_dict['feats'].shape)
         input_dict['seg_feats'] = None
         # del input_dict['pts']
         return input_dict

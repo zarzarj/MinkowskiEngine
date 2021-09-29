@@ -8,13 +8,18 @@ from examples.utils import interpolate_grid_feats, interpolate_sparsegrid_feats
 import numpy as np
 from examples.basic_blocks import MLP, norm_layer
 
+def get_obj_from_str(string):
+    # From https://github.com/CompVis/taming-transformers
+    module, cls = string.rsplit(".", 1)
+    return getattr(importlib.import_module(module, package=None), cls)
+
 class ImplicitSegmentationModule(BaseSegmentationModule):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         # print(self.backbone)
-        self.backbone = self.backbone_class(**self.backbone_args,
-                                            in_channels=self.datamodule.feat_channels,
-                                            out_channels=self.datamodule.feat_channels)
+        self.backbone = get_obj_from_str(self.backbone_class)(**self.backbone_args,
+                                            in_channels=self.datamodule_args.feat_channels,
+                                            out_channels=self.datamodule_args.feat_channels)
         # print(self.backbone)
         if self.use_backbone:
             # self.backbone = get_obj_from_str(self.backbone)(self.in_channels, self.in_channels)
@@ -29,10 +34,10 @@ class ImplicitSegmentationModule(BaseSegmentationModule):
 
         self.mlp_channels = [int(i) for i in self.mlp_channels.split(',')]
         if self.relative_mlp_channels:
-            self.mlp_channels = (self.datamodule.seg_feat_channels) * np.array(self.mlp_channels)
+            self.mlp_channels = (self.datamodule_args.seg_feat_channels) * np.array(self.mlp_channels)
             # print(self.mlp_channels)
         else:
-            self.mlp_channels = [self.datamodule.seg_feat_channels] + self.mlp_channels
+            self.mlp_channels = [self.datamodule_args.seg_feat_channels] + self.mlp_channels
         seg_head_list = []
         if self.seg_head_in_bn:
             seg_head_list.append(norm_layer(norm_type='batch', nc=self.mlp_channels[0]))
@@ -42,48 +47,53 @@ class ImplicitSegmentationModule(BaseSegmentationModule):
         
 
     def forward(self, in_dict):
+        # print(in_dict['feats'].shape, in_dict['coords'].shape)
         if self.use_backbone:
             seg_lats = self.backbone(in_dict)
         else:
             seg_lats = in_dict['feats']
         
-        bs = len(in_dict['pts'])
-        logits_list = []
-        for i in range(bs):
-            cur_idx = in_dict['coords'][...,0] == i
-            cur_coords = in_dict['coords'][cur_idx][...,1:]
-            cur_lats = seg_lats[cur_idx]
-            if in_dict['rand_shift'][i] is not None:
-                cur_coords -= in_dict['rand_shift'][i]
+        if self.use_seg_head:
+            bs = len(in_dict['pts'])
+            logits_list = []
+            for i in range(bs):
+                # print(seg_lats.shape, in_dict['coords'].shape)
+                cur_idx = in_dict['coords'][...,0] == i
+                cur_coords = in_dict['coords'][cur_idx][...,1:]
+                cur_lats = seg_lats[cur_idx]
+                if in_dict['rand_shift'][i] is not None:
+                    cur_coords -= in_dict['rand_shift'][i]
 
-            # print(seg_lats.shape, in_dict['pts'][i].shape)
-            if self.interpolate_LIG:
-                lat, xloc, weights = interpolate_sparsegrid_feats(in_dict['pts'][i], cur_coords.long(), cur_lats,
-                                                                  overlap_factor=self.datamodule.overlap_factor) # (num_pts, 2**dim, c), (num_pts, 2**dim, 3)
-            else:
-                lat, xloc, weights = interpolate_sparsegrid_feats(in_dict['pts'][i], cur_coords.long(), cur_lats,
-                                                                  overlap_factor=1, part_size=self.datamodule.voxel_size,
-                                                                  xmin=self.datamodule.voxel_size*1.1) # (num_pts, 2**dim, c), (num_pts, 2**dim, 3)
-            # print(xloc.max())
-            if self.interpolate_grid_feats and self.average_xlocs:
-                xloc = xloc.mean(axis=1, keepdim=True).repeat(1, lat.shape[1], 1)
-            if in_dict['seg_feats'][i] is not None:
-                seg_occ_in = torch.cat([lat, xloc, in_dict['seg_feats'][i].unsqueeze(1).repeat(1,lat.shape[1],1)], dim=-1)
-            else:
-                seg_occ_in = torch.cat([lat, xloc], dim=-1)
-            weights = weights.unsqueeze(dim=-1)
-            logits = seg_occ_in.transpose(1,2)
+                # print(seg_lats.shape, in_dict['pts'][i].shape)
+                if self.interpolate_LIG:
+                    lat, xloc, weights = interpolate_sparsegrid_feats(in_dict['pts'][i], cur_coords.long(), cur_lats,
+                                                                      overlap_factor=self.datamodule_args.overlap_factor) # (num_pts, 2**dim, c), (num_pts, 2**dim, 3)
+                else:
+                    lat, xloc, weights = interpolate_sparsegrid_feats(in_dict['pts'][i], cur_coords.long(), cur_lats,
+                                                                      overlap_factor=1, part_size=self.datamodule_args.voxel_size,
+                                                                      xmin=self.datamodule_args.voxel_size*1.1) # (num_pts, 2**dim, c), (num_pts, 2**dim, 3)
+                # print(xloc.max())
+                if self.interpolate_grid_feats and self.average_xlocs:
+                    xloc = xloc.mean(axis=1, keepdim=True).repeat(1, lat.shape[1], 1)
+                if in_dict['seg_feats'][i] is not None:
+                    seg_occ_in = torch.cat([lat, xloc, in_dict['seg_feats'][i].unsqueeze(1).repeat(1,lat.shape[1],1)], dim=-1)
+                else:
+                    seg_occ_in = torch.cat([lat, xloc], dim=-1)
+                weights = weights.unsqueeze(dim=-1)
+                logits = seg_occ_in.transpose(1,2)
 
-            # print(logits.shape, weights.shape)
+                # print(logits.shape, weights.shape)
 
-            if self.interpolate_grid_feats:
-                logits = torch.bmm(logits, weights) # (num_pts, c + 3, 1)
-                logits = self.seg_head(logits).squeeze(dim=-1) # (num_pts, out_c, 1)
-            else:
-                logits = self.seg_head(logits) # (num_pts, out_c, 2**dim)
-                logits = torch.bmm(logits, weights).squeeze(dim=-1) # (num_pts, out_c)
-            logits_list.append(logits)
-        logits = torch.cat(logits_list, dim=0) # (b x num_pts, out_c)
+                if self.interpolate_grid_feats:
+                    logits = torch.bmm(logits, weights) # (num_pts, c + 3, 1)
+                    logits = self.seg_head(logits).squeeze(dim=-1) # (num_pts, out_c, 1)
+                else:
+                    logits = self.seg_head(logits) # (num_pts, out_c, 2**dim)
+                    logits = torch.bmm(logits, weights).squeeze(dim=-1) # (num_pts, out_c)
+                logits_list.append(logits)
+            logits = torch.cat(logits_list, dim=0) # (b x num_pts, out_c)
+        else:
+            logits = seg_lats
         return logits
 
     def convert_sync_batchnorm(self):

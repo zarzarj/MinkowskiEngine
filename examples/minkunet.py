@@ -238,8 +238,9 @@ class MinkUNetBase(ResNetBase):
         #     feats = out.decomposed_features
         # else:
         #     coords, feats = out.decomposed_coordinates_and_features
-        feats = out.decomposed_features
-        return torch.cat(feats, axis=0)
+        feats = out.slice(in_field).F
+        # feats = torch.cat(feats, axis=0)
+        return feats
 
     @staticmethod
     def add_argparse_args(parent_parser):
