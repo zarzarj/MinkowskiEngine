@@ -102,8 +102,12 @@ if __name__ == "__main__":
     pl_module = get_obj_from_str(main_args.pl_module)
     pl_module, args, pl_module_args = init_module_from_args(pl_module, args,
                                             backbone_class=main_args.backbone, backbone_args=backbone_args,
-                                            datamodule=pl_datamodule,
-                                            interpolate_LIG=main_args.pl_datamodule=='examples.ScanNetLightningLIG.ScanNetLIG')
+                                            interpolate_LIG=main_args.pl_datamodule=='examples.ScanNetLightningLIG.ScanNetLIG',
+                                            feat_channels=pl_datamodule.feat_channels,
+                                            seg_feat_channels=pl_datamodule.seg_feat_channels,
+                                            overlap_factor=pl_datamodule.overlap_factor,
+                                            voxel_size=pl_datamodule.voxel_size,
+                                            )
 
     callbacks = []
     callbacks.append(ConfusionMatrixPlotCallback())

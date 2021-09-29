@@ -20,8 +20,8 @@ class ImplicitSegmentationModule(BaseSegmentationModule):
         super().__init__(**kwargs)
         # print(self.backbone)
         self.backbone = get_obj_from_str(self.backbone_class)(**self.backbone_args,
-                                            in_channels=self.datamodule.feat_channels,
-                                            out_channels=self.datamodule.feat_channels)
+                                            in_channels=self.feat_channels,
+                                            out_channels=self.feat_channels)
         # print(self.backbone)
         if self.use_backbone:
             # self.backbone = get_obj_from_str(self.backbone)(self.in_channels, self.in_channels)
@@ -36,10 +36,10 @@ class ImplicitSegmentationModule(BaseSegmentationModule):
 
         self.mlp_channels = [int(i) for i in self.mlp_channels.split(',')]
         if self.relative_mlp_channels:
-            self.mlp_channels = (self.datamodule.seg_feat_channels) * np.array(self.mlp_channels)
+            self.mlp_channels = (self.seg_feat_channels) * np.array(self.mlp_channels)
             # print(self.mlp_channels)
         else:
-            self.mlp_channels = [self.datamodule.seg_feat_channels] + self.mlp_channels
+            self.mlp_channels = [self.seg_feat_channels] + self.mlp_channels
         seg_head_list = []
         if self.seg_head_in_bn:
             seg_head_list.append(norm_layer(norm_type='batch', nc=self.mlp_channels[0]))
@@ -69,11 +69,11 @@ class ImplicitSegmentationModule(BaseSegmentationModule):
                 # print(seg_lats.shape, in_dict['pts'][i].shape)
                 if self.interpolate_LIG:
                     lat, xloc, weights = interpolate_sparsegrid_feats(in_dict['pts'][i], cur_coords.long(), cur_lats,
-                                                                      overlap_factor=self.datamodule.overlap_factor) # (num_pts, 2**dim, c), (num_pts, 2**dim, 3)
+                                                                      overlap_factor=self.overlap_factor) # (num_pts, 2**dim, c), (num_pts, 2**dim, 3)
                 else:
                     lat, xloc, weights = interpolate_sparsegrid_feats(in_dict['pts'][i], cur_coords.long(), cur_lats,
-                                                                      overlap_factor=1, part_size=self.datamodule.voxel_size,
-                                                                      xmin=self.datamodule.voxel_size*1.1) # (num_pts, 2**dim, c), (num_pts, 2**dim, 3)
+                                                                      overlap_factor=1, part_size=self.voxel_size,
+                                                                      xmin=self.voxel_size*1.1) # (num_pts, 2**dim, c), (num_pts, 2**dim, 3)
                 # print(xloc.max())
                 if self.interpolate_grid_feats and self.average_xlocs:
                     xloc = xloc.mean(axis=1, keepdim=True).repeat(1, lat.shape[1], 1)
