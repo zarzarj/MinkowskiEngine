@@ -102,7 +102,7 @@ if __name__ == "__main__":
     pl_module = get_obj_from_str(main_args.pl_module)
     pl_module, args, pl_module_args = init_module_from_args(pl_module, args,
                                             backbone_class=main_args.backbone, backbone_args=backbone_args,
-                                            datamodule_args=pl_datamodule_args,
+                                            datamodule=pl_datamodule,
                                             interpolate_LIG=main_args.pl_datamodule=='examples.ScanNetLightningLIG.ScanNetLIG')
 
     callbacks = []
