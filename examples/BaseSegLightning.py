@@ -178,7 +178,6 @@ class BaseSegmentationModule(LightningModule):
     @staticmethod
     def add_argparse_args(parent_parser):
         parser = parent_parser.add_argument_group("BaseSegModel")
-        parser.add_argument("--seg_in_channels", type=int, default=3)
         parser.add_argument("--num_classes", type=int, default=20)
         parser.add_argument("--save_pcs", type=str2bool, nargs='?', const=True, default=False)
 

@@ -85,7 +85,7 @@ class MinkUNetBase(ResNetBase):
     # To use the model, must call initialize_coords before forward pass.
     # Once data is processed, call clear to reset the model before calling
     # initialize_coords
-    def __init__(self, in_channels, out_channels, bn_momentum=0.1, D=3):
+    def __init__(self, in_channels=3, out_channels=20, bn_momentum=0.1, D=3):
         self.bn_momentum=bn_momentum
         ResNetBase.__init__(self, in_channels, out_channels, D)
         
@@ -164,7 +164,7 @@ class MinkUNetBase(ResNetBase):
 
     def forward(self, in_dict):
         in_field = ME.TensorField(
-            features=in_dict['lats'],
+            features=in_dict['feats'],
             coordinates=in_dict['coords'],
             quantization_mode=ME.SparseTensorQuantizationMode.UNWEIGHTED_AVERAGE,
             minkowski_algorithm=ME.MinkowskiAlgorithm.SPEED_OPTIMIZED,
@@ -244,8 +244,8 @@ class MinkUNetBase(ResNetBase):
     @staticmethod
     def add_argparse_args(parent_parser):
         parser = parent_parser.add_argument_group("MinkUNet")
-        parser.add_argument("--in_channels", type=int, default=3)
-        parser.add_argument("--out_channels", type=int, default=32)
+        # parser.add_argument("--in_channels", type=int, default=3)
+        # parser.add_argument("--out_channels", type=int, default=32)
         return parent_parser
 
     def convert_sync_batchnorm(self):

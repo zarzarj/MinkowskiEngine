@@ -93,6 +93,13 @@ class ScanNet(LightningDataModule):
         self.label_map[-100] = -100
         self.NUM_LABELS -= len(self.IGNORE_LABELS)
 
+        self.feat_channels = self.implicit_feat_channels * int(self.use_implicit_feats) \
+                           + 3 * int(self.use_colors) + 3 * int(self.use_coords) \
+                           + 30 * int(self.use_coord_pos_encoding)
+        if self.feat_channels == 0:
+            self.feat_channels = 1
+        self.seg_feat_channels = self.feat_channels + 3
+
     def prepare_data(self):
         if self.save_preds:
             os.makedirs(os.path.join(self.data_dir, 'output'), exist_ok=True)
@@ -132,14 +139,16 @@ class ScanNet(LightningDataModule):
 
     def convert_batch(self, idxs):
         input_dict = self.load_scan_files(idxs)
-        coords_batch, feats_batch, labels_batch = sparse_collate(input_dict['coords'],
-                                                                          input_dict['feats'], input_dict['labels'],
+        coords_batch, feats_batch = sparse_collate(input_dict['coords'],
+                                                                          input_dict['feats'],
                                                                           dtype=torch.float32)
         return {"coords": coords_batch,
                 "feats": feats_batch,
-                "labels": labels_batch.long(),
+                "seg_feats": input_dict['seg_feats'],
+                "labels": input_dict['labels'],
                 "idxs": idxs,
-                "pts": input_dict['pts']
+                "pts": input_dict['pts'],
+                "rand_shift": input_dict['rand_shift'],
                 }
 
     def load_scan_files(self, idxs):
@@ -221,17 +230,18 @@ class ScanNet(LightningDataModule):
         return out_dict
 
     def process_input(self, input_dict):
-        if self.permute_points:
-            perm = torch.randperm(input_dict['coords'].shape[0])
-            for k, v in input_dict.items():
-                input_dict[k] = v[perm]
-
-        input_dict['coords'] = input_dict['pts'] / self.voxel_size
-        if self.shift_coords and self.trainer.training:
-            input_dict['coords'] += (torch.rand(3) * 100).type_as(input_dict['coords'])
-        input_dict['coords'] = torch.floor(input_dict['coords'])
         input_dict['colors'] = (input_dict['colors'] / 255.) - 0.5
+        input_dict['coords'] = input_dict['pts'] / self.voxel_size
+        input_dict['coords'] = torch.floor(input_dict['coords']).long()
+        if self.shift_coords and self.trainer.training:
+            input_dict['rand_shift'] = (torch.rand(3) * 100).type_as(input_dict['coords'])
+            input_dict['coords'] += input_dict['rand_shift']
+        else:
+            input_dict['rand_shift'] = None
+        
         input_dict['feats'] = self.get_features(input_dict)
+
+        input_dict['seg_feats'] = None
         # del input_dict['pts']
         return input_dict
 
@@ -247,6 +257,8 @@ class ScanNet(LightningDataModule):
             feats.append(self.embedder(input_dict['pts']))
         if len(feats) == 0:
             feats.append(torch.ones((input_dict['pts'].shape[0], 1)))
+        # for feat in feats:
+        #     print(feat.shape)
         out_feats = torch.cat(feats, dim=-1)
         # print(out_feats.shape)
         return out_feats
@@ -256,11 +268,12 @@ class ScanNet(LightningDataModule):
         scene_name = file_name.split('/')[-2]
         lats_file = os.path.join(self.data_dir, 'lats', scene_name + self.lats_file_suffix + '.npy')
         grid = torch.from_numpy(np.load(lats_file))
-        lat, xloc, weights = interpolate_grid_feats(pts, grid)
+        lat, xloc, weights = interpolate_grid_feats(pts, grid, overlap_factor=self.overlap_factor)
         if self.interp_grid_feats:
             implicit_feats = torch.bmm(weights.unsqueeze(dim=1), lat).squeeze(1)
         else:
-            implicit_feats = torch.cat([lat, xloc], dim=-1)
+            implicit_feats = torch.cat([lat, xloc], dim=-1).reshape(lat.shape[0], -1)
+
         return implicit_feats
 
     @staticmethod
@@ -275,10 +288,14 @@ class ScanNet(LightningDataModule):
         parser.add_argument("--train_percent", type=float, default=0.8)
         parser.add_argument("--train_subset", type=float, default=1.0)
         parser.add_argument("--interp_grid_feats", type=str2bool, nargs='?', const=True, default=False)
+
+        parser.add_argument("--overlap_factor", type=int, default=2)
         parser.add_argument("--lats_file_suffix", type=str, default='-d1e-05-vertices-st20000')
+
         parser.add_argument("--point_subsampling_percent", type=float, default=1.0)
         parser.add_argument("--voxel_size", type=float, default=0.02)
         parser.add_argument("--use_implicit_feats", type=str2bool, nargs='?', const=True, default=False)
+        parser.add_argument("--implicit_feat_channels", type=int, default=32)
         parser.add_argument("--use_coords", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument("--use_colors", type=str2bool, nargs='?', const=True, default=True)
         parser.add_argument("--use_coord_pos_encoding", type=str2bool, nargs='?', const=True, default=False)

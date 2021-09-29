@@ -25,11 +25,15 @@ from examples.utils import gather_nd, sparse_collate
 class ScanNetLIG(ScanNet):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+        self.feat_channels = self.implicit_feat_channels
+        self.seg_feat_channels = self.feat_channels  \
+                                + 3 * int(self.use_colors) + 3 * int(self.use_coords) \
+                                + 30 * int(self.use_coord_pos_encoding) + 3
+        self.voxel_size = 0.25
 
     def process_input(self, input_dict):
-        # print(input_dict)
-        input_dict['coords'], input_dict['lats'] = input_dict['implicit_feats']
         input_dict['colors'] = (input_dict['colors'] / 255.) - 0.5
+        input_dict['coords'], input_dict['lats'] = input_dict['implicit_feats']
         if self.shift_coords and self.trainer.training:
             input_dict['rand_shift'] = (torch.rand(3) * 100).type_as(input_dict['coords'])
             input_dict['coords'] += input_dict['rand_shift']
@@ -73,8 +77,8 @@ class ScanNetLIG(ScanNet):
                                                             dtype=torch.float32)
         # print("batched: ", coords_batch.max(dim=0)[0], coords_batch.min(dim=0)[0])
         out_dict = {"coords": coords_batch,
-                    "lats": lats_batch,
-                    "feats": input_dict['feats'],
+                    "feats": lats_batch,
+                    "seg_feats": input_dict['feats'],
                     "pts": input_dict['pts'],
                     "labels": input_dict['labels'],
                     "idxs": idxs,

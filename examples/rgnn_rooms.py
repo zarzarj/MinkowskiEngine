@@ -54,7 +54,7 @@ class GCNWrap(nn.Module):
 
 
 class RevGNN_Rooms(LightningModule):
-    def __init__(self, **kwargs):
+    def __init__(self, in_channels=3, out_channels=20, **kwargs):
         super().__init__()
         self.save_hyperparameters()
         for name, value in kwargs.items():
@@ -66,7 +66,7 @@ class RevGNN_Rooms(LightningModule):
 
         self.convs = ModuleList()
         if self.model == 'rgat':
-            in_conv = GATConv(self.in_channels, self.hidden_channels // self.heads, self.heads,
+            in_conv = GATConv(in_channels, self.hidden_channels // self.heads, self.heads,
                               add_self_loops=False)
             back_conv = GATConv(self.hidden_channels // self.group, (self.hidden_channels // self.heads) // self.group,
                                 self.heads, add_self_loops=False)
@@ -88,10 +88,11 @@ class RevGNN_Rooms(LightningModule):
                                         preserve_rng_state=self.dropout>0)
         else:
             self.skips = ModuleList()
-            self.skips.append(Linear(self.in_channels, self.hidden_channels))
+            self.skips.append(Linear(in_channels, self.hidden_channels))
             for _ in range(self.num_layers - 1):
                 self.skips.append(Linear(self.hidden_channels, self.hidden_channels))
 
+        self.out = Linear(self.hidden_channels, out_channels, bias=True)
         # self.mlp_channels = [self.hidden_channels] + [int(i) for i in self.mlp_channels.split(',')]
         # self.mlp = Sequential(MLP(mlp_channels=self.mlp_channels,
         #                           norm=self.norm, dropout=self.dropout),
@@ -102,7 +103,7 @@ class RevGNN_Rooms(LightningModule):
     def forward(self, batch) -> Tensor:
         # print(coords, coords.max(), coords.min())
         coords = batch['coords']
-        x = batch['lats']
+        x = batch['feats']
         # print(x.shape)
         adj = torch_geometric.nn.pool.knn_graph(x=coords[...,1:], k=16, batch=coords[...,0].long(),
                                                     loop=False, flow='source_to_target',
@@ -112,7 +113,7 @@ class RevGNN_Rooms(LightningModule):
             x = self.forward_single(x, adj, i)
         # x = x.unsqueeze(-1)
         # print(x.shape, coords.shape)
-        return x
+        return self.out(x)
 
     def forward_single(self, x: Tensor, adj, cur_layer: int):
         out = self.convs[cur_layer](x, adj)
@@ -126,8 +127,7 @@ class RevGNN_Rooms(LightningModule):
     @staticmethod
     def add_argparse_args(parent_parser):
         parser = parent_parser.add_argument_group("RevGNNSegModel")
-        parser.add_argument("--in_channels", type=int, default=3)
-        parser.add_argument("--out_channels", type=int, default=3)
+        # parser.add_argument("--in_channels", type=int, default=3)
         parser.add_argument("--hidden_channels", type=int, default=128)
         parser.add_argument("--heads", type=int, default=4)
         parser.add_argument("--num_layers", type=int, default=3)

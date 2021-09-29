@@ -93,14 +93,17 @@ if __name__ == "__main__":
     main_args, args, _ = init_module_from_args(MainArgs)
     seed_everything(main_args.seed, workers=True)
 
-    backbone = get_obj_from_str(main_args.backbone)
-    backbone, args, backbone_args = init_module_from_args(backbone, args)
-
-    pl_module = get_obj_from_str(main_args.pl_module)
-    pl_module, args, pl_module_args = init_module_from_args(pl_module, args, backbone=backbone)
-
     pl_datamodule = get_obj_from_str(main_args.pl_datamodule)
     pl_datamodule, args, _ = init_module_from_args(pl_datamodule, args)
+
+    backbone = get_obj_from_str(main_args.backbone)
+    _, args, backbone_args = init_module_from_args(backbone, args)
+
+    pl_module = get_obj_from_str(main_args.pl_module)
+    pl_module, args, pl_module_args = init_module_from_args(pl_module, args,
+                                            backbone_class=backbone, backbone_args=backbone_args,
+                                            datamodule=pl_datamodule,
+                                            interpolate_LIG=main_args.pl_datamodule=='examples.ScanNetLightningLIG.ScanNetLIG')
 
     callbacks = []
     callbacks.append(ConfusionMatrixPlotCallback())
