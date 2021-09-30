@@ -163,17 +163,16 @@ class PointwiseMLP(LightningModule):
 
         self.mlp_channels = [in_channels] + [int(i) for i in self.mlp_channels.split(',')]
         self.mlp = Sequential(MLP(mlp_channels=self.mlp_channels,
-                                  norm=self.norm, dropout=self.dropout),
+                                  norm=self.norm, dropout=self.dropout,
+                                  track_running_stats=self.track_running_stats,
+                                  momentum=self.bn_momentum),
                               nn.Conv1d(self.mlp_channels[-1], out_channels, kernel_size=1, bias=True)
                               )
         # print(self)
         # print(self)
 
     def forward(self, batch) -> Tensor:
-
         x = batch['feats'].unsqueeze(-1)
-
-        # print(x.shape)
         return self.mlp(x).squeeze(-1)
 
     def convert_sync_batchnorm(self):
@@ -184,6 +183,8 @@ class PointwiseMLP(LightningModule):
         parser = parent_parser.add_argument_group("PointwiseMLPSegModel")
         # parser.add_argument("--in_channels", type=int, default=3)
         parser.add_argument("--dropout", type=int, default=0.0)
+        parser.add_argument("--bn_momentum", type=int, default=0.1)
         parser.add_argument("--norm", type=str, default='batch', choices=['batch', 'layer', 'instance', 'none'])
+        parser.add_argument("--track_running_stats", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument("--mlp_channels", type=str, default='256,128,64')
         return parent_parser
