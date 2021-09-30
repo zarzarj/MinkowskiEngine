@@ -107,4 +107,5 @@ def collate_adjs(adjs):
         # print(adjs[i])
         adjs[i] += num_pts
         num_pts += adjs[i].shape[0]
-    return torch.cat(adjs, axis=0)
+        # print(adjs[i].shape)
+    return torch.cat(adjs, axis=1)
