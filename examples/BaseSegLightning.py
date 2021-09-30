@@ -89,14 +89,16 @@ class BaseSegmentationModule(LightningModule):
         if self.global_step % 1 == 0:
             torch.cuda.empty_cache()
 
-        return {'loss': train_loss, 'preds': preds[valid_targets], 'target': target[valid_targets]}
-
-    def training_step_end(self, outputs):
-        #update and log
-        self.train_metrics(outputs['preds'], outputs['target'])
+        self.train_metrics(preds[valid_targets], target[valid_targets])
         self.log_dict(self.train_metrics, sync_dist=True, prog_bar=False, on_step=False, on_epoch=True)
-        self.train_conf_metrics(outputs['preds'], outputs['target'])
+        self.train_conf_metrics(preds[valid_targets], target[valid_targets])
         self.log_dict(self.train_conf_metrics, sync_dist=True, prog_bar=False, on_step=False, on_epoch=False)
+
+        return train_loss
+
+    # def training_step_end(self, outputs):
+    #     #update and log
+        
 
     def validation_step(self, batch, batch_idx):
         logits = self(batch)
@@ -110,22 +112,17 @@ class BaseSegmentationModule(LightningModule):
         if self.global_step % 1 == 0:
             torch.cuda.empty_cache()
 
-        return {'loss': val_loss, 'preds': preds[valid_targets], 'target': target[valid_targets]}
-
-    def validation_step_end(self, outputs):
-        #update and log
-        # print("val step end")
-        self.val_metrics(outputs['preds'], outputs['target'])
+        self.val_metrics(preds[valid_targets], target[valid_targets])
         self.log_dict(self.val_metrics, sync_dist=True, prog_bar=True, on_step=False, on_epoch=True)
-        self.val_conf_metrics(outputs['preds'], outputs['target'])
+        self.val_conf_metrics(preds[valid_targets], target[valid_targets])
         self.log_dict(self.val_conf_metrics, sync_dist=True, prog_bar=False, on_step=False, on_epoch=False)
-        if self.save_pcs:
-            # print(outputs['preds'])
-            colors_preds = [self.trainer.datamodule.scannet_color_map[self.trainer.datamodule.valid_class_ids[out]] for out in outputs['preds'].cpu().numpy()]
-            colors_target = [self.trainer.datamodule.scannet_color_map[self.trainer.datamodule.valid_class_ids[out]] for out in outputs['target'].cpu().numpy()]
-            save_pc(outputs['pts'].cpu().numpy(), colors_preds, 'test_preds.ply')
-            save_pc(outputs['pts'].cpu().numpy(), colors_target, 'test_target.ply')
-            assert(True==False)
+
+        return val_loss
+
+    # def validation_step_end(self, outputs):
+    #     #update and log
+    #     # print("val step end")
+        
 
     def configure_optimizers(self):
         if self.optimizer == 'SGD':
