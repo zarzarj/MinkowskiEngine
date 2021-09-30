@@ -139,10 +139,8 @@ class ScanNet(LightningDataModule):
 
     def convert_batch(self, idxs):
         input_dict = self.load_scan_files(idxs)
-        coords_batch, feats_batch = sparse_collate(input_dict['coords'],
-                                                                          input_dict['feats'],
+        coords_batch, feats_batch = sparse_collate(input_dict['coords'], input_dict['feats'],
                                                                           dtype=torch.float32)
-        # print(coords_batch.shape, feats_batch.shape)
         return {"coords": coords_batch,
                 "feats": feats_batch,
                 "seg_feats": input_dict['seg_feats'],
@@ -202,14 +200,19 @@ class ScanNet(LightningDataModule):
             pts = resampled_pts[valid_face_labels]
             colors = resampled_colors[valid_face_labels]
             labels = resampled_labels[valid_face_labels]
+            # print("resampling mesh")
+
 
         if self.trainer.training and self.max_num_pts > 0 and self.max_num_pts < pts.shape[0]:
             randperm = torch.randperm(pts.shape[0])[:self.max_num_pts]
-        else:
+        elif self.permute_points:
             randperm = torch.randperm(pts.shape[0])
+        else:
+            randperm = torch.arange(pts.shape[0])
         pts = pts[randperm] - pts_min
         colors = colors[randperm]
         labels = labels[randperm]
+        
         return pts, colors, labels
 
     def load_ply(self, idx):
@@ -302,7 +305,7 @@ class ScanNet(LightningDataModule):
         parser.add_argument("--use_coord_pos_encoding", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument("--coord_pos_encoding_multires", type=int, default=10)
         parser.add_argument("--shift_coords", type=str2bool, nargs='?', const=True, default=False)
-        parser.add_argument("--permute_points", type=str2bool, nargs='?', const=True, default=False)
+        parser.add_argument("--permute_points", type=str2bool, nargs='?', const=True, default=True)
         parser.add_argument("--resample_mesh", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument("--max_num_pts", type=int, default=-1)
         return parent_parser

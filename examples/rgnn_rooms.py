@@ -72,7 +72,8 @@ class RevGNN_Rooms(LightningModule):
                                 self.heads, add_self_loops=False)
 
         self.convs.append(BasicGCNBlock(in_conv, dropout=self.dropout, input_layer=True,
-                                     track_running_stats=self.track_running_stats))
+                                     track_running_stats=self.track_running_stats,
+                                     momentum=self.bn_momentum))
         for i in range(self.num_layers - 1):
             if i == 0:
                 cur_back_conv = back_conv
@@ -80,7 +81,8 @@ class RevGNN_Rooms(LightningModule):
                 cur_back_conv = copy.deepcopy(back_conv)
                 cur_back_conv.reset_parameters()
             self.convs.append(BasicGCNBlock(cur_back_conv, dropout=self.dropout, norm=self.norm, 
-                                         track_running_stats=self.track_running_stats))
+                                         track_running_stats=self.track_running_stats,
+                                         momentum=self.bn_momentum))
 
         if self.reversible:
             for i in range(1, self.num_layers):
@@ -92,28 +94,34 @@ class RevGNN_Rooms(LightningModule):
             for _ in range(self.num_layers - 1):
                 self.skips.append(Linear(self.hidden_channels, self.hidden_channels))
 
-        self.out = Linear(self.hidden_channels, out_channels, bias=True)
-        # self.mlp_channels = [self.hidden_channels] + [int(i) for i in self.mlp_channels.split(',')]
-        # self.mlp = Sequential(MLP(mlp_channels=self.mlp_channels,
-        #                           norm=self.norm, dropout=self.dropout),
-        #                       nn.Conv1d(self.mlp_channels[-1], self.out_channels, kernel_size=1, bias=True)
-        #                       )
+        # self.out = Linear(self.hidden_channels, out_channels, bias=True)
+        self.mlp_channels = [self.hidden_channels] + [int(i) for i in self.mlp_channels.split(',')]
+        self.mlp = Sequential(MLP(mlp_channels=self.mlp_channels,
+                                  norm=self.norm, dropout=self.dropout, 
+                                         track_running_stats=self.track_running_stats,
+                                         momentum=self.bn_momentum),
+                              nn.Conv1d(self.mlp_channels[-1], out_channels, kernel_size=1, bias=True)
+                              )
         # print(self)
 
     def forward(self, batch) -> Tensor:
         # print(coords, coords.max(), coords.min())
-        coords = batch['coords']
+        # coords = batch['coords']
         x = batch['feats']
+        adj = batch['adj']
+        # print(x)
+        # print(adj)
         # print(x.shape)
-        adj = torch_geometric.nn.pool.knn_graph(x=coords[...,1:], k=16, batch=coords[...,0].long(),
-                                                    loop=False, flow='source_to_target',
-                                                    cosine=False)
+        # adj = torch_geometric.nn.pool.knn_graph(x=coords[...,1:], k=16, batch=coords[...,0].long(),
+        #                                             loop=False, flow='source_to_target',
+        #                                             cosine=False)
+
         for i in range(len(self.convs)):
             # print(x.shape)
             x = self.forward_single(x, adj, i)
         # x = x.unsqueeze(-1)
         # print(x.shape, coords.shape)
-        return self.out(x)
+        return self.mlp(x.unsqueeze(-1)).squeeze(-1)
 
     def forward_single(self, x: Tensor, adj, cur_layer: int):
         out = self.convs[cur_layer](x, adj)
@@ -133,9 +141,49 @@ class RevGNN_Rooms(LightningModule):
         parser.add_argument("--num_layers", type=int, default=3)
         parser.add_argument("--group", type=int, default=2)
         parser.add_argument("--dropout", type=int, default=0.0)
+        parser.add_argument("--bn_momentum", type=int, default=0.1)
         parser.add_argument("--norm", type=str, default='batch', choices=['batch', 'layer', 'instance', 'none'])
         parser.add_argument("--track_running_stats", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument("--reversible", type=str2bool, nargs='?', const=True, default=True)
         parser.add_argument("--model", type=str, default='rgat', choices=['rgat'])
-        parser.add_argument("--mlp_channels", type=str, default='1,256,512')
+        parser.add_argument("--mlp_channels", type=str, default='512,256,128,64')
+        return parent_parser
+
+
+class PointwiseMLP(LightningModule):
+    def __init__(self, in_channels=3, out_channels=20, **kwargs):
+        super().__init__()
+        self.save_hyperparameters()
+        for name, value in kwargs.items():
+            if name != "self":
+                try:
+                    setattr(self, name, value)
+                except:
+                    print(name, value)
+
+        self.mlp_channels = [in_channels] + [int(i) for i in self.mlp_channels.split(',')]
+        self.mlp = Sequential(MLP(mlp_channels=self.mlp_channels,
+                                  norm=self.norm, dropout=self.dropout),
+                              nn.Conv1d(self.mlp_channels[-1], out_channels, kernel_size=1, bias=True)
+                              )
+        # print(self)
+        # print(self)
+
+    def forward(self, batch) -> Tensor:
+
+        x = batch['feats'].unsqueeze(-1)
+
+        # print(x.shape)
+        return self.mlp(x).squeeze(-1)
+
+    def convert_sync_batchnorm(self):
+        return
+
+    @staticmethod
+    def add_argparse_args(parent_parser):
+        parser = parent_parser.add_argument_group("PointwiseMLPSegModel")
+        # parser.add_argument("--in_channels", type=int, default=3)
+        parser.add_argument("--dropout", type=int, default=0.0)
+        parser.add_argument("--norm", type=str, default='batch', choices=['batch', 'layer', 'instance', 'none'])
+        parser.add_argument("--mlp_channels", type=str, default='256,128,64')
         return parent_parser

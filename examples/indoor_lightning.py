@@ -73,13 +73,8 @@ class MainArgs():
         parser.add_argument("--exp_name", type=str, default='default')
         parser.add_argument('--run_mode', type=str, default='train', choices=['train','validate','test'])
         parser.add_argument('--seed', type=int, default=42)
-        parser.add_argument("--pl_module", type=str, default='examples.ImplicitSeg.ImplicitSegmentationModule',
-                                                    choices=['examples.MinkLightning.MinkowskiSegmentationModule',
-                                                             'examples.MinkLightningLIG.MinkowskiSegmentationModuleLIG',
-                                                             'examples.ImplicitSeg.ImplicitSegmentationModule'])
-        parser.add_argument("--pl_datamodule", type=str, default='examples.ScanNetLightningLIG.ScanNetLIG',
-                                                         choices=['examples.ScanNetLightning.ScanNet',
-                                                                  'examples.ScanNetLightningLIG.ScanNetLIG'])
+        parser.add_argument("--pl_module", type=str, default='examples.ImplicitSeg.ImplicitSegmentationModule')
+        parser.add_argument("--pl_datamodule", type=str, default='examples.ScanNetLightningLIG.ScanNetLIG')
         parser.add_argument("--backbone", type=str, default='examples.minkunet.MinkUNet34C')
         return parent_parser
 

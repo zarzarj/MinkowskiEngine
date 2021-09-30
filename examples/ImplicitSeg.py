@@ -19,9 +19,14 @@ class ImplicitSegmentationModule(BaseSegmentationModule):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         # print(self.backbone)
+        if self.use_seg_head:
+            backbone_out_channels = self.feat_channels
+        else:
+            backbone_out_channels = self.num_classes
+        
         self.backbone = get_obj_from_str(self.backbone_class)(**self.backbone_args,
                                             in_channels=self.feat_channels,
-                                            out_channels=self.feat_channels)
+                                            out_channels=backbone_out_channels)
         # print(self.backbone)
         if self.use_backbone:
             # self.backbone = get_obj_from_str(self.backbone)(self.in_channels, self.in_channels)
@@ -34,27 +39,30 @@ class ImplicitSegmentationModule(BaseSegmentationModule):
                 del pretrained_ckpt['final.bias']
                 self.backbone.load_state_dict(pretrained_ckpt, strict=False)
 
-        self.mlp_channels = [int(i) for i in self.mlp_channels.split(',')]
-        if self.relative_mlp_channels:
-            self.mlp_channels = (self.seg_feat_channels) * np.array(self.mlp_channels)
-            # print(self.mlp_channels)
-        else:
-            self.mlp_channels = [self.seg_feat_channels] + self.mlp_channels
-        seg_head_list = []
-        if self.seg_head_in_bn:
-            seg_head_list.append(norm_layer(norm_type='batch', nc=self.mlp_channels[0]))
-        seg_head_list += [MLP(self.mlp_channels, dropout=self.seg_head_dropout),
-                         nn.Conv1d(self.mlp_channels[-1], self.num_classes, kernel_size=1, bias=True)]
-        self.seg_head = nn.Sequential(*seg_head_list)
+        if self.use_seg_head:
+            self.mlp_channels = [int(i) for i in self.mlp_channels.split(',')]
+            if self.relative_mlp_channels:
+                self.mlp_channels = (self.seg_feat_channels) * np.array(self.mlp_channels)
+                # print(self.mlp_channels)
+            else:
+                self.mlp_channels = [self.seg_feat_channels] + self.mlp_channels
+            seg_head_list = []
+            if self.seg_head_in_bn:
+                seg_head_list.append(norm_layer(norm_type='batch', nc=self.mlp_channels[0]))
+            seg_head_list += [MLP(self.mlp_channels, dropout=self.seg_head_dropout),
+                             nn.Conv1d(self.mlp_channels[-1], self.num_classes, kernel_size=1, bias=True)]
+            self.seg_head = nn.Sequential(*seg_head_list)
         
 
     def forward(self, in_dict):
         # print(in_dict['feats'].shape, in_dict['coords'].shape)
+        
         if self.use_backbone:
             seg_lats = self.backbone(in_dict)
         else:
             seg_lats = in_dict['feats']
         
+        # print(seg_lats.shape)
         if self.use_seg_head:
             bs = len(in_dict['pts'])
             logits_list = []

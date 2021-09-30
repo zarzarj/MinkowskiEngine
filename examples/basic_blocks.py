@@ -16,11 +16,12 @@ def act_layer(act, inplace=False, neg_slope=0.2, n_prelu=1):
         raise NotImplementedError('activation layer [%s] is not found' % act)
     return layer
 
-def norm_layer(norm_type, nc, track_running_stats=True):
+def norm_layer(norm_type, nc, track_running_stats=True, momentum=0.1):
     # normalization layer 1d
     norm = norm_type.lower()
     if norm == 'batch':
-        layer = nn.BatchNorm1d(nc, affine=True, track_running_stats=track_running_stats)
+        layer = nn.BatchNorm1d(nc, affine=True, track_running_stats=track_running_stats,
+                               momentum=momentum)
     elif norm == 'layer':
         layer = nn.LayerNorm(nc, elementwise_affine=True)
     elif norm == 'instance':
@@ -32,7 +33,8 @@ def norm_layer(norm_type, nc, track_running_stats=True):
     return layer
 
 class MLP(nn.Sequential):
-    def __init__(self, mlp_channels, act='relu', norm='batch', bias=True, dropout=0.0):
+    def __init__(self, mlp_channels, act='relu', norm='batch', bias=True, dropout=0.0, 
+                                         track_running_stats=True, momentum=0.1):
         m = []
         in_channels = mlp_channels[0]
         for hidden_channels in mlp_channels[1:]:
@@ -40,7 +42,7 @@ class MLP(nn.Sequential):
             if act is not None and act.lower() != 'none':
                 m.append(act_layer(act))
             if norm is not None and norm.lower() != 'none':
-                m.append(norm_layer(norm, hidden_channels))
+                m.append(norm_layer(norm, hidden_channels, track_running_stats, momentum))
             if dropout > 0:
                 m.append(nn.Dropout2d(dropout, inplace=True))
             in_channels = hidden_channels
@@ -61,12 +63,13 @@ class MLP(nn.Sequential):
 
 class BasicGCNBlock(nn.Module):
     def __init__(self, gcn, norm: str = 'batch', dropout: float = 0.0,
-                input_layer: bool = False, track_running_stats: bool = True):
+                input_layer: bool = False, track_running_stats: bool = True,
+                momentum: float = 0.1):
         super(BasicGCNBlock, self).__init__()
         self.gcn = gcn
         self.input_layer = input_layer
         if not self.input_layer:
-            self.norm = norm_layer(norm, gcn.in_channels, track_running_stats)
+            self.norm = norm_layer(norm, gcn.in_channels, track_running_stats, momentum)
             self.dropout = nn.Dropout(p=dropout)
 
     def forward(self, x, edge_index):
