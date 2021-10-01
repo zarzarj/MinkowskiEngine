@@ -168,7 +168,9 @@ class ScanNet(LightningDataModule):
         pts = torch.from_numpy(np.stack((plydata['vertex']['x'],
                                plydata['vertex']['y'],
                                plydata['vertex']['z'])).T)
+
         pts_min = pts.min(axis=0)[0]
+        pts -= pts_min
         colors = torch.from_numpy(np.stack((plydata['vertex']['red'],
                            plydata['vertex']['green'],
                            plydata['vertex']['blue'])).T)
@@ -201,18 +203,6 @@ class ScanNet(LightningDataModule):
             colors = resampled_colors[valid_face_labels]
             labels = resampled_labels[valid_face_labels]
             # print("resampling mesh")
-
-
-        if self.trainer.training and self.max_num_pts > 0 and self.max_num_pts < pts.shape[0]:
-            randperm = torch.randperm(pts.shape[0])[:self.max_num_pts]
-        elif self.permute_points:
-            randperm = torch.randperm(pts.shape[0])
-        else:
-            randperm = torch.arange(pts.shape[0])
-        pts = pts[randperm] - pts_min
-        colors = colors[randperm]
-        labels = labels[randperm]
-        
         return pts, colors, labels
 
     def load_ply(self, idx):
@@ -226,6 +216,7 @@ class ScanNet(LightningDataModule):
         out_dict = {'pts': pts,
                     'colors': colors,
                     'labels': labels,
+                    'scene_name': idx,
                     }
         if self.use_implicit_feats:
             implicit_feats = self.load_implicit_feats(scan_file, pts)
@@ -234,6 +225,19 @@ class ScanNet(LightningDataModule):
         return out_dict
 
     def process_input(self, input_dict):
+        if self.trainer.training and self.max_num_pts > 0 and self.max_num_pts < pts.shape[0]:
+            perm = torch.randperm(pts.shape[0])[:self.max_num_pts]
+        else:
+            perm = torch.arange(pts.shape[0])
+            
+        if self.permute_points:
+            perm = perm[torch.randperm(perm.shape[0])]
+
+
+        input_dict['pts'] = input_dict['pts'][perm]
+        input_dict['colors'] = input_dict['colors'][perm]
+        input_dict['labels'] = input_dict['labels'][perm]
+
         input_dict['colors'] = (input_dict['colors'] / 255.) - 0.5
         input_dict['coords'] = input_dict['pts'] / self.voxel_size
         input_dict['coords'] = torch.floor(input_dict['coords']).long()

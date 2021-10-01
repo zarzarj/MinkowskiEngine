@@ -47,24 +47,52 @@ class ScanNetLIG_graph(ScanNet):
 
     def prepare_data(self):
         all_scans = glob.glob(os.path.join(self.scans_dir, '*')) + glob.glob(os.path.join(self.scans_test_dir, '*'))
+        os.makedirs(os.path.join(self.data_dir, 'adjs'), exist_ok=True)
+        os.makedirs(os.path.join(self.data_dir, 'subsample_idx'), exist_ok=True)
+        os.makedirs(os.path.join(self.data_dir, 'num_pts'), exist_ok=True)
+        num_pts_file = os.path.join(self.data_dir, 'num_pts.pt')
+        if not os.path.exists(num_pts_file):
+            num_pts = {}
+            for scan in all_scans:
+                scene_name = scan.split('/')[-1]
+                scan_file = os.path.join(scan, scene_name + '_vh_clean_2.ply')
+                with open(scan_file, 'rb') as f:
+                    plydata = PlyData.read(f)
+                # pts = torch.from_numpy(np.stack((plydata['vertex']['x'],
+                #                        plydata['vertex']['y'],
+                #                        plydata['vertex']['z'])).T)
+                num_pts[scene_name] = plydata['vertex']['x'].shape[0]
+                # print(plydata['vertex']['x'].shape[0])
+            torch.save(num_pts, num_pts_file)
+        else:
+            num_pts = torch.load(num_pts_file)
+
         for scan in all_scans:
             scene_name = scan.split('/')[-1]
-            adj_file = os.path.join(self.data_dir, 'adjs', scene_name + '_adj.pt')
-            os.makedirs(os.path.join(self.data_dir, 'adjs'), exist_ok=True)
+            if self.max_num_pts > 0 and self.max_num_pts < num_pts[scene_name]:
+                adj_file = os.path.join(self.data_dir, 'adjs', scene_name + f'_adj_{self.max_num_pts}.pt')
+            else:
+                adj_file = os.path.join(self.data_dir, 'adjs', scene_name + '_adj.pt')
             if not os.path.exists(adj_file):
+                # print(pts.shape)
                 scan_file = os.path.join(scan, scene_name + '_vh_clean_2.ply')
                 with open(scan_file, 'rb') as f:
                     plydata = PlyData.read(f)
                 pts = torch.from_numpy(np.stack((plydata['vertex']['x'],
                                        plydata['vertex']['y'],
                                        plydata['vertex']['z'])).T)
-                # print(pts.shape)
+                if self.max_num_pts > 0 and self.max_num_pts < pts.shape[0]:
+                    subsample_idx_file = os.path.join(self.data_dir, 'subsample_idx', scene_name + f'_{self.max_num_pts}_idx.pt')
+                    if not os.path.exists(subsample_idx_file):
+                        subsample_idx = torch.randperm(pts.shape[0])[:self.max_num_pts]
+                        torch.save(subsample_idx, subsample_idx_file)
+                    else:
+                        subsample_idx = torch.load(subsample_idx_file)
+                    pts = pts[subsample_idx]
+
                 adj = torch_geometric.nn.pool.knn_graph(x=pts, k=16,
                                                     loop=False, flow='source_to_target',
                                                     cosine=False)
-                # save_adj(pts, adj, 'test_adj.ply')
-                # assert(True==False)
-                # print(adj.shape)
                 torch.save(adj, adj_file)
 
         
@@ -72,9 +100,19 @@ class ScanNetLIG_graph(ScanNet):
         in_dict = super().load_ply(idx)
         adj_file = os.path.join(self.data_dir, 'adjs', idx + '_adj.pt')
         in_dict['adj'] = torch.load(adj_file)
+
         return in_dict
 
     def process_input(self, input_dict):
+        if self.trainer.training and self.max_num_pts > 0 and self.max_num_pts < input_dict['pts'].shape[0]:
+            subsample_idx_file = os.path.join(self.data_dir, 'subsample_idx', input_dict['scene_name'] + f'_{self.max_num_pts}_idx.pt')
+            perm = torch.load(subsample_idx_file)
+        else:
+            perm = torch.arange(input_dict['pts'].shape[0])
+
+        input_dict['pts'] = input_dict['pts'][perm]
+        input_dict['colors'] = input_dict['colors'][perm]
+        input_dict['labels'] = input_dict['labels'][perm]
         input_dict['colors'] = (input_dict['colors'] / 255.) - 0.5
         input_dict['feats'] = self.get_features(input_dict)
         input_dict['coords'] = input_dict['pts'] / self.voxel_size
