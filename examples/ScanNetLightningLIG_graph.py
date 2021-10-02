@@ -114,7 +114,7 @@ class ScanNetLIG_graph(ScanNet):
         input_dict['colors'] = input_dict['colors'][perm]
         input_dict['labels'] = input_dict['labels'][perm]
         input_dict['colors'] = (input_dict['colors'] / 255.) - 0.5
-        input_dict['feats'] = self.get_features(input_dict)
+        input_dict['feats'] = self.get_features(input_dict)[perm]
         input_dict['coords'] = input_dict['pts'] / self.voxel_size
         input_dict['seg_feats'] = None
         input_dict['rand_shift'] = None
