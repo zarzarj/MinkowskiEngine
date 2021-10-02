@@ -99,9 +99,9 @@ class ScanNetLIG_graph(ScanNet):
     def load_ply(self, idx):
         in_dict = super().load_ply(idx)
         if self.max_num_pts > 0 and self.max_num_pts < in_dict['pts'].shape[0]:
-            adj_file = os.path.join(self.data_dir, 'adjs', scene_name + f'_adj_{self.max_num_pts}.pt')
+            adj_file = os.path.join(self.data_dir, 'adjs', idx + f'_adj_{self.max_num_pts}.pt')
         else:
-            adj_file = os.path.join(self.data_dir, 'adjs', scene_name + '_adj.pt')
+            adj_file = os.path.join(self.data_dir, 'adjs', idx + '_adj.pt')
         in_dict['adj'] = torch.load(adj_file)
         return in_dict
 
