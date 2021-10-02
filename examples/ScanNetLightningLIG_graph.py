@@ -98,9 +98,11 @@ class ScanNetLIG_graph(ScanNet):
         
     def load_ply(self, idx):
         in_dict = super().load_ply(idx)
-        adj_file = os.path.join(self.data_dir, 'adjs', idx + '_adj.pt')
+        if self.max_num_pts > 0 and self.max_num_pts < in_dict['pts'].shape[0]:
+            adj_file = os.path.join(self.data_dir, 'adjs', scene_name + f'_adj_{self.max_num_pts}.pt')
+        else:
+            adj_file = os.path.join(self.data_dir, 'adjs', scene_name + '_adj.pt')
         in_dict['adj'] = torch.load(adj_file)
-
         return in_dict
 
     def process_input(self, input_dict):
@@ -113,8 +115,9 @@ class ScanNetLIG_graph(ScanNet):
         input_dict['pts'] = input_dict['pts'][perm]
         input_dict['colors'] = input_dict['colors'][perm]
         input_dict['labels'] = input_dict['labels'][perm]
+        input_dict['implicit_feats'] = input_dict['implicit_feats'][perm]
         input_dict['colors'] = (input_dict['colors'] / 255.) - 0.5
-        input_dict['feats'] = self.get_features(input_dict)[perm]
+        input_dict['feats'] = self.get_features(input_dict)
         input_dict['coords'] = input_dict['pts'] / self.voxel_size
         input_dict['seg_feats'] = None
         input_dict['rand_shift'] = None
