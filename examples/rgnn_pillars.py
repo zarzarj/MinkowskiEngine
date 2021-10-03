@@ -390,6 +390,9 @@ class PointNetv2(LightningModule):
         x = F.dropout(x, p=0.5, training=self.training)
         x = self.lin3(x)
         return x
+        
+    def convert_sync_batchnorm(self):
+        return
 
     @staticmethod
     def add_argparse_args(parent_parser):
