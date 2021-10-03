@@ -43,8 +43,6 @@ class ScanNet_chunks(ScanNet):
             for k, v in out_dict.items():
                 if k != 'scene_name':
                     out_dict[k] = out_dict[k][chunk_idx]
-        else:
-            print("not training")
         return out_dict
 
     def process_input(self, input_dict):
