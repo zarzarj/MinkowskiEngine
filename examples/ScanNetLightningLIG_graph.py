@@ -115,7 +115,8 @@ class ScanNetLIG_graph(ScanNet):
         input_dict['pts'] = input_dict['pts'][perm]
         input_dict['colors'] = input_dict['colors'][perm]
         input_dict['labels'] = input_dict['labels'][perm]
-        input_dict['implicit_feats'] = input_dict['implicit_feats'][perm]
+        if self.use_implicit_feats:
+            input_dict['implicit_feats'] = input_dict['implicit_feats'][perm]
         input_dict['colors'] = (input_dict['colors'] / 255.) - 0.5
         input_dict['feats'] = self.get_features(input_dict)
         input_dict['coords'] = input_dict['pts'] / self.voxel_size

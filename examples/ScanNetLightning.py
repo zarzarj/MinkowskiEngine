@@ -225,10 +225,10 @@ class ScanNet(LightningDataModule):
         return out_dict
 
     def process_input(self, input_dict):
-        if self.trainer.training and self.max_num_pts > 0 and self.max_num_pts < pts.shape[0]:
-            perm = torch.randperm(pts.shape[0])[:self.max_num_pts]
+        if self.trainer.training and self.max_num_pts > 0 and self.max_num_pts < input_dict['pts'].shape[0]:
+            perm = torch.randperm(input_dict['pts'].shape[0])[:self.max_num_pts]
         else:
-            perm = torch.arange(pts.shape[0])
+            perm = torch.arange(input_dict['pts'].shape[0])
             
         if self.permute_points:
             perm = perm[torch.randperm(perm.shape[0])]
