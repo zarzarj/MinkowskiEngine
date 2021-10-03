@@ -40,7 +40,7 @@ class ScanNet_chunks(ScanNet):
             curmin[2] = coordmin[2]
             curmax[2] = coordmax[2]
             chunk_idx = torch.sum((pts>=(curmin-0.2))*(pts<=(curmax+0.2)),axis=1)==3
-            if self.aument:
+            if self.augment:
                 pts = self._augment(pts)
             for k, v in out_dict.items():
                 if k != 'scene_name':
