@@ -40,9 +40,12 @@ class ScanNet_chunks(ScanNet):
             curmin[2] = coordmin[2]
             curmax[2] = coordmax[2]
             chunk_idx = torch.sum((pts>=(curmin-0.2))*(pts<=(curmax+0.2)),axis=1)==3
+            if self.aument:
+                pts = self._augment(pts)
             for k, v in out_dict.items():
                 if k != 'scene_name':
                     out_dict[k] = out_dict[k][chunk_idx]
+
         return out_dict
 
     def process_input(self, input_dict):
@@ -161,4 +164,5 @@ class ScanNet_chunks(ScanNet):
         parent_parser = ScanNet.add_argparse_args(parent_parser)
         parser = parent_parser.add_argument_group("ScanNet_chunks")
         parser.add_argument("--chunk_size", type=float, default=0.75)
+        parser.add_argument("--augment", type=str2bool, nargs='?', const=True, default=False)
         return parent_parser
