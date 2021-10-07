@@ -24,6 +24,7 @@ from pytorch_lightning.core import LightningModule
 
 from torch_geometric.nn import PointConv, fps, radius, global_max_pool, knn_interpolate
 from torch.nn import Sequential as Seq, Linear as Lin, ReLU, BatchNorm1d as BN
+from torch_geometric.nn import DynamicEdgeConv
 
 from examples.utils import save_pc
 
@@ -397,4 +398,32 @@ class PointNetv2(LightningModule):
     @staticmethod
     def add_argparse_args(parent_parser):
         parser = parent_parser.add_argument_group("PointNetv2")
+        return parent_parser
+
+
+class DGCNN(LightningModule):
+    def __init__(self, in_channels=3, out_channels=20, k=30, aggr='max'):
+        super(DGCNN, self).__init__()
+
+        self.conv1 = DynamicEdgeConv(MLP([2 * (in_channels+3), 64, 64]), k, aggr)
+        self.conv2 = DynamicEdgeConv(MLP([2 * 64, 64, 64]), k, aggr)
+        self.conv3 = DynamicEdgeConv(MLP([2 * 64, 64, 64]), k, aggr)
+        self.lin1 = MLP([3 * 64, 1024])
+
+        self.mlp = Seq(MLP([1024, 256]), Dropout(0.5), MLP([256, 128]),
+                       Dropout(0.5), Lin(128, out_channels))
+
+    def forward(self, data):
+        x, pos, batch = (data['feats'], data['coords'][:,1:], data['coords'][:,0].long())
+        x0 = torch.cat([x, pos], dim=-1)
+        x1 = self.conv1(x0, batch)
+        x2 = self.conv2(x1, batch)
+        x3 = self.conv3(x2, batch)
+        out = self.lin1(torch.cat([x1, x2, x3], dim=1))
+        out = self.mlp(out)
+        return F.log_softmax(out, dim=1)
+
+    @staticmethod
+    def add_argparse_args(parent_parser):
+        parser = parent_parser.add_argument_group("DGCNN")
         return parent_parser
