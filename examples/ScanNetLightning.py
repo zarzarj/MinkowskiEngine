@@ -99,6 +99,7 @@ class ScanNet(LightningDataModule):
         if self.feat_channels == 0:
             self.feat_channels = 1
         self.seg_feat_channels = self.feat_channels + 3
+        self.labelweights=None
 
     def prepare_data(self):
         if self.save_preds:
@@ -284,9 +285,13 @@ class ScanNet(LightningDataModule):
 
         return implicit_feats
 
+    def callbacks(self):
+        return []
+
     @staticmethod
     def add_argparse_args(parent_parser):
         parser = parent_parser.add_argument_group("ScanNet")
+        parser.add_argument("--num_classes", type=int, default=20)
         parser.add_argument("--data_dir", type=str, default=None)
         parser.add_argument("--batch_size", type=int, default=6)
         parser.add_argument("--val_batch_size", type=int, default=6)

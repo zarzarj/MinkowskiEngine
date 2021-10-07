@@ -23,6 +23,7 @@ class ImplicitSegmentationModule(BaseSegmentationModule):
             backbone_out_channels = self.feat_channels
         else:
             backbone_out_channels = self.num_classes
+        # print(self.feat_channels)
         
         self.backbone = get_obj_from_str(self.backbone_class)(**self.backbone_args,
                                             in_channels=self.feat_channels,

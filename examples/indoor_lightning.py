@@ -90,6 +90,8 @@ if __name__ == "__main__":
 
     pl_datamodule = get_obj_from_str(main_args.pl_datamodule)
     pl_datamodule, args, pl_datamodule_args = init_module_from_args(pl_datamodule, args)
+    label_weights = pl_datamodule.labelweights
+    callbacks = pl_datamodule.callbacks()
 
     backbone = get_obj_from_str(main_args.backbone)
     _, args, backbone_args = init_module_from_args(backbone, args)
@@ -102,9 +104,11 @@ if __name__ == "__main__":
                                             seg_feat_channels=pl_datamodule.seg_feat_channels,
                                             overlap_factor=pl_datamodule.overlap_factor,
                                             voxel_size=pl_datamodule.voxel_size,
+                                            num_classes=pl_datamodule.num_classes,
+                                            label_weights=label_weights
                                             )
 
-    callbacks = []
+    # callbacks = []
     callbacks.append(ConfusionMatrixPlotCallback())
     callbacks.append(ModelCheckpoint(monitor='val_miou', mode = 'max', save_top_k=1))
     callbacks.append(LearningRateMonitor(logging_interval='step'))

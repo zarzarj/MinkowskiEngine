@@ -64,7 +64,7 @@ class BaseSegmentationModule(LightningModule):
                     setattr(self, name, value)
                 except:
                     print(name, value)
-        self.criterion = nn.CrossEntropyLoss(ignore_index=-100)
+        self.criterion = nn.CrossEntropyLoss(weight=self.label_weights, ignore_index=-100)
         metrics = MetricCollection({'acc': Accuracy(dist_sync_on_step=True),
                                     'macc': MeanAccuracy(num_classes=self.num_classes, dist_sync_on_step=True),
                                     'miou': MeanIoU(num_classes=self.num_classes, dist_sync_on_step=True)})
@@ -175,7 +175,6 @@ class BaseSegmentationModule(LightningModule):
     @staticmethod
     def add_argparse_args(parent_parser):
         parser = parent_parser.add_argument_group("BaseSegModel")
-        parser.add_argument("--num_classes", type=int, default=20)
         parser.add_argument("--save_pcs", type=str2bool, nargs='?', const=True, default=False)
 
         # Optimizer arguments
