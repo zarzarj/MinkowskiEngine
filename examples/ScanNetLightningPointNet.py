@@ -298,8 +298,9 @@ class ScannetDataset():
         """
             note: must be called before training
         """
-        print("generate new chunks for {}...".format(self.phase))
-        for scene_id in tqdm(self.scene_list):
+        # print("generate new chunks for {}...".format(self.phase))
+        # for scene_id in tqdm(self.scene_list):
+        for scene_id in self.scene_list:
             scene = self.scene_data[scene_id]
             semantic = scene[:, 10].astype(np.int32)
 

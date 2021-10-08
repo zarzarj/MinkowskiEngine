@@ -18,7 +18,7 @@ from examples.MeanAccuracy import MeanAccuracy
 from examples.MeanIoU import MeanIoU
 from examples.str2bool import str2bool
 from examples.BaseSegLightning import BaseSegmentationModule
-from examples.basic_blocks import MLP, BasicGCNBlock
+from examples.basic_blocks import BasicGCNBlock, MLP as basic_MLP
 from pytorch_lightning.core import LightningModule
 
 
@@ -103,7 +103,7 @@ class RevGNN_Rooms(LightningModule):
 
         # self.out = Linear(self.hidden_channels, out_channels, bias=True)
         self.mlp_channels = [self.hidden_channels] + [int(i) for i in self.mlp_channels.split(',')]
-        self.mlp = Sequential(MLP(mlp_channels=self.mlp_channels,
+        self.mlp = Sequential(basic_MLP(mlp_channels=self.mlp_channels,
                                   norm=self.norm, dropout=self.dropout, 
                                          track_running_stats=self.track_running_stats,
                                          momentum=self.bn_momentum),
