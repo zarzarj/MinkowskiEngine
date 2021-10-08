@@ -423,6 +423,9 @@ class DGCNN(LightningModule):
         out = self.mlp(out)
         return F.log_softmax(out, dim=1)
 
+    def convert_sync_batchnorm(self):
+        return
+        
     @staticmethod
     def add_argparse_args(parent_parser):
         parser = parent_parser.add_argument_group("DGCNN")
