@@ -60,14 +60,22 @@ class ScanNetPointNet(LightningDataModule):
         
     
     def train_dataloader(self):
+        if self.dense_input:
+            collate_fn=collate_random
+        else:
+            collate_fn=collate_random_PyG
         train_dataloader = DataLoader(self.train_dataset, batch_size=self.batch_size,
-                                      collate_fn=collate_random_PyG, num_workers=self.num_workers,
+                                      collate_fn=collate_fn, num_workers=self.num_workers,
                                       pin_memory=True)
         return train_dataloader
 
     def val_dataloader(self):
+        if self.dense_input:
+            collate_fn=collate_random
+        else:
+            collate_fn=collate_random_PyG
         val_dataloader = DataLoader(self.val_dataset, batch_size=self.val_batch_size,
-                                      collate_fn=collate_random_PyG, num_workers=self.num_workers,
+                                      collate_fn=collate_fn, num_workers=self.num_workers,
                                       pin_memory=True)
         return val_dataloader
 
@@ -103,6 +111,8 @@ class ScanNetPointNet(LightningDataModule):
 
         parser.add_argument("--overlap_factor", type=int, default=2)
         parser.add_argument("--voxel_size", type=float, default=.25)
+
+        parser.add_argument("--dense_input", type=str2bool, nargs='?', const=True, default=False)
         return parent_parser
 
 
@@ -365,18 +375,14 @@ def collate_random(data):
     sample_weight = torch.FloatTensor(sample_weight)
 
     # split points to coords and feats
-    coords = point_set[:, :, :3]
-    feats = point_set[:, :, 3:]
+    coords = point_set[:, :, :3] #B, N, 3
+    feats = point_set[:, :, 3:].contiguous().transpose(1,2) #B, C, N
 
     # pack
-    batch = (
-        coords,             # (B, N, 3)
-        feats,              # (B, N, 3)
-        semantic_seg,      # (B, N)
-        sample_weight,     # (B, N)
-        sum(fetch_time)          # float
-    )
-
+    batch = {'coords': coords,
+             'feats': feats,
+             'labels': [sem for sem in semantic_seg],
+    }
     return batch
 
 def collate_random_PyG(data):

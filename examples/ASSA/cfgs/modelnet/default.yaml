@@ -1,0 +1,51 @@
+batch_size: 16 # batch size Per GPU. Feed 24 batches in one 2080Ti for ASSANet
+num_workers: 6
+print_freq: 10
+save_freq: 100
+val_freq: 10
+
+# data augmentation
+data:
+  datasets: 'modelnet40'
+  data_root: './data'
+  input_features_dim: 3
+  num_classes: 40
+  num_points: 10000
+  in_radius: 2.0
+  x_angle_range: 0.0
+  y_angle_range: 0.0
+  z_angle_range: 0
+  scale_low: 0.6
+  scale_high: 1.4
+  noise_std: 0.002
+  noise_clip: 0.05
+  translate_range: 0.0
+  sampleDl: 0.02
+
+
+# ---------------------------------------------------------------------------- #
+# Training options
+# ---------------------------------------------------------------------------- #
+epochs: 600
+start_epoch: 1
+warmup_epoch:  -1
+
+lr_scheduler:
+  name: 'cosine'  # step,cosine
+  decay_steps: 1
+  decay_rate: 0.9885531
+  on_epoch: True
+
+optimizer:
+  name: 'sgd'
+  weight_decay: 0.001
+  momentum: 0.98
+  lr: 1.25e-4  # LR per batch! for batch size 8 per GPU and 2 gpus -> lr *= 8*2
+
+# ---------------------------------------------------------------------------- #
+# io and misc
+# ---------------------------------------------------------------------------- #
+log_dir: './log/modelnet40'
+
+wandb:
+  project: ASSA-Net-ModelNet40

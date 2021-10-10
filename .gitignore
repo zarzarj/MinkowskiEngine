@@ -9,3 +9,6 @@ build/
 objs/
 dist/
 MinkowskiEngine.egg-info/
+examples/ASSA/ASSA_Net.egg-info/
+examples/ASSA/ops/pt_custom_ops/pt_custom_ops.egg-info/
+
