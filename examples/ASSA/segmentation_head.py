@@ -7,7 +7,7 @@ import torch.nn.functional as F
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT_DIR = os.path.dirname(os.path.dirname(BASE_DIR))
 sys.path.append(ROOT_DIR)
-sys.path.append(os.path.join(ROOT_DIR, 'ops', 'pt_custom_ops'))
+sys.path.append(os.path.join(ROOT_DIR, 'examples', 'ASSA', 'ops', 'pt_custom_ops'))
 from pt_utils import MaskedUpsample
 
 
