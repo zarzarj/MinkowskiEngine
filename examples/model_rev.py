@@ -191,12 +191,15 @@ class InvertibleCheckpointFunction(torch.autograd.Function):
                         inputs_inverted = (inputs_inverted,)
 
                     for element_original, element_inverted in zip(inputs, inputs_inverted):
+                        # print(element_inverted)
+                        # print(element_original)
                         # print((element_original - element_inverted).abs().max())
-                        # if not torch.allclose(element_original, element_inverted, atol=0.1):
+                        # if not torch.allclose(element_original, element_inverted):
                         #     print((element_original - element_inverted).abs().max())
-                        # assert(torch.allclose(element_original, element_inverted, atol=0.1))
+                        # assert(torch.allclose(element_original, element_inverted))
                         element_original.storage().resize_(int(np.prod(element_original.size())))
                         element_original.set_(element_inverted)
+                        
                     
 
         # compute gradients

@@ -1,12 +1,13 @@
 import torch
 import torch.nn as nn
-from torch.optim import SGD, Adam
+from torch.optim import SGD, Adam, AdamW
 from torch.optim.lr_scheduler import LambdaLR, StepLR
 
 from pytorch_lightning.core import LightningModule
-from pytorch_lightning.metrics import Accuracy, ConfusionMatrix, MetricCollection
+from pytorch_lightning.metrics import ConfusionMatrix, MetricCollection
 
 from examples.MeanAccuracy import MeanAccuracy
+from examples.Accuracy import Accuracy
 from examples.MeanIoU import MeanIoU
 
 from examples.str2bool import str2bool
@@ -65,9 +66,11 @@ class BaseSegmentationModule(LightningModule):
                 except:
                     print(name, value)
         self.criterion = nn.CrossEntropyLoss(weight=self.label_weights, ignore_index=-100)
-        metrics = MetricCollection({'acc': Accuracy(dist_sync_on_step=True),
+        metrics = MetricCollection({
+                                    'acc': Accuracy(dist_sync_on_step=True),
                                     'macc': MeanAccuracy(num_classes=self.num_classes, dist_sync_on_step=True),
-                                    'miou': MeanIoU(num_classes=self.num_classes, dist_sync_on_step=True)})
+                                    'miou': MeanIoU(num_classes=self.num_classes, dist_sync_on_step=True),
+                                    })
         self.train_metrics = metrics.clone(prefix='train_')
         self.val_metrics = metrics.clone(prefix='val_')
         conf_metrics = MetricCollection({'ConfusionMatrix': ConfusionMatrix(num_classes=self.num_classes),
@@ -89,7 +92,10 @@ class BaseSegmentationModule(LightningModule):
         if self.global_step % 1 == 0:
             torch.cuda.empty_cache()
 
+        # print("train_metrics")
+        # print(preds, target)
         self.train_metrics(preds[valid_targets], target[valid_targets])
+        # print("done train_metrics")
         self.log_dict(self.train_metrics, sync_dist=True, prog_bar=False, on_step=False, on_epoch=True)
         self.train_conf_metrics(preds[valid_targets], target[valid_targets])
         self.log_dict(self.train_conf_metrics, sync_dist=True, prog_bar=False, on_step=False, on_epoch=False)
@@ -138,6 +144,12 @@ class BaseSegmentationModule(LightningModule):
                     lr=self.lr,
                     betas=(self.adam_beta1, self.adam_beta2),
                     weight_decay=self.weight_decay)
+        elif self.optimizer == 'AdamW':
+            optimizer = AdamW(
+                    self.parameters(),
+                    lr=self.lr,
+                    betas=(self.adam_beta1, self.adam_beta2),
+                    weight_decay=self.weight_decay)
         else:
             logging.error('Optimizer type not supported')
             raise ValueError('Optimizer type not supported')
@@ -178,7 +190,7 @@ class BaseSegmentationModule(LightningModule):
         parser.add_argument("--save_pcs", type=str2bool, nargs='?', const=True, default=False)
 
         # Optimizer arguments
-        parser.add_argument('--optimizer', type=str, default='SGD', choices=['SGD', 'Adam'])
+        parser.add_argument('--optimizer', type=str, default='SGD', choices=['SGD', 'Adam', 'AdamW'])
         parser.add_argument('--lr', type=float, default=1e-1)
         parser.add_argument('--sgd_momentum', type=float, default=0.9)
         parser.add_argument('--sgd_dampening', type=float, default=0.1)
