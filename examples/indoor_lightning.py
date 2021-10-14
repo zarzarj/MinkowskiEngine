@@ -8,6 +8,7 @@ import numpy as np
 from urllib.request import urlretrieve
 
 from pytorch_lightning import Trainer, seed_everything
+from pytorch_lightning.loggers import TensorBoardLogger
 
 import torchvision
 from PIL import Image
@@ -76,6 +77,7 @@ class MainArgs():
         parser.add_argument("--pl_module", type=str, default='examples.ImplicitSeg.ImplicitSegmentationModule')
         parser.add_argument("--pl_datamodule", type=str, default='examples.ScanNetLightningLIG.ScanNetLIG')
         parser.add_argument("--backbone", type=str, default='examples.minkunet.MinkUNet34C')
+        parser.add_argument("--use_wandb", type=str2bool, nargs='?', const=True, default=True)
         return parent_parser
 
 def get_obj_from_str(string):
@@ -84,8 +86,14 @@ def get_obj_from_str(string):
     return getattr(importlib.import_module(module, package=None), cls)
 
 if __name__ == "__main__":
-    # wandb_logger = WandbLogger()
+    
     main_args, args, _ = init_module_from_args(MainArgs)
+    lightning_root_dir = os.path.join('logs', main_args.exp_name, main_args.run_mode)
+    loggers = [TensorBoardLogger(save_dir=lightning_root_dir, name='lightning_logs')]
+    if main_args.use_wandb:
+        run_id = os.getenv('SLURM_ARRAY_JOB_ID')
+        loggers.append(WandbLogger(save_dir=lightning_root_dir, name=main_args.exp_name, id=run_id))
+        
     seed_everything(main_args.seed, workers=True)
 
     pl_datamodule = get_obj_from_str(main_args.pl_datamodule)
@@ -113,7 +121,7 @@ if __name__ == "__main__":
     callbacks.append(ModelCheckpoint(monitor='val_miou', mode = 'max', save_top_k=1))
     callbacks.append(LearningRateMonitor(logging_interval='step'))
 
-    lightning_root_dir = os.path.join('logs', main_args.exp_name, main_args.run_mode)
+    
     train_dir = os.path.join(lightning_root_dir, '..', 'train', 'lightning_logs')
     train_versions = glob.glob(os.path.join(train_dir, '*'))
     resume_from_checkpoint = None
@@ -132,10 +140,10 @@ if __name__ == "__main__":
             resume_from_checkpoint = ckpt
 
     pl_trainer, args, _ = init_module_from_args(Trainer, args, callbacks=callbacks,
-                                             default_root_dir=os.path.join(lightning_root_dir),
+                                             default_root_dir=lightning_root_dir,
                                              plugins=DDPPlugin(find_unused_parameters=False),
                                              resume_from_checkpoint=resume_from_checkpoint,
-                                             # logger=wandb_logger,
+                                             logger=loggers,
                                              )
 
     # print("done trainer")
