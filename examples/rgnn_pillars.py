@@ -18,7 +18,7 @@ from examples.MeanAccuracy import MeanAccuracy
 from examples.MeanIoU import MeanIoU
 from examples.str2bool import str2bool
 from examples.BaseSegLightning import BaseSegmentationModule
-from examples.basic_blocks import BasicGCNBlock, MLP as basic_MLP
+from examples.basic_blocks import BasicGCNBlock, MLPLinear, MLP as basic_MLP
 from pytorch_lightning.core import LightningModule
 
 
@@ -72,11 +72,25 @@ class RevGNN_Rooms(LightningModule):
                     print(name, value)
 
         self.convs = ModuleList()
-        if self.model == 'rgat':
+        if self.model == 'gat':
             in_conv = GATConv(in_channels, self.hidden_channels // self.heads, self.heads,
                               add_self_loops=False)
             back_conv = GATConv(self.hidden_channels // self.group, (self.hidden_channels // self.heads) // self.group,
                                 self.heads, add_self_loops=False)
+        elif self.model == 'edgeconv':
+            self.edgeconv_channels = [int(i) for i in self.edgeconv_channels.split(',')]
+            edgeconv_channels = [2 * in_channels] + self.edgeconv_channels
+            conv_mlp = MLPLinear(mlp_channels=edgeconv_channels,
+                                 norm=self.norm, dropout=self.dropout, 
+                                 track_running_stats=self.track_running_stats,
+                                 momentum=self.bn_momentum)
+            in_conv = GCNWrap(EdgeConv(nn=conv_mlp, aggr=self.aggr), in_channels=in_channels)
+            edgeconv_channels = np.array([2 * self.edgeconv_channels[-1]] + self.edgeconv_channels)
+            conv_mlp = MLPLinear(mlp_channels=edgeconv_channels // self.group,
+                                 norm=self.norm, dropout=self.dropout, 
+                                 track_running_stats=self.track_running_stats,
+                                 momentum=self.bn_momentum)
+            back_conv = GCNWrap(EdgeConv(nn=conv_mlp, aggr=self.aggr), in_channels=(self.edgeconv_channels[-1]) // self.group)
 
         self.convs.append(BasicGCNBlock(in_conv, dropout=self.dropout, input_layer=True,
                                      track_running_stats=self.track_running_stats,
@@ -143,8 +157,10 @@ class RevGNN_Rooms(LightningModule):
         parser.add_argument("--norm", type=str, default='batch', choices=['batch', 'layer', 'instance', 'none'])
         parser.add_argument("--track_running_stats", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument("--reversible", type=str2bool, nargs='?', const=True, default=True)
-        parser.add_argument("--model", type=str, default='rgat', choices=['rgat'])
+        parser.add_argument("--model", type=str, default='gat', choices=['gat', 'edgeconv'])
+        parser.add_argument("--aggr", type=str, default='max', choices=['max', 'mean', 'add'])
         parser.add_argument("--mlp_channels", type=str, default='512,256,128,64')
+        parser.add_argument("--edgeconv_channels", type=str, default='128')
         return parent_parser
 
 

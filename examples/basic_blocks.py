@@ -60,6 +60,34 @@ class MLP(nn.Sequential):
                 m.weight.data.fill_(1)
                 m.bias.data.zero_()
 
+class MLPLinear(nn.Sequential):
+    def __init__(self, mlp_channels, act='relu', norm='batch', bias=True, dropout=0.0, 
+                                         track_running_stats=True, momentum=0.1):
+        m = []
+        in_channels = mlp_channels[0]
+        for hidden_channels in mlp_channels[1:]:
+            m.append(nn.Linear(in_channels, hidden_channels, bias=bias))
+            if act is not None and act.lower() != 'none':
+                m.append(act_layer(act))
+            if norm is not None and norm.lower() != 'none':
+                m.append(norm_layer(norm, hidden_channels, track_running_stats, momentum))
+            if dropout > 0:
+                m.append(nn.Dropout2d(dropout, inplace=True))
+            in_channels = hidden_channels
+        super(MLPLinear, self).__init__(*m)
+
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        for m in self.modules():
+            if isinstance(m, nn.Linear):
+                nn.init.kaiming_normal_(m.weight)
+                if m.bias is not None:
+                    nn.init.zeros_(m.bias)
+            elif isinstance(m, nn.BatchNorm1d) or isinstance(m, nn.InstanceNorm1d):
+                m.weight.data.fill_(1)
+                m.bias.data.zero_()
+
 
 class BasicGCNBlock(nn.Module):
     def __init__(self, gcn, norm: str = 'batch', dropout: float = 0.0,
