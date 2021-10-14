@@ -70,6 +70,7 @@ class DenseDeepGCN(torch.nn.Module):
         
     @staticmethod
     def add_argparse_args(parent_parser):
+        parser = parent_parser.add_argument_group("DenseDeepGCN")
         parser = parent_parser.add_argument('--k', default=20, type=int, help='neighbor num (default:16)')
         parser = parent_parser.add_argument('--block', default='res', type=str, help='graph backbone block type {plain, res, dense}')
         parser = parent_parser.add_argument('--conv', default='mr', type=str, help='graph conv layer {edge, mr}')
