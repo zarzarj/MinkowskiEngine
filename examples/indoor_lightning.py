@@ -88,18 +88,10 @@ def get_obj_from_str(string):
 if __name__ == "__main__":
     
     main_args, args, _ = init_module_from_args(MainArgs)
-    lightning_root_dir = os.path.join('logs', main_args.exp_name, main_args.run_mode)
-    loggers = [TensorBoardLogger(save_dir=lightning_root_dir, name='lightning_logs')]
-    if main_args.use_wandb:
-        run_id = os.getenv('SLURM_ARRAY_JOB_ID')
-        loggers.append(WandbLogger(save_dir=lightning_root_dir, name=main_args.exp_name, id=run_id))
-        
     seed_everything(main_args.seed, workers=True)
 
     pl_datamodule = get_obj_from_str(main_args.pl_datamodule)
     pl_datamodule, args, pl_datamodule_args = init_module_from_args(pl_datamodule, args)
-    label_weights = pl_datamodule.labelweights
-    callbacks = pl_datamodule.callbacks()
 
     backbone = get_obj_from_str(main_args.backbone)
     _, args, backbone_args = init_module_from_args(backbone, args)
@@ -113,10 +105,26 @@ if __name__ == "__main__":
                                             overlap_factor=pl_datamodule.overlap_factor,
                                             voxel_size=pl_datamodule.voxel_size,
                                             num_classes=pl_datamodule.num_classes,
-                                            label_weights=label_weights
+                                            label_weights=pl_datamodule.labelweights
                                             )
 
     # callbacks = []
+    lightning_root_dir = os.path.join('logs', main_args.exp_name, main_args.run_mode)
+    loggers = [TensorBoardLogger(save_dir=lightning_root_dir, name='lightning_logs')]
+    if main_args.use_wandb:
+        loggers.append(WandbLogger(save_dir=lightning_root_dir, name=main_args.exp_name))
+        loggers[1].experiment.tags += (main_args.backbone.split('.')[-1],)
+        loggers[1].experiment.tags += (main_args.pl_module.split('.')[-1],)
+        loggers[1].experiment.tags += (main_args.pl_datamodule.split('.')[-1],)
+        loggers[1].experiment.tags += (main_args.run_mode,)
+        loggers[1].experiment.tags += ("lr_"+str(pl_module.lr),)
+        loggers[1].experiment.tags += (pl_module.optimizer,)
+        loggers[1].experiment.tags += (pl_module.scheduler,)
+        loggers[1].experiment.tags += ("wd_"+str(pl_module.weight_decay),)
+        loggers[1].experiment.tags += ("seed_"+str(main_args.seed),)
+
+
+    callbacks = pl_datamodule.callbacks()
     callbacks.append(ConfusionMatrixPlotCallback())
     callbacks.append(ModelCheckpoint(monitor='val_miou', mode = 'max', save_top_k=1))
     callbacks.append(LearningRateMonitor(logging_interval='step'))

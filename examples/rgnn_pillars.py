@@ -287,6 +287,7 @@ class PointNetfeat(nn.Module):
 class PointNetDenseCls(LightningModule):
     def __init__(self, in_channels=3, out_channels=20, feature_transform=False):
         super(PointNetDenseCls, self).__init__()
+
         self.feature_transform=feature_transform
         self.feat = PointNetfeat(in_channels=in_channels, global_feat=False, feature_transform=feature_transform)
         self.conv1 = torch.nn.Conv1d(1088, 512, 1)
@@ -487,6 +488,7 @@ def get_graph_feature(x, k=20, idx=None, use_coords=False):
 class DGCNN_semseg(nn.Module):
     def __init__(self, in_channels=3, out_channels=20, **kwargs):
         super(DGCNN_semseg, self).__init__()
+        self.save_hyperparameters()
         for name, value in kwargs.items():
             if name != "self":
                 try:
