@@ -8,7 +8,7 @@ import numpy as np
 from urllib.request import urlretrieve
 
 from pytorch_lightning import Trainer, seed_everything
-from pytorch_lightning.loggers import TensorBoardLogger
+from pytorch_lightning.loggers import TensorBoardLogger, WandbLogger
 
 import torchvision
 from PIL import Image
@@ -18,12 +18,10 @@ from pytorch_lightning.callbacks import ModelCheckpoint, LearningRateMonitor, Ca
 from pytorch_lightning.plugins import DDPPlugin
 from examples.str2bool import str2bool
 
-from pytorch_lightning.loggers import WandbLogger
 
 
 
 def plot_confusion_matrix(trainer, pl_module, confusion_metric, plot_title):
-    tb = pl_module.logger.experiment
     conf_mat = confusion_metric.compute().detach().cpu().numpy()
     disp = ConfusionMatrixDisplay(confusion_matrix=conf_mat,
                              display_labels=trainer.datamodule.class_labels)
@@ -34,7 +32,14 @@ def plot_confusion_matrix(trainer, pl_module, confusion_metric, plot_title):
     buf.seek(0)
     im = Image.open(buf)
     im = torchvision.transforms.ToTensor()(im)
-    tb.add_image(plot_title, im, global_step=pl_module.current_epoch)
+    for logger in pl_module.logger:
+        if logger is TensorBoardLogger:
+            print('tb_log')
+            logger.experiment.add_image(plot_title, im, global_step=pl_module.current_epoch)
+        elif logger is WandbLogger:
+            print('wandb_log')
+            logger.log_images([im])
+
     plt.close()
 
 class ConfusionMatrixPlotCallback(Callback):
