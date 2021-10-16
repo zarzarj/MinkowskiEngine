@@ -18,7 +18,7 @@ from pytorch_lightning.callbacks import ModelCheckpoint, LearningRateMonitor, Ca
 from pytorch_lightning.plugins import DDPPlugin
 from examples.str2bool import str2bool
 
-
+import wandb
 
 
 def plot_confusion_matrix(trainer, pl_module, confusion_metric, plot_title):
@@ -33,12 +33,13 @@ def plot_confusion_matrix(trainer, pl_module, confusion_metric, plot_title):
     im = Image.open(buf)
     im = torchvision.transforms.ToTensor()(im)
     for logger in pl_module.logger:
-        if logger is TensorBoardLogger:
-            print('tb_log')
-            logger.experiment.add_image(plot_title, im, global_step=pl_module.current_epoch)
-        elif logger is WandbLogger:
-            print('wandb_log')
-            logger.log_images([im])
+        if isinstance(logger, TensorBoardLogger):
+            # print('tb_log')
+            logger.experiment.add_image(plot_title, im, global_step=trainer.current_epoch)
+        elif isinstance(logger, WandbLogger):
+            # print('wandb_log')
+            logger.experiment.log({plot_title: [wandb.Image(im)], "global_step": trainer.current_epoch})
+    # print(pl_module.current_epoch)
 
     plt.close()
 
@@ -83,6 +84,7 @@ class MainArgs():
         parser.add_argument("--pl_datamodule", type=str, default='examples.ScanNetLightningLIG.ScanNetLIG')
         parser.add_argument("--backbone", type=str, default='examples.minkunet.MinkUNet34C')
         parser.add_argument("--use_wandb", type=str2bool, nargs='?', const=True, default=True)
+        # parser.add_argument("--use_tb", type=str2bool, nargs='?', const=True, default=False)
         return parent_parser
 
 def get_obj_from_str(string):
@@ -116,8 +118,10 @@ if __name__ == "__main__":
     # callbacks = []
     lightning_root_dir = os.path.join('logs', main_args.exp_name, main_args.run_mode)
     loggers = [TensorBoardLogger(save_dir=lightning_root_dir, name='lightning_logs')]
+    os.makedirs(lightning_root_dir, exist_ok=True)
     if main_args.use_wandb:
-        loggers.append(WandbLogger(save_dir=lightning_root_dir, name=main_args.exp_name))
+        # if int(os.environ.get('LOCAL_RANK', 0)) == 0:
+        loggers.append(WandbLogger(save_dir=lightning_root_dir, name=main_args.exp_name, id="version_"+str(loggers[0].version)))
         loggers[1].experiment.tags += (main_args.backbone.split('.')[-1],)
         loggers[1].experiment.tags += (main_args.pl_module.split('.')[-1],)
         loggers[1].experiment.tags += (main_args.pl_datamodule.split('.')[-1],)
@@ -131,11 +135,12 @@ if __name__ == "__main__":
 
     callbacks = pl_datamodule.callbacks()
     callbacks.append(ConfusionMatrixPlotCallback())
-    callbacks.append(ModelCheckpoint(monitor='val_miou', mode = 'max', save_top_k=1))
+    callbacks.append(ModelCheckpoint(monitor='val_miou', mode = 'max', save_top_k=1,
+                                    dirpath=os.path.join(lightning_root_dir, loggers[0].name, "version_"+str(loggers[0].version), 'checkpoints')))
     callbacks.append(LearningRateMonitor(logging_interval='step'))
 
     
-    train_dir = os.path.join(lightning_root_dir, '..', 'train', 'lightning_logs')
+    train_dir = os.path.join(lightning_root_dir, 'lightning_logs')
     train_versions = glob.glob(os.path.join(train_dir, '*'))
     resume_from_checkpoint = None
     if len(train_versions) > 0:
