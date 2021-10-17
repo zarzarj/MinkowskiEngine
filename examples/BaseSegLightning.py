@@ -4,11 +4,11 @@ from torch.optim import SGD, Adam, AdamW
 from torch.optim.lr_scheduler import LambdaLR, StepLR
 
 from pytorch_lightning.core import LightningModule
-from torchmetrics import Accuracy, IoU, ConfusionMatrix, MetricCollection
+from torchmetrics import ConfusionMatrix, MetricCollection
 
-# from examples.MeanAccuracy import MeanAccuracy
-# from examples.Accuracy import Accuracy
-# from examples.MeanIoU import MeanIoU
+from examples.MeanAccuracy import MeanAccuracy
+from examples.Accuracy import Accuracy
+from examples.MeanIoU import MeanIoU
 
 from examples.str2bool import str2bool
 from examples.basic_blocks import MLP
@@ -66,16 +66,16 @@ class BaseSegmentationModule(LightningModule):
                 except:
                     print(name, value)
         self.criterion = nn.CrossEntropyLoss(weight=self.label_weights, ignore_index=-100)
-        # metrics = MetricCollection({
-        #                             'acc': Accuracy(dist_sync_on_step=True),
-        #                             'macc': MeanAccuracy(num_classes=self.num_classes, dist_sync_on_step=True),
-        #                             'miou': MeanIoU(num_classes=self.num_classes, dist_sync_on_step=True),
-        #                             })
         metrics = MetricCollection({
                                     'acc': Accuracy(dist_sync_on_step=True),
-                                    'macc': Accuracy(num_classes=self.num_classes, average='macro', dist_sync_on_step=True),
-                                    'miou': IoU(num_classes=self.num_classes, dist_sync_on_step=True),
+                                    'macc': MeanAccuracy(num_classes=self.num_classes, dist_sync_on_step=True),
+                                    'miou': MeanIoU(num_classes=self.num_classes, dist_sync_on_step=True),
                                     })
+        # metrics = MetricCollection({
+        #                             'acc': Accuracy(dist_sync_on_step=True),
+        #                             'macc': Accuracy(num_classes=self.num_classes, average='macro', dist_sync_on_step=True),
+        #                             'miou': IoU(num_classes=self.num_classes, dist_sync_on_step=True),
+        #                             })
         self.train_metrics = metrics.clone(prefix='train_')
         self.val_metrics = metrics.clone(prefix='val_')
         conf_metrics = MetricCollection({'ConfusionMatrix': ConfusionMatrix(num_classes=self.num_classes),
@@ -101,9 +101,9 @@ class BaseSegmentationModule(LightningModule):
         # print(preds, target)
         self.train_metrics(preds[valid_targets], target[valid_targets])
         # print("done train_metrics")
-        self.log_dict(self.train_metrics, prog_bar=False, on_step=False, on_epoch=True)
+        self.log_dict(self.train_metrics, sync_dist=True, prog_bar=False, on_step=False, on_epoch=True)
         self.train_conf_metrics(preds[valid_targets], target[valid_targets])
-        self.log_dict(self.train_conf_metrics, prog_bar=False, on_step=False, on_epoch=False)
+        self.log_dict(self.train_conf_metrics, sync_dist=True, prog_bar=False, on_step=False, on_epoch=False)
 
         return train_loss
 
@@ -124,9 +124,9 @@ class BaseSegmentationModule(LightningModule):
             torch.cuda.empty_cache()
 
         self.val_metrics(preds[valid_targets], target[valid_targets])
-        self.log_dict(self.val_metrics, prog_bar=True, on_step=False, on_epoch=True)
+        self.log_dict(self.val_metrics, sync_dist=True, prog_bar=True, on_step=False, on_epoch=True)
         self.val_conf_metrics(preds[valid_targets], target[valid_targets])
-        self.log_dict(self.val_conf_metrics, prog_bar=False, on_step=False, on_epoch=False)
+        self.log_dict(self.val_conf_metrics, sync_dist=True, prog_bar=False, on_step=False, on_epoch=False)
 
         return val_loss
 

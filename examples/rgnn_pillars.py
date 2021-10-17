@@ -127,10 +127,14 @@ class RevGNN_Rooms(LightningModule):
         x = batch['feats']
         coords = batch['coords']
         adj = torch_geometric.nn.pool.knn_graph(x=coords[...,1:], k=16, batch=coords[...,0].long(),
-                                                    loop=False, flow='source_to_target',
-                                                    cosine=False)
+                                                loop=False, flow='source_to_target',
+                                                cosine=False)
         for i in range(len(self.convs)):
             x = self.forward_single(x, adj, i)
+            if self.recompute_adj and i != len(self.convs)-1:
+                adj = torch_geometric.nn.pool.knn_graph(x=x, k=16, batch=coords[...,0].long(),
+                                                        loop=False, flow='source_to_target',
+                                                        cosine=False)
         return self.mlp(x.unsqueeze(-1)).squeeze(-1)
 
     def forward_single(self, x: Tensor, adj, cur_layer: int):
@@ -155,6 +159,7 @@ class RevGNN_Rooms(LightningModule):
         parser.add_argument("--norm", type=str, default='batch', choices=['batch', 'layer', 'instance', 'none'])
         parser.add_argument("--track_running_stats", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument("--reversible", type=str2bool, nargs='?', const=True, default=True)
+        parser.add_argument("--recompute_adj", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument("--model", type=str, default='gat', choices=['gat', 'edgeconv'])
         parser.add_argument("--aggr", type=str, default='max', choices=['max', 'mean', 'add'])
         parser.add_argument("--mlp_channels", type=str, default='512,256,128,64')
