@@ -485,7 +485,7 @@ def get_graph_feature(x, k=20, idx=None, use_coords=False):
   
     return feature      # (batch_size, 2*num_dims, num_points, k)
 
-class DGCNN_semseg(nn.Module):
+class DGCNN_semseg(LightningModule):
     def __init__(self, in_channels=3, out_channels=20, **kwargs):
         super(DGCNN_semseg, self).__init__()
         self.save_hyperparameters()
