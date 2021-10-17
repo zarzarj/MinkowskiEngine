@@ -4,8 +4,7 @@ from torch.optim import SGD, Adam, AdamW
 from torch.optim.lr_scheduler import LambdaLR, StepLR
 
 from pytorch_lightning.core import LightningModule
-from pytorch_lightning.metrics import ConfusionMatrix, MetricCollection
-from torchmetrics import Accuracy, IoU
+from torchmetrics import Accuracy, IoU, ConfusionMatrix, MetricCollection
 
 # from examples.MeanAccuracy import MeanAccuracy
 # from examples.Accuracy import Accuracy
@@ -102,9 +101,9 @@ class BaseSegmentationModule(LightningModule):
         # print(preds, target)
         self.train_metrics(preds[valid_targets], target[valid_targets])
         # print("done train_metrics")
-        self.log_dict(self.train_metrics, sync_dist=True, prog_bar=False, on_step=False, on_epoch=True)
+        self.log_dict(self.train_metrics, prog_bar=False, on_step=False, on_epoch=True)
         self.train_conf_metrics(preds[valid_targets], target[valid_targets])
-        self.log_dict(self.train_conf_metrics, sync_dist=True, prog_bar=False, on_step=False, on_epoch=False)
+        self.log_dict(self.train_conf_metrics, prog_bar=False, on_step=False, on_epoch=False)
 
         return train_loss
 
@@ -125,9 +124,9 @@ class BaseSegmentationModule(LightningModule):
             torch.cuda.empty_cache()
 
         self.val_metrics(preds[valid_targets], target[valid_targets])
-        self.log_dict(self.val_metrics, sync_dist=True, prog_bar=True, on_step=False, on_epoch=True)
+        self.log_dict(self.val_metrics, prog_bar=True, on_step=False, on_epoch=True)
         self.val_conf_metrics(preds[valid_targets], target[valid_targets])
-        self.log_dict(self.val_conf_metrics, sync_dist=True, prog_bar=False, on_step=False, on_epoch=False)
+        self.log_dict(self.val_conf_metrics, prog_bar=False, on_step=False, on_epoch=False)
 
         return val_loss
 
@@ -166,6 +165,8 @@ class BaseSegmentationModule(LightningModule):
                 optimizer, step_size=self.step_size, gamma=self.step_gamma, last_epoch=-1)
         elif self.scheduler == 'SquaredLR':
             scheduler = SquaredLR(optimizer, max_iter=self.max_iter, last_step=-1)
+        elif self.scheduler == 'None':
+            return [optimizer]
         else:
             logging.error('Scheduler not supported')
             raise ValueError('Scheduler not supported')

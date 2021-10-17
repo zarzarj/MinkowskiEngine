@@ -7,15 +7,13 @@ from torch import Tensor
 import torch.nn.functional as F
 import torch.nn as nn
 from torch.nn import ModuleList, Sequential, Linear, BatchNorm1d, ReLU, Dropout, Conv2d, Dropout2d
-
 from torch_sparse import SparseTensor
-from torch_geometric.nn import SAGEConv, GATConv, EdgeConv
-import torch_geometric
 
-from examples.EdgeConvs import EdgeConvZ, EdgeOnlyConv, DenseEdgeOnlyConv, EdgeOnlyConvPos, EffSparseEdgeConv, DenseEdgeConvTriplets, DenseEdgeConv, DenseMRConv
+import torch_geometric
+from torch_geometric.nn import SAGEConv, GATConv, EdgeConv
+
+
 from examples.model_rev import RevGCN
-from examples.MeanAccuracy import MeanAccuracy
-from examples.MeanIoU import MeanIoU
 from examples.str2bool import str2bool
 from examples.BaseSegLightning import BaseSegmentationModule
 from examples.basic_blocks import BasicGCNBlock, MLPLinear, MLP as basic_MLP
