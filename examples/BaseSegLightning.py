@@ -56,15 +56,18 @@ def to_precision(inputs, precision):
     return inputs
 
 class BaseSegmentationModule(LightningModule):
-    def __init__(self, **kwargs):
+    def __init__(self, num_classes, overlap_factor, voxel_size, **kwargs):
         super().__init__()
-        self.save_hyperparameters()
+        self.save_hyperparameters(kwargs)
         for name, value in kwargs.items():
             if name != "self":
                 try:
                     setattr(self, name, value)
                 except:
                     print(name, value)
+        self.num_classes = num_classes
+        self.overlap_factor = overlap_factor
+        self.voxel_size = voxel_size
         self.criterion = nn.CrossEntropyLoss(weight=self.label_weights, ignore_index=-100)
         metrics = MetricCollection({
                                     'acc': Accuracy(dist_sync_on_step=True),
