@@ -24,6 +24,8 @@ from torch_geometric.nn import PointConv, fps, radius, global_max_pool, knn_inte
 from torch.nn import Sequential as Seq, Linear as Lin, ReLU, BatchNorm1d as BN
 from torch_geometric.nn import DynamicEdgeConv
 
+from examples.CustomGraphConvs import PointConv_NoCoords
+
 from examples.utils import save_pc
 
 def to_precision(inputs, precision):
@@ -418,6 +420,83 @@ class PointNetv2(LightningModule):
     @staticmethod
     def add_argparse_args(parent_parser):
         parser = parent_parser.add_argument_group("PointNetv2")
+        return parent_parser
+
+
+
+class SAModule_NoCoords(torch.nn.Module):
+    def __init__(self, ratio, r, nn):
+        super(SAModule_NoCoords, self).__init__()
+        self.ratio = ratio
+        self.r = r
+        self.conv = PointConv_NoCoords(nn, add_self_loops=False)
+
+    def forward(self, x, pos, batch):
+        idx = fps(pos, batch, ratio=self.ratio)
+        row, col = radius(pos, pos[idx], self.r, batch, batch[idx],
+                          max_num_neighbors=64)
+        edge_index = torch.stack([col, row], dim=0)
+        x = self.conv(x, (pos, pos[idx]), edge_index)
+        pos, batch = pos[idx], batch[idx]
+        return x, pos, batch
+
+
+class GlobalSAModule_NoCoords(torch.nn.Module):
+    def __init__(self, nn):
+        super(GlobalSAModule_NoCoords, self).__init__()
+        self.nn = nn
+
+    def forward(self, x, pos, batch):
+        x = self.nn(x)
+        x = global_max_pool(x, batch)
+        pos = pos.new_zeros((x.size(0), 3))
+        batch = torch.arange(x.size(0), device=batch.device)
+        return x, pos, batch
+
+class PointNetv2_NoCoords(LightningModule):
+    def __init__(self, in_channels=3, out_channels=20):
+        super(PointNetv2_NoCoords, self).__init__()
+
+        # Input channels account for both `pos` and node features.
+        self.sa1_module = SAModule_NoCoords(0.2, 0.2, MLP([in_channels, 64, 64, 128]))
+        self.sa2_module = SAModule_NoCoords(0.25, 0.4, MLP([128, 128, 128, 256]))
+        self.sa3_module = GlobalSAModule_NoCoords(MLP([256, 256, 512, 1024]))
+
+        self.fp3_module = FPModule(1, MLP([1024 + 256, 256, 256]))
+        self.fp2_module = FPModule(3, MLP([256 + 128, 256, 128]))
+        self.fp1_module = FPModule(3, MLP([128 + in_channels, 128, 128, 128]))
+
+        self.lin1 = torch.nn.Linear(128, 128)
+        self.lin2 = torch.nn.Linear(128, 128)
+        self.lin3 = torch.nn.Linear(128, out_channels)
+
+    def forward(self, batch):
+        # batch_0_idx = batch['coords'][:,0] == 0
+        # save_pc(batch['coords'][batch_0_idx,1:].cpu().numpy(), batch['feats'][batch_0_idx,:3].cpu().numpy(), 'test_s3dis_fwd.ply')
+        # assert(True == False)
+        # print(batch['feats'], batch['feats'].shape)
+        sa0_out = (batch['feats'], batch['coords'][:,1:], batch['coords'][:,0].long())
+        sa1_out = self.sa1_module(*sa0_out)
+        sa2_out = self.sa2_module(*sa1_out)
+        sa3_out = self.sa3_module(*sa2_out)
+
+        fp3_out = self.fp3_module(*sa3_out, *sa2_out)
+        fp2_out = self.fp2_module(*fp3_out, *sa1_out)
+        x, _, _ = self.fp1_module(*fp2_out, *sa0_out)
+
+        x = F.relu(self.lin1(x))
+        x = F.dropout(x, p=0.5, training=self.training)
+        x = self.lin2(x)
+        x = F.dropout(x, p=0.5, training=self.training)
+        x = self.lin3(x)
+        return x
+        
+    def convert_sync_batchnorm(self):
+        return
+
+    @staticmethod
+    def add_argparse_args(parent_parser):
+        parser = parent_parser.add_argument_group("PointNetv2_NoCoords")
         return parent_parser
 
 

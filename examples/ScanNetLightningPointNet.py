@@ -28,6 +28,7 @@ class ChunkGeneratorCallback(Callback):
 class ScanNetPointNet(LightningDataModule):
     def __init__(self, **kwargs):
         super().__init__()
+        self.save_hyperparameters()
         for name, value in kwargs.items():
             if name != "self":
                 setattr(self, name, value)  
@@ -347,7 +348,7 @@ class ScannetDataset():
             cur_point_set = cur_point_set[choices]
             self.chunk_data[scene_id] = cur_point_set
             
-        print("done!\n")
+        # print("done!\n")
 
 def collate_random(data):
     '''
