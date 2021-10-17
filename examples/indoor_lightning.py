@@ -38,7 +38,7 @@ def plot_confusion_matrix(trainer, pl_module, confusion_metric, plot_title):
             logger.experiment.add_image(plot_title, im, global_step=trainer.current_epoch)
         elif isinstance(logger, WandbLogger):
             # print('wandb_log')
-            logger.experiment.log({plot_title: [wandb.Image(im)], "global_step": trainer.current_epoch})
+            logger.experiment.log({plot_title: [wandb.Image(im)]})
     # print(pl_module.current_epoch)
 
     plt.close()
@@ -120,17 +120,17 @@ if __name__ == "__main__":
     loggers = [TensorBoardLogger(save_dir=lightning_root_dir, name='lightning_logs')]
     os.makedirs(lightning_root_dir, exist_ok=True)
     if main_args.use_wandb:
-        # if int(os.environ.get('LOCAL_RANK', 0)) == 0:
-        loggers.append(WandbLogger(save_dir=lightning_root_dir, name=main_args.exp_name, id="version_"+str(loggers[0].version)))
-        loggers[1].experiment.tags += (main_args.backbone.split('.')[-1],)
-        loggers[1].experiment.tags += (main_args.pl_module.split('.')[-1],)
-        loggers[1].experiment.tags += (main_args.pl_datamodule.split('.')[-1],)
-        loggers[1].experiment.tags += (main_args.run_mode,)
-        loggers[1].experiment.tags += ("lr_"+str(pl_module.lr),)
-        loggers[1].experiment.tags += (pl_module.optimizer,)
-        loggers[1].experiment.tags += (pl_module.scheduler,)
-        loggers[1].experiment.tags += ("wd_"+str(pl_module.weight_decay),)
-        loggers[1].experiment.tags += ("seed_"+str(main_args.seed),)
+        tags = ()
+        tags += (main_args.backbone.split('.')[-1],)
+        tags += (main_args.pl_module.split('.')[-1],)
+        tags += (main_args.pl_datamodule.split('.')[-1],)
+        tags += (main_args.run_mode,)
+        tags += ("lr_"+str(pl_module.lr),)
+        tags += (pl_module.optimizer,)
+        tags += (pl_module.scheduler,)
+        tags += ("wd_"+str(pl_module.weight_decay),)
+        tags += ("seed_"+str(main_args.seed),)
+        loggers.append(WandbLogger(save_dir=lightning_root_dir, name=main_args.exp_name, tags=tags))
 
 
     callbacks = pl_datamodule.callbacks()
