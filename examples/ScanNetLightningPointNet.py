@@ -49,13 +49,19 @@ class ScanNetPointNet(LightningDataModule):
         with open(os.path.join(self.data_dir, 'splits', 'scannetv2_train.txt'), 'r') as f:
             self.train_files = f.readlines()
             self.train_files = [file[:-5] for file in self.train_files]
-        self.train_dataset = ScannetDataset(phase="train", scene_list=self.train_files, **self.kwargs)
+        if self.use_whole_scene:
+            self.train_dataset = ScannetDatasetWholeScene(phase="train", scene_list=self.train_files, **self.kwargs)
+        else:
+            self.train_dataset = ScannetDataset(phase="train", scene_list=self.train_files, **self.kwargs)
         # self.labelweights = self.train_dataset.labelweights
         # self.train_dataset.generate_chunks()
         with open(os.path.join(self.data_dir, 'splits', 'scannetv2_val.txt'), 'r') as f:
             self.val_files = f.readlines()
             self.val_files = [file[:-5] for file in self.val_files]
-        self.val_dataset = ScannetDataset(phase="val", scene_list=self.val_files, **self.kwargs)
+        if self.use_whole_scene:
+            self.val_dataset = ScannetDatasetWholeScene(phase="val", scene_list=self.val_files, **self.kwargs)
+        else:
+            self.val_dataset = ScannetDataset(phase="val", scene_list=self.val_files, **self.kwargs)
         # self.val_dataset.generate_chunks()
         
     
@@ -80,7 +86,10 @@ class ScanNetPointNet(LightningDataModule):
         return val_dataloader
 
     def callbacks(self):
-        return [ChunkGeneratorCallback()]
+        if self.use_whole_scene:
+            return []
+        else:
+            return [ChunkGeneratorCallback()]
 
     # def on_train_epoch_start(self):
     #     print("TRAIN EPOCH START")
@@ -113,8 +122,100 @@ class ScanNetPointNet(LightningDataModule):
         parser.add_argument("--voxel_size", type=float, default=.25)
 
         parser.add_argument("--dense_input", type=str2bool, nargs='?', const=True, default=False)
+        parser.add_argument("--use_whole_scene", type=str2bool, nargs='?', const=True, default=False)
         return parent_parser
 
+
+class ScannetDatasetWholeScene():
+    def __init__(self, **kwargs):
+        for name, value in kwargs.items():
+            if name != "self":
+                setattr(self, name, value)
+        assert self.phase in ["train", "val", "test"]
+
+        self._load_scene_file()
+
+    def _load_scene_file(self):
+        self.scene_points_list = []
+        self.mask_list = []
+        if self.use_implicit:
+            self.implicit_data = []
+
+        for scene_id in tqdm(self.scene_list):
+            scene_data = np.load(os.path.join(self.data_dir, 'preprocessing', 'scannet_scenes', scene_id + '.npy'))
+            if self.use_implicit:
+                implicit_feats = np.load(os.path.join(self.data_dir, 'implicit_feats_pointnet2', scene_id + '.feats.npy'))
+                scene_data = np.concatenate([scene_data, implicit_feats], axis=-1)
+
+            coordmax = scene_data[:, :3].max(axis=0)
+            coordmin = scene_data[:, :3].min(axis=0)
+            xlength = 1.5
+            ylength = 1.5
+            nsubvolume_x = np.ceil((coordmax[0]-coordmin[0])/xlength).astype(np.int32)
+            nsubvolume_y = np.ceil((coordmax[1]-coordmin[1])/ylength).astype(np.int32)
+            for i in range(nsubvolume_x):
+                for j in range(nsubvolume_y):
+                    curmin = coordmin+[i*xlength, j*ylength, 0]
+                    curmax = coordmin+[(i+1)*xlength, (j+1)*ylength, coordmax[2]-coordmin[2]]
+                    mask = np.sum((scene_data[:, :3]>=(curmin-0.01))*(scene_data[:, :3]<=(curmax+0.01)), axis=1)==3
+
+                    cur_point_set = scene_data[mask,:]
+                    # cur_semantic_seg = scene_data[mask, 10].astype(np.int32)
+                    if len(cur_point_set) == 0:
+                        continue
+
+                    choice = np.random.choice(len(cur_point_set), self.npoints, replace=True)
+                    point_set = cur_point_set[choice,:] # Nx3
+                    # semantic_seg = cur_semantic_seg[choice] # N
+                    mask = mask[choice]
+                    self.scene_points_list.append(point_set)
+                    self.mask_list.append(mask)
+
+        if self.weighting:
+            labelweights = np.zeros(self.num_classes)
+            for scene_data in self.scene_points_list:
+                seg = scene_data[:,10].astype(np.int32)
+                tmp,_ = np.histogram(seg,range(self.num_classes + 1))
+                labelweights += tmp
+            labelweights = labelweights.astype(np.float32)
+            labelweights = labelweights/np.sum(labelweights)
+            self.labelweights = 1/np.log(1.2+labelweights)
+        else:
+            self.labelweights = np.ones(self.num_classes)
+
+    def __getitem__(self, index):
+        start = time.time()
+        scene_data = self.scene_points_list[index]
+        mask = self.mask_list[index]
+
+        # unpack
+        point_set = scene_data[:, :3] # include xyz by default
+        color = scene_data[:, 3:6] / 255. # normalize the rgb values to [0, 1]
+        normal = scene_data[:, 6:9]
+        label = scene_data[:, 10].astype(np.int32)
+
+        if self.use_color:
+            point_set = np.concatenate([point_set, color], axis=1)
+
+        if self.use_normal:
+            point_set = np.concatenate([point_set, normal], axis=1)
+
+        if self.use_implicit:
+            implicit_features = scene_data[:, -32:]
+            point_set = np.concatenate([point_set, implicit_features], axis=1)
+
+        if self.random_feats:
+            point_set[:,3:] = np.random.rand(point_set.shape[0], point_set.shape[1]-3)
+
+        sample_weight = self.labelweights[label]
+        sample_weight *= mask
+
+        fetch_time = time.time() - start
+
+        return point_set, label, sample_weight, fetch_time
+
+    def __len__(self):
+        return len(self.scene_points_list)
 
 class ScannetDataset():
     def __init__(self, **kwargs):
@@ -189,10 +290,11 @@ class ScannetDataset():
         sample_weight = self.labelweights[label]
         sample_weight *= mask
 
-        fetch_time = time.time() - start
 
         if self.random_feats:
             point_set[:,3:] = np.random.rand(point_set.shape[0], point_set.shape[1]-3)
+
+        fetch_time = time.time() - start
 
         return point_set, label, sample_weight, fetch_time
 
@@ -430,3 +532,5 @@ def collate_random_PyG(data):
     }
 
     return batch
+
+

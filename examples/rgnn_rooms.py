@@ -117,6 +117,7 @@ class RevGNN_Rooms(LightningModule):
         #                                             cosine=False)
 
         for i in range(len(self.convs)):
+
             # print(x.shape)
             x = self.forward_single(x, adj, i)
         # x = x.unsqueeze(-1)
@@ -146,7 +147,7 @@ class RevGNN_Rooms(LightningModule):
         parser.add_argument("--track_running_stats", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument("--reversible", type=str2bool, nargs='?', const=True, default=True)
         parser.add_argument("--model", type=str, default='rgat', choices=['rgat'])
-        parser.add_argument("--mlp_channels", type=str, default='512,256,128,64')
+        parser.add_argument("--mlp_channels", type=str, default='256,128,64')
         return parent_parser
 
 
