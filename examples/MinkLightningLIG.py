@@ -5,7 +5,7 @@ from torch.optim.lr_scheduler import LambdaLR, StepLR
 
 from pytorch_lightning.core import LightningModule
 import MinkowskiEngine as ME
-from examples.minkunet import MinkUNet34C, MinkUNet14A, MinkUNet34CShallow
+from examples.minkunet_sparse import MinkUNet34C, MinkUNet14A, MinkUNet34CShallow
 # from examples.minkunetodd import MinkUNet34C as MinkUNet34Codd
 from examples.BaseSegLightning import BaseSegmentationModule
 from examples.str2bool import str2bool
@@ -13,51 +13,26 @@ from examples.basic_blocks import MLP, norm_layer
 from examples.utils import interpolate_grid_feats, interpolate_sparsegrid_feats
 import numpy as np
 
-def to_precision(inputs, precision):
-    # print(precision)
-    if precision == 'mixed':
-        dtype = torch.float16
-    elif precision == 32:
-        dtype = torch.float32
-    elif precision == 64:
-        dtype = torch.float64
-    outputs = []
-    for input in inputs:
-        if isinstance(input, list):
-            loutputs = []
-            for loutput in input:
-                if loutput is not None:
-                    loutputs.append(loutput.to(dtype))
-                else:
-                    loutputs.append(loutput)
-            outputs.append(loutputs)
-            # print(loutputs)
-        else:
-            outputs.append(input.to(dtype))
-    # print(outputs)
-    return tuple(outputs)
-
 class MinkowskiSegmentationModuleLIG(BaseSegmentationModule):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         if self.mink_sdf_to_seg:
-            if self.shallow_model:
-                self.model = MinkUNet34CShallow(self.in_channels, self.in_channels)
-            else:
-                self.model = MinkUNet34C(self.in_channels, self.in_channels)
+            self.model = MinkUNet34C(self.feat_channels, self.feat_channels)
                 
         self.mlp_channels = [int(i) for i in self.mlp_channels.split(',')]
         if self.relative_mlp_channels:
-            self.mlp_channels = (self.in_channels + self.mlp_extra_in_channels) * np.array(self.mlp_channels)
+            self.mlp_channels = (self.seg_feat_channels) * np.array(self.mlp_channels)
             # print(self.mlp_channels)
         else:
-            self.mlp_channels = [self.in_channels + self.mlp_extra_in_channels] + self.mlp_channels
+            self.mlp_channels = [self.seg_feat_channels] + self.mlp_channels
+
         seg_head_list = []
         if self.seg_head_in_bn:
             seg_head_list.append(norm_layer(norm_type='batch', nc=self.mlp_channels[0]))
         seg_head_list += [MLP(self.mlp_channels, dropout=self.seg_head_dropout),
-                         nn.Conv1d(self.mlp_channels[-1], self.out_channels, kernel_size=1, bias=True)]
+                         nn.Conv1d(self.mlp_channels[-1], self.num_classes, kernel_size=1, bias=True)]
         self.seg_head = nn.Sequential(*seg_head_list)
+
         if self.pretrained_minkunet_ckpt is not None:
             # print(self.model)
             pretrained_ckpt = torch.load(self.pretrained_minkunet_ckpt)
@@ -71,7 +46,21 @@ class MinkowskiSegmentationModuleLIG(BaseSegmentationModule):
             self.model.load_state_dict(pretrained_ckpt, strict=False)
         # print(self)
 
-    def forward(self, x, pts, feats, rand_shift=None):
+    def forward(self, batch):
+        pts = batch['pts']
+        lats = batch['feats']
+        coords = batch['coords']
+        feats = batch['seg_feats']
+        in_field = ME.TensorField(
+            features=lats,
+            coordinates=coords,
+            quantization_mode=ME.SparseTensorQuantizationMode.UNWEIGHTED_AVERAGE,
+            minkowski_algorithm=ME.MinkowskiAlgorithm.SPEED_OPTIMIZED,
+            # minkowski_algorithm=ME.MinkowskiAlgorithm.MEMORY_EFFICIENT,
+            device=self.device,
+        )
+        x = in_field.sparse()
+
         bs = len(pts)
         if self.mink_sdf_to_seg:
             sparse_lats = self.model(x)
@@ -82,16 +71,9 @@ class MinkowskiSegmentationModuleLIG(BaseSegmentationModule):
         # weights_list = []
         logits_list = []
         for i in range(bs):
-            # pts_min = torch.min(pts[i], dim=0)[0]
-            # print(cur_rand_shift)
-            if rand_shift is not None:
-                cur_rand_shift = rand_shift[i]
-            else:
-                cur_rand_shift=None
-
             lat, xloc, weights = interpolate_sparsegrid_feats(pts[i], sparse_lats.coordinates_at(batch_index=i),
                                                                    sparse_lats.features_at(batch_index=i),
-                                                                   overlap_factor=self.overlap_factor, rand_shift=cur_rand_shift) # (num_pts, 2**dim, c), (num_pts, 2**dim, 3)
+                                                                   overlap_factor=self.overlap_factor) # (num_pts, 2**dim, c), (num_pts, 2**dim, 3)
             if self.interpolate_grid_feats and self.average_xlocs:
                 xloc = xloc.mean(axis=1, keepdim=True).repeat(1, lat.shape[1], 1)
             if feats[i] is not None:
@@ -116,59 +98,6 @@ class MinkowskiSegmentationModuleLIG(BaseSegmentationModule):
         # weights = weights.unsqueeze(dim=-1) # (b x num_pts, 2**dim, 1)
         logits = torch.cat(logits_list, dim=0) # (b x num_pts, out_c)
         return logits
-
-    def training_step(self, batch, batch_idx):
-        coords, lats, pts, feats, target = batch['coords'], batch['lats'], batch['pts'], batch['feats'], batch['labels']
-        coords, lats, pts, feats = to_precision((coords, lats, pts, feats), self.trainer.precision)
-        # print(coords.shape, lats.shape, pts.shape, feats.shape)
-        if self.trainer.datamodule.shift_coords:
-            rand_shift = batch['rand_shift']
-        else:
-            rand_shift = None
-        target = torch.cat(target, dim=0).long()
-        in_field = ME.TensorField(
-            features=lats,
-            coordinates=coords,
-            quantization_mode=ME.SparseTensorQuantizationMode.UNWEIGHTED_AVERAGE,
-            minkowski_algorithm=ME.MinkowskiAlgorithm.SPEED_OPTIMIZED,
-            # minkowski_algorithm=ME.MinkowskiAlgorithm.MEMORY_EFFICIENT,
-            device=self.device,
-        )
-        sinput = in_field.sparse()
-        logits = self(sinput, pts, feats, rand_shift)
-        train_loss = self.criterion(logits, target)
-
-        self.log('train_loss', train_loss, sync_dist=True, prog_bar=True, on_step=False, on_epoch=True)
-        preds = logits.argmax(dim=-1)
-        valid_targets = target != -100
-
-        if self.global_step % 10 == 0:
-            torch.cuda.empty_cache()
-
-        return {'loss': train_loss, 'preds': preds[valid_targets], 'target': target[valid_targets]}
-
-    def validation_step(self, batch, batch_idx):
-        coords, lats, pts, feats, target = batch['coords'], batch['lats'], batch['pts'], batch['feats'], batch['labels']
-        coords, lats, pts, feats = to_precision((coords, lats, pts, feats), self.trainer.precision)
-        target = torch.cat(target, dim=0).long()
-        # print('coords', coords.max(dim=0)[0], [p.max(dim=0)[0] for p in pts], [p.min(dim=0)[0] for p in pts], batch['idxs'])
-        in_field = ME.TensorField(
-            features=lats,
-            coordinates=coords,
-            quantization_mode=ME.SparseTensorQuantizationMode.UNWEIGHTED_AVERAGE,
-            minkowski_algorithm=ME.MinkowskiAlgorithm.SPEED_OPTIMIZED,
-            device=self.device,
-        )
-        sinput = in_field.sparse()
-        # print('coords2', sinput.coordinates.max(dim=0)[0])
-        if self.global_step % 10 == 0:
-            torch.cuda.empty_cache()
-        logits = self(sinput, pts, feats)
-        val_loss = self.criterion(logits, target)
-        self.log('val_loss', val_loss, sync_dist=True, prog_bar=True, on_step=False, on_epoch=True)
-        preds = logits.argmax(dim=-1)
-        valid_targets = target != -100
-        return {'loss': val_loss, 'preds': preds[valid_targets], 'target': target[valid_targets]}
 
     def convert_sync_batchnorm(self):
         if self.mink_sdf_to_seg:

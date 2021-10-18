@@ -89,47 +89,36 @@ class BaseSegmentationModule(LightningModule):
 
     def training_step(self, batch, batch_idx):
         logits = self(batch)
+
         target = torch.cat(batch['labels'], dim=0).long()
         train_loss = self.criterion(logits, target)
-
         self.log('train_loss', train_loss, sync_dist=True, prog_bar=True, on_step=False, on_epoch=True)
         preds = logits.argmax(dim=-1)
-        # target = torch.cat(target, dim=0).long()
         valid_targets = target != -100
-
-        if self.global_step % 1 == 0:
-            torch.cuda.empty_cache()
-
-        # print("train_metrics")
-        # print(preds, target)
         self.train_metrics(preds[valid_targets], target[valid_targets])
-        # print("done train_metrics")
         self.log_dict(self.train_metrics, sync_dist=True, prog_bar=False, on_step=False, on_epoch=True)
         self.train_conf_metrics(preds[valid_targets], target[valid_targets])
         self.log_dict(self.train_conf_metrics, sync_dist=True, prog_bar=False, on_step=False, on_epoch=False)
 
+        if self.global_step % 1 == 0:
+            torch.cuda.empty_cache()
+
         return train_loss
-
-    # def training_step_end(self, outputs):
-    #     #update and log
         
-
     def validation_step(self, batch, batch_idx):
         logits = self(batch)
         target = torch.cat(batch['labels'], dim=0).long()
         val_loss = self.criterion(logits, target)
         self.log('val_loss', val_loss, sync_dist=True, prog_bar=True, on_step=False, on_epoch=True)
         preds = logits.argmax(dim=-1)
-        # 
         valid_targets = target != -100
-
-        if self.global_step % 1 == 0:
-            torch.cuda.empty_cache()
-
         self.val_metrics(preds[valid_targets], target[valid_targets])
         self.log_dict(self.val_metrics, sync_dist=True, prog_bar=True, on_step=False, on_epoch=True)
         self.val_conf_metrics(preds[valid_targets], target[valid_targets])
         self.log_dict(self.val_conf_metrics, sync_dist=True, prog_bar=False, on_step=False, on_epoch=False)
+
+        if self.global_step % 1 == 0:
+            torch.cuda.empty_cache()
 
         return val_loss
 

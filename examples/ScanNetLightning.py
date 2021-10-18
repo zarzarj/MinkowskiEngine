@@ -120,6 +120,11 @@ class ScanNet(LightningDataModule):
                 self.test_files = [file[:-5] for file in self.test_files]
         if self.use_coord_pos_encoding:
             self.embedder, _ = get_embedder(self.coord_pos_encoding_multires)
+        if self.in_memory:
+            self.cache = {}
+        
+
+
     
     def train_dataloader(self):
         train_dataloader = DataLoader(self.train_files, collate_fn=self.convert_batch,
@@ -154,7 +159,12 @@ class ScanNet(LightningDataModule):
     def load_scan_files(self, idxs):
         out_dict = {}
         for i in idxs:
-            input_dict = self.load_ply(i)
+            if self.in_memory and i in self.cache:
+                input_dict = self.cache[i]
+            else:
+                input_dict = self.load_ply(i)
+                if self.in_memory:
+                    self.cache[i] = input_dict
             input_dict = self.process_input(input_dict)
             for k, v in input_dict.items():
                 if i == idxs[0]:
@@ -317,4 +327,6 @@ class ScanNet(LightningDataModule):
         parser.add_argument("--permute_points", type=str2bool, nargs='?', const=True, default=True)
         parser.add_argument("--resample_mesh", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument("--max_num_pts", type=int, default=-1)
+
+        parser.add_argument("--in_memory", type=str2bool, nargs='?', const=True, default=False)
         return parent_parser
