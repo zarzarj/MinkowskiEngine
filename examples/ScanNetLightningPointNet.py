@@ -46,15 +46,16 @@ class ScanNetPointNet(LightningDataModule):
         self.labelweights = torch.from_numpy(self.train_dataset.labelweights)
 
     def setup(self, stage: Optional[str] = None):
-        with open(os.path.join(self.data_dir, 'splits', 'scannetv2_train.txt'), 'r') as f:
-            self.train_files = f.readlines()
-            self.train_files = [file[:-5] for file in self.train_files]
-        if self.use_whole_scene:
-            self.train_dataset = ScannetDatasetWholeScene(phase="train", scene_list=self.train_files, **self.kwargs)
-        else:
-            self.train_dataset = ScannetDataset(phase="train", scene_list=self.train_files, **self.kwargs)
-        # self.labelweights = self.train_dataset.labelweights
-        # self.train_dataset.generate_chunks()
+        if stage == 'fit':
+            with open(os.path.join(self.data_dir, 'splits', 'scannetv2_train.txt'), 'r') as f:
+                self.train_files = f.readlines()
+                self.train_files = [file[:-5] for file in self.train_files]
+            if self.use_whole_scene:
+                self.train_dataset = ScannetDatasetWholeScene(phase="train", scene_list=self.train_files, **self.kwargs)
+            else:
+                self.train_dataset = ScannetDataset(phase="train", scene_list=self.train_files, **self.kwargs)
+            # self.labelweights = self.train_dataset.labelweights
+            # self.train_dataset.generate_chunks()
         with open(os.path.join(self.data_dir, 'splits', 'scannetv2_val.txt'), 'r') as f:
             self.val_files = f.readlines()
             self.val_files = [file[:-5] for file in self.val_files]
@@ -204,11 +205,14 @@ class ScannetDatasetWholeScene():
             implicit_features = scene_data[:, -32:]
             point_set = np.concatenate([point_set, implicit_features], axis=1)
 
-        if self.random_feats:
-            point_set[:,3:] = np.random.rand(point_set.shape[0], point_set.shape[1]-3)
+        if self.phase == "train" and self.augment_points:
+            point_set = self._augment(point_set)
 
         sample_weight = self.labelweights[label]
         sample_weight *= mask
+
+        if self.random_feats:
+            point_set[:,3:] = np.random.rand(point_set.shape[0], point_set.shape[1]-3)
 
         fetch_time = time.time() - start
 
@@ -216,6 +220,111 @@ class ScannetDatasetWholeScene():
 
     def __len__(self):
         return len(self.scene_points_list)
+
+    def _augment(self, point_set):
+        # translate the chunk center to the origin
+        center = np.mean(point_set[:, :3], axis=0)
+        coords = point_set[:, :3] - center
+
+        p = np.random.choice(np.arange(0.01, 1.01, 0.01), size=1)[0]
+        if p < 1 / 8:
+            # random translation
+            coords = self._translate(coords)
+        elif p >= 1 / 8 and p < 2 / 8:
+            # random rotation
+            coords = self._rotate(coords)
+        elif p >= 2 / 8 and p < 3 / 8:
+            # random scaling
+            coords = self._scale(coords)
+        elif p >= 3 / 8 and p < 4 / 8:
+            # random translation
+            coords = self._translate(coords)
+            # random rotation
+            coords = self._rotate(coords)
+        elif p >= 4 / 8 and p < 5 / 8:
+            # random translation
+            coords = self._translate(coords)
+            # random scaling
+            coords = self._scale(coords)
+        elif p >= 5 / 8 and p < 6 / 8:
+            # random rotation
+            coords = self._rotate(coords)
+            # random scaling
+            coords = self._scale(coords)
+        elif p >= 6 / 8 and p < 7 / 8:
+            # random translation
+            coords = self._translate(coords)
+            # random rotation
+            coords = self._rotate(coords)
+            # random scaling
+            coords = self._scale(coords)
+        else:
+            # no augmentation
+            pass
+
+        # translate the chunk center back to the original center
+        coords += center
+        point_set[:, :3] = coords
+
+        return point_set
+
+    def _translate(self, point_set):
+        # translation factors
+        x_factor = np.random.choice(np.arange(-0.5, 0.501, 0.001), size=1)[0]
+        y_factor = np.random.choice(np.arange(-0.5, 0.501, 0.001), size=1)[0]
+        z_factor = np.random.choice(np.arange(-0.5, 0.501, 0.001), size=1)[0]
+
+        coords = point_set[:, :3]
+        coords += [x_factor, y_factor, z_factor]
+        point_set[:, :3] = coords
+
+        return point_set
+
+    def _rotate(self, point_set):
+        coords = point_set[:, :3]
+
+        # x rotation matrix
+        theta = np.random.choice(np.arange(-5, 5.001, 0.001), size=1)[0] * 3.14 / 180 # in radians
+        Rx = np.array(
+            [[1, 0, 0],
+             [0, np.cos(theta), -np.sin(theta)],
+             [0, np.sin(theta), np.cos(theta)]]
+        )
+
+        # y rotation matrix
+        theta = np.random.choice(np.arange(-5, 5.001, 0.001), size=1)[0] * 3.14 / 180 # in radians
+        Ry = np.array(
+            [[np.cos(theta), 0, np.sin(theta)],
+             [0, 1, 0],
+             [-np.sin(theta), 0, np.cos(theta)]]
+        )
+
+        # z rotation matrix
+        theta = np.random.choice(np.arange(-5, 5.001, 0.001), size=1)[0] * 3.14 / 180 # in radians
+        Rz = np.array(
+            [[np.cos(theta), -np.sin(theta), 0],
+             [np.sin(theta), np.cos(theta), 0],
+             [0, 0, 1]]
+        )
+
+        # rotate
+        R = np.matmul(np.matmul(Rz, Ry), Rx)
+        coords = np.matmul(R, coords.T).T
+
+        # dump
+        point_set[:, :3] = coords
+
+        return point_set
+
+    def _scale(self, point_set):
+        # scaling factors
+        factor = np.random.choice(np.arange(0.95, 1.051, 0.001), size=1)[0]
+
+        coords = point_set[:, :3]
+        coords *= [factor, factor, factor]
+        point_set[:, :3] = coords
+
+        return point_set
 
 class ScannetDataset():
     def __init__(self, **kwargs):

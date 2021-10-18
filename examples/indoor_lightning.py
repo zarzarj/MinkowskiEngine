@@ -117,7 +117,7 @@ if __name__ == "__main__":
                                             )
 
     # callbacks = []
-    lightning_root_dir = os.path.join('logs', main_args.exp_name, main_args.run_mode)
+    lightning_root_dir = os.path.join('logs', main_args.exp_name, 'train')
     loggers = [TensorBoardLogger(save_dir=lightning_root_dir, name='lightning_logs')]
     os.makedirs(lightning_root_dir, exist_ok=True)
     if main_args.use_wandb:
