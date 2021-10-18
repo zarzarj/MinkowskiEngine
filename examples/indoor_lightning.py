@@ -39,6 +39,7 @@ def plot_confusion_matrix(trainer, pl_module, confusion_metric, plot_title):
         elif isinstance(logger, WandbLogger):
             # print('wandb_log')
             logger.experiment.log({plot_title: [wandb.Image(im)]})
+
     # print(pl_module.current_epoch)
 
     plt.close()

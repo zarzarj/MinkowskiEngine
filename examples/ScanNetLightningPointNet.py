@@ -28,7 +28,6 @@ class ChunkGeneratorCallback(Callback):
 class ScanNetPointNet(LightningDataModule):
     def __init__(self, **kwargs):
         super().__init__()
-        self.save_hyperparameters()
         for name, value in kwargs.items():
             if name != "self":
                 setattr(self, name, value)  

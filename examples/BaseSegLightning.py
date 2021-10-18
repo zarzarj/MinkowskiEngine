@@ -139,22 +139,32 @@ class BaseSegmentationModule(LightningModule):
         
 
     def configure_optimizers(self):
+        if self.split_wd:
+            decay, no_decay = [], []
+            for name, param in self.named_parameters():
+                # print(name)
+                if not param.requires_grad: continue # frozen weights                 
+                if len(param.shape) == 1 or name.endswith(".bias") or ".bn" in name: no_decay.append(param)
+                else: decay.append(param)
+            params = [{'params': no_decay, 'weight_decay': 0.}, {'params': decay, 'weight_decay': self.weight_decay}]
+        else:
+            params = self.parameters()
         if self.optimizer == 'SGD':
             optimizer = SGD(
-                    self.parameters(),
+                    params,
                     lr=self.lr,
                     momentum=self.sgd_momentum,
                     dampening=self.sgd_dampening,
                     weight_decay=self.weight_decay)
         elif self.optimizer == 'Adam':
             optimizer = Adam(
-                    self.parameters(),
+                    params,
                     lr=self.lr,
                     betas=(self.adam_beta1, self.adam_beta2),
                     weight_decay=self.weight_decay)
         elif self.optimizer == 'AdamW':
             optimizer = AdamW(
-                    self.parameters(),
+                    params,
                     lr=self.lr,
                     betas=(self.adam_beta1, self.adam_beta2),
                     weight_decay=self.weight_decay)
@@ -217,4 +227,6 @@ class BaseSegmentationModule(LightningModule):
         parser.add_argument('--poly_power', type=float, default=0.9)
         parser.add_argument('--exp_gamma', type=float, default=0.95)
         parser.add_argument('--exp_step_size', type=float, default=445)
+
+        parser.add_argument("--split_wd", type=str2bool, nargs='?', const=True, default=False)
         return parent_parser
