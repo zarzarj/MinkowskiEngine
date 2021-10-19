@@ -165,10 +165,10 @@ class ScannetDatasetWholeScene():
                     if len(cur_point_set) == 0:
                         continue
 
-                    choice = np.random.choice(len(cur_point_set), self.npoints, replace=True)
-                    point_set = cur_point_set[choice,:] # Nx3
-                    # semantic_seg = cur_semantic_seg[choice] # N
-                    mask = mask[choice]
+                    if self.npoints > 0:
+                        choice = np.random.choice(len(cur_point_set), self.npoints, replace=True)
+                        point_set = cur_point_set[choice,:] # Nx3
+                        mask = mask[choice]
                     self.scene_points_list.append(point_set)
                     self.mask_list.append(mask)
 
