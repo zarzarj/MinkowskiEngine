@@ -75,14 +75,8 @@ class ImplicitSegmentationModule(BaseSegmentationModule):
                 if in_dict['rand_shift'][i] is not None:
                     cur_coords -= in_dict['rand_shift'][i]
 
-                # print(seg_lats.shape, in_dict['pts'][i].shape)
-                if self.interpolate_LIG:
-                    lat, xloc, weights = interpolate_sparsegrid_feats(in_dict['pts'][i], cur_coords.long(), cur_lats,
+                lat, xloc, weights = interpolate_sparsegrid_feats(in_dict['pts'][i], cur_coords.long(), cur_lats,
                                                                       overlap_factor=self.overlap_factor) # (num_pts, 2**dim, c), (num_pts, 2**dim, 3)
-                else:
-                    lat, xloc, weights = interpolate_sparsegrid_feats(in_dict['pts'][i], cur_coords.long(), cur_lats,
-                                                                      overlap_factor=1, part_size=self.voxel_size,
-                                                                      xmin=self.voxel_size*1.1) # (num_pts, 2**dim, c), (num_pts, 2**dim, 3)
                 # print(xloc.max())
                 if self.interpolate_grid_feats and self.average_xlocs:
                     xloc = xloc.mean(axis=1, keepdim=True).repeat(1, lat.shape[1], 1)
@@ -92,8 +86,6 @@ class ImplicitSegmentationModule(BaseSegmentationModule):
                     seg_occ_in = torch.cat([lat, xloc], dim=-1)
                 weights = weights.unsqueeze(dim=-1)
                 logits = seg_occ_in.transpose(1,2)
-
-                # print(logits.shape, weights.shape)
 
                 if self.interpolate_grid_feats:
                     logits = torch.bmm(logits, weights) # (num_pts, c + 3, 1)

@@ -109,11 +109,11 @@ class ScanNet(LightningDataModule):
         if stage == 'fit' or stage =='validate':
             with open(os.path.join(self.data_dir, 'splits', 'scannetv2_train.txt'), 'r') as f:
                 self.train_files = f.readlines()
-                self.train_files = [file[:-5] for file in self.train_files]
+                self.train_files = [file[:-5] for file in self.train_files][:10]
             # print(self.train_files)
             with open(os.path.join(self.data_dir, 'splits', 'scannetv2_val.txt'), 'r') as f:
                 self.val_files = f.readlines()
-                self.val_files = [file[:-5] for file in self.val_files]
+                self.val_files = [file[:-5] for file in self.val_files][:10]
         else:
             with open(os.path.join(self.data_dir, 'splits', 'scannetv2_test.txt'), 'r') as f:
                 self.test_files = f.readlines()
@@ -122,10 +122,7 @@ class ScanNet(LightningDataModule):
             self.embedder, _ = get_embedder(self.coord_pos_encoding_multires)
         if self.in_memory:
             self.cache = {}
-        
 
-
-    
     def train_dataloader(self):
         train_dataloader = DataLoader(self.train_files, collate_fn=self.convert_batch,
                           batch_size=self.batch_size, shuffle=True,
@@ -158,13 +155,16 @@ class ScanNet(LightningDataModule):
 
     def load_scan_files(self, idxs):
         out_dict = {}
+        
         for i in idxs:
             if self.in_memory and i in self.cache:
-                input_dict = self.cache[i]
+                input_dict = copy.deepcopy(self.cache[i])
             else:
                 input_dict = self.load_ply(i)
                 if self.in_memory:
-                    self.cache[i] = input_dict
+                    # print(i, i in self.cache)
+                    self.cache[i] = copy.deepcopy(input_dict)
+                    # print(self.cache.keys())
             input_dict = self.process_input(input_dict)
             for k, v in input_dict.items():
                 if i == idxs[0]:

@@ -740,6 +740,7 @@ class DGCNN_semseg_NoCoords(LightningModule):
         
 
     def forward(self, batch):
+        print(batch['coords'].shape, batch['feats'].shape)
         x = torch.cat([batch['coords'].transpose(1,2), batch['feats']], axis=1)
         batch_size = x.size(0)
         num_points = x.size(2)
@@ -777,7 +778,7 @@ class DGCNN_semseg_NoCoords(LightningModule):
         
     @staticmethod
     def add_argparse_args(parent_parser):
-        parser = parent_parser.add_argument_group("DGCNN_semseg")
+        parser = parent_parser.add_argument_group("DGCNN_semseg_NoCoords")
         parser = parent_parser.add_argument('--emb_dims', default=1024, type=int)
         parser = parent_parser.add_argument('--k', default=20, type=int)
         parser = parent_parser.add_argument('--dropout', default=0.5, type=float, help='ratio of dropout')
