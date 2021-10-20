@@ -85,6 +85,7 @@ class MainArgs():
         parser.add_argument("--pl_datamodule", type=str, default='examples.ScanNetLightningLIG.ScanNetLIG')
         parser.add_argument("--backbone", type=str, default='examples.minkunet.MinkUNet34C')
         parser.add_argument("--use_wandb", type=str2bool, nargs='?', const=True, default=True)
+        parser.add_argument("--log_conf_matrix", type=str2bool, nargs='?', const=True, default=False)
         # parser.add_argument("--use_tb", type=str2bool, nargs='?', const=True, default=False)
         return parent_parser
 
@@ -135,7 +136,8 @@ if __name__ == "__main__":
 
 
     callbacks = pl_datamodule.callbacks()
-    callbacks.append(ConfusionMatrixPlotCallback())
+    if main_args.log_conf_matrix:
+        callbacks.append(ConfusionMatrixPlotCallback())
     callbacks.append(ModelCheckpoint(monitor='val_miou', mode = 'max', save_top_k=1,
                                     dirpath=os.path.join(lightning_root_dir, loggers[0].name, "version_"+str(loggers[0].version), 'checkpoints')))
     callbacks.append(LearningRateMonitor(logging_interval='step'))
