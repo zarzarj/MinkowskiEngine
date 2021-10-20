@@ -109,11 +109,11 @@ class ScanNet(LightningDataModule):
         if stage == 'fit' or stage =='validate':
             with open(os.path.join(self.data_dir, 'splits', 'scannetv2_train.txt'), 'r') as f:
                 self.train_files = f.readlines()
-                self.train_files = [file[:-5] for file in self.train_files][:10]
+                self.train_files = [file[:-5] for file in self.train_files]
             # print(self.train_files)
             with open(os.path.join(self.data_dir, 'splits', 'scannetv2_val.txt'), 'r') as f:
                 self.val_files = f.readlines()
-                self.val_files = [file[:-5] for file in self.val_files][:10]
+                self.val_files = [file[:-5] for file in self.val_files]
         else:
             with open(os.path.join(self.data_dir, 'splits', 'scannetv2_test.txt'), 'r') as f:
                 self.test_files = f.readlines()

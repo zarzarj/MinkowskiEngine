@@ -36,9 +36,9 @@ def plot_confusion_matrix(trainer, pl_module, confusion_metric, plot_title):
         if isinstance(logger, TensorBoardLogger):
             # print('tb_log')
             logger.experiment.add_image(plot_title, im, global_step=trainer.current_epoch)
-        elif isinstance(logger, WandbLogger):
-            # print('wandb_log')
-            logger.experiment.log({plot_title: [wandb.Image(im)]})
+        # elif isinstance(logger, WandbLogger):
+        #     # print('wandb_log')
+        #     logger.experiment.log({plot_title: [wandb.Image(im)]})
 
     # print(pl_module.current_epoch)
 
