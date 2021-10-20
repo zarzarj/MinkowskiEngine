@@ -740,7 +740,7 @@ class DGCNN_semseg_NoCoords(LightningModule):
         
 
     def forward(self, batch):
-        print(batch['coords'].shape, batch['feats'].shape)
+        # print(batch['coords'].shape, batch['feats'].shape)
         x = torch.cat([batch['coords'].transpose(1,2), batch['feats']], axis=1)
         batch_size = x.size(0)
         num_points = x.size(2)
