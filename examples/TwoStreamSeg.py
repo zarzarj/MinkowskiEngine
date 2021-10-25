@@ -68,7 +68,7 @@ class TwoStreamSegmentationModule(BaseSegmentationModule):
         return logits
 
     def convert_sync_batchnorm(self):
-        self.backbone.convert_sync_batchnorm()
+        pass
 
     @staticmethod
     def add_argparse_args(parent_parser):
