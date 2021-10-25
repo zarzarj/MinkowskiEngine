@@ -75,12 +75,15 @@ class ScanNetLIG(ScanNet):
         coords_batch, lats_batch = sparse_collate(input_dict['coords'],
                                                             input_dict['lats'],
                                                             dtype=torch.float32)
+        _, _, labels_batch = sparse_collate(input_dict['pts'], input_dict['pts'],
+                                                            input_dict['labels'],
+                                                            dtype=torch.float32)
         # print("batched: ", coords_batch.max(dim=0)[0], coords_batch.min(dim=0)[0])
         out_dict = {"coords": coords_batch,
                     "feats": lats_batch,
                     "seg_feats": input_dict['feats'],
                     "pts": input_dict['pts'],
-                    "labels": input_dict['labels'],
+                    "labels": labels_batch,
                     "idxs": idxs,
                     "rand_shift": input_dict['rand_shift'],
                     }
