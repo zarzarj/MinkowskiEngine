@@ -142,12 +142,12 @@ class ScanNet(LightningDataModule):
 
     def convert_batch(self, idxs):
         input_dict = self.load_scan_files(idxs)
-        coords_batch, feats_batch = sparse_collate(input_dict['coords'], input_dict['feats'],
+        coords_batch, feats_batch, labels_batch = sparse_collate(input_dict['coords'], input_dict['feats'], input_dict['labels'],
                                                                           dtype=torch.float32)
         return {"coords": coords_batch,
                 "feats": feats_batch,
                 "seg_feats": input_dict['seg_feats'],
-                "labels": input_dict['labels'],
+                "labels": labels_batch.long(),
                 "idxs": idxs,
                 "pts": input_dict['pts'],
                 "rand_shift": input_dict['rand_shift'],
@@ -199,20 +199,19 @@ class ScanNet(LightningDataModule):
             face_pts = pts[faces]
             bary_pts = torch.rand((faces.shape[0], 2))
             bary_pts[bary_pts.sum(axis=1) > 1] /= 2
-            resampled_pts = face_pts[:, 0, :] +                                        \
+            pts = face_pts[:, 0, :] +                                        \
                             (face_pts[:, 1, :] - face_pts[:, 0, :]) * bary_pts[:, 0].unsqueeze(1) + \
                             (face_pts[:, 2, :] - face_pts[:, 0, :]) * bary_pts[:, 1].unsqueeze(1)
             face_colors = colors[faces].float()
-            resampled_colors = face_colors[:, 0, :] +                                        \
+            colors = face_colors[:, 0, :] +                                        \
                               (face_colors[:, 1, :] - face_colors[:, 0, :]) * bary_pts[:,0].unsqueeze(1) + \
                               (face_colors[:, 2, :] - face_colors[:, 0, :]) * bary_pts[:,1].unsqueeze(1)
-            face_labels = labels[faces]
-            valid_face_labels = torch.all(face_labels == face_labels[:,0].unsqueeze(1), axis=1)
-            resampled_labels = face_labels[:, 0]
-
-            pts = resampled_pts[valid_face_labels]
-            colors = resampled_colors[valid_face_labels]
-            labels = resampled_labels[valid_face_labels]
+            labels = labels[faces, 0]
+            if self.keep_same_labels:
+                valid_face_labels = torch.all(face_labels == face_labels[:,0].unsqueeze(1), axis=1)
+                pts = pts[valid_face_labels]
+                colors = colors[valid_face_labels]
+                labels = labels[valid_face_labels]
             # print("resampling mesh")
         return pts, colors, labels
 
@@ -329,4 +328,5 @@ class ScanNet(LightningDataModule):
         parser.add_argument("--max_num_pts", type=int, default=-1)
 
         parser.add_argument("--in_memory", type=str2bool, nargs='?', const=True, default=False)
+        parser.add_argument("--keep_same_labels", type=str2bool, nargs='?', const=True, default=True)
         return parent_parser

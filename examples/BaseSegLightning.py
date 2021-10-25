@@ -56,7 +56,7 @@ def to_precision(inputs, precision):
     return inputs
 
 class BaseSegmentationModule(LightningModule):
-    def __init__(self, num_classes, overlap_factor, voxel_size, **kwargs):
+    def __init__(self, **kwargs):
         super().__init__()
         self.save_hyperparameters(kwargs)
         for name, value in kwargs.items():
@@ -65,9 +65,9 @@ class BaseSegmentationModule(LightningModule):
                     setattr(self, name, value)
                 except:
                     print(name, value)
-        self.num_classes = num_classes
-        self.overlap_factor = overlap_factor
-        self.voxel_size = voxel_size
+        # self.num_classes = num_classes
+        # self.overlap_factor = overlap_factor
+        # self.voxel_size = voxel_size
         self.criterion = nn.CrossEntropyLoss(weight=self.label_weights, ignore_index=-100)
         metrics = MetricCollection({
                                     'acc': Accuracy(dist_sync_on_step=True),
@@ -90,7 +90,8 @@ class BaseSegmentationModule(LightningModule):
     def training_step(self, batch, batch_idx):
         logits = self(batch)
 
-        target = torch.cat(batch['labels'], dim=0).long()
+        # target = torch.cat(batch['labels'], dim=0).long()
+        target = batch['labels'].long()
         train_loss = self.criterion(logits, target)
         self.log('train_loss', train_loss, sync_dist=True, prog_bar=True, on_step=False, on_epoch=True)
         preds = logits.argmax(dim=-1)
@@ -107,7 +108,8 @@ class BaseSegmentationModule(LightningModule):
         
     def validation_step(self, batch, batch_idx):
         logits = self(batch)
-        target = torch.cat(batch['labels'], dim=0).long()
+        # target = torch.cat(batch['labels'], dim=0).long()
+        target = batch['labels'].long()
         val_loss = self.criterion(logits, target)
         self.log('val_loss', val_loss, sync_dist=True, prog_bar=True, on_step=False, on_epoch=True)
         preds = logits.argmax(dim=-1)

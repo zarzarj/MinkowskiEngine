@@ -81,9 +81,8 @@ class MainArgs():
         parser.add_argument("--exp_name", type=str, default='default')
         parser.add_argument('--run_mode', type=str, default='train', choices=['train','validate','test'])
         parser.add_argument('--seed', type=int, default=42)
-        parser.add_argument("--pl_module", type=str, default='examples.ImplicitSeg.ImplicitSegmentationModule')
-        parser.add_argument("--pl_datamodule", type=str, default='examples.ScanNetLightningLIG.ScanNetLIG')
-        parser.add_argument("--backbone", type=str, default='examples.minkunet.MinkUNet34C')
+        parser.add_argument("--pl_module", type=str, default='examples.TwoStreamSeg.TwoStreamSegmentationModule')
+        parser.add_argument("--pl_datamodule", type=str, default='examples.ScanNetLightningPrecomputed.ScanNetPrecomputed')
         parser.add_argument("--use_wandb", type=str2bool, nargs='?', const=True, default=True)
         parser.add_argument("--log_conf_matrix", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument("--save_feats", type=str2bool, nargs='?', const=True, default=False)
@@ -104,21 +103,10 @@ if __name__ == "__main__":
     pl_datamodule = get_obj_from_str(main_args.pl_datamodule)
     pl_datamodule, args, pl_datamodule_args = init_module_from_args(pl_datamodule, args)
 
-    backbone = get_obj_from_str(main_args.backbone)
-    _, args, backbone_args = init_module_from_args(backbone, args)
-
     pl_module = get_obj_from_str(main_args.pl_module)
     pl_module, args, pl_module_args = init_module_from_args(pl_module, args,
-                                            backbone_class=main_args.backbone, backbone_args=backbone_args,
-                                            interpolate_LIG=main_args.pl_datamodule=='examples.ScanNetLightningLIG.ScanNetLIG',
-                                            feat_channels=pl_datamodule.feat_channels,
-                                            seg_feat_channels=pl_datamodule.seg_feat_channels,
-                                            overlap_factor=pl_datamodule.overlap_factor,
-                                            voxel_size=pl_datamodule.voxel_size,
-                                            num_classes=pl_datamodule.num_classes,
-                                            label_weights=pl_datamodule.labelweights,
-                                            save_feats=main_args.save_feats
-                                            )
+                                                            num_classes=pl_datamodule.NUM_LABELS,
+                                                            label_weights=pl_datamodule.labelweights)
 
     # callbacks = []
     lightning_root_dir = os.path.join('logs', main_args.exp_name, 'train')
@@ -126,7 +114,6 @@ if __name__ == "__main__":
     os.makedirs(lightning_root_dir, exist_ok=True)
     if main_args.use_wandb:
         tags = ()
-        tags += (main_args.backbone.split('.')[-1],)
         tags += (main_args.pl_module.split('.')[-1],)
         tags += (main_args.pl_datamodule.split('.')[-1],)
         tags += (main_args.run_mode,)

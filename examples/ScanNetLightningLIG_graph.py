@@ -126,10 +126,11 @@ class ScanNetLIG_graph(ScanNet):
 
     def convert_batch(self, idxs):
         input_dict = self.load_scan_files(idxs)
-        coords_batch, feats_batch = sparse_collate(input_dict['coords'], input_dict['feats'],
+        coords_batch, feats_batch, labels_batch = sparse_collate(input_dict['coords'], input_dict['feats'], input_dict['labels'],
                                                                           dtype=torch.float32)
         merged_adj = collate_adjs(input_dict['adj'])
         update_dict = {"coords": coords_batch,
+                    "labels": labels_batch.long(),
                     "feats": feats_batch,
                     "idxs": idxs,
                     "adj": merged_adj}

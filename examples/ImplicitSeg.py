@@ -59,7 +59,15 @@ class ImplicitSegmentationModule(BaseSegmentationModule):
         # print(in_dict['feats'].shape, in_dict['coords'].shape)
         
         if self.use_backbone:
-            seg_lats = self.backbone(in_dict)
+            # print(self.save_feats)
+            if self.save_feats:
+                # print(in_dict['feats'].shape)
+                seg_lats, feats = self.backbone(in_dict, return_feats=True)
+                # print(feats.shape)
+                torch.save(feats.detach().cpu(), "feats/"+in_dict['scene_id'][0]+str(in_dict['scene_index'][0])+'_feats.pt')
+                torch.save(in_dict['point_idx'], "pt_idx/"+in_dict['scene_id'][0]+str(in_dict['scene_index'][0])+'pt_idx.pt')
+            else:
+                seg_lats = self.backbone(in_dict)
         else:
             seg_lats = in_dict['feats']
         

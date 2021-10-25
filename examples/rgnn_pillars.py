@@ -470,7 +470,7 @@ class PointNetv2_NoCoords(LightningModule):
         self.lin2 = torch.nn.Linear(128, 128)
         self.lin3 = torch.nn.Linear(128, out_channels)
 
-    def forward(self, batch):
+    def forward(self, batch, return_feats=False):
         # batch_0_idx = batch['coords'][:,0] == 0
         # save_pc(batch['coords'][batch_0_idx,1:].cpu().numpy(), batch['feats'][batch_0_idx,:3].cpu().numpy(), 'test_s3dis_fwd.ply')
         # assert(True == False)
@@ -486,9 +486,12 @@ class PointNetv2_NoCoords(LightningModule):
 
         x = F.relu(self.lin1(x))
         x = F.dropout(x, p=0.5, training=self.training)
-        x = self.lin2(x)
-        x = F.dropout(x, p=0.5, training=self.training)
+        out_feats = self.lin2(x)
+
+        x = F.dropout(out_feats, p=0.5, training=self.training)
         x = self.lin3(x)
+        if return_feats:
+            return x, out_feats
         return x
         
     def convert_sync_batchnorm(self):
@@ -739,7 +742,7 @@ class DGCNN_semseg_NoCoords(LightningModule):
         self.conv9 = nn.Conv1d(256, out_channels, kernel_size=1, bias=False)
         
 
-    def forward(self, batch):
+    def forward(self, batch, return_feats=False):
         # print(batch['coords'].shape, batch['feats'].shape)
         x = torch.cat([batch['coords'].transpose(1,2), batch['feats']], axis=1)
         batch_size = x.size(0)
@@ -767,11 +770,14 @@ class DGCNN_semseg_NoCoords(LightningModule):
         x = torch.cat((x, x1, x2, x3), dim=1)   # (batch_size, 1024+64*3, num_points)
 
         x = self.conv7(x)                       # (batch_size, 1024+64*3, num_points) -> (batch_size, 512, num_points)
-        x = self.conv8(x)                       # (batch_size, 512, num_points) -> (batch_size, 256, num_points)
-        x = self.dp1(x)
+        conv8 = self.conv8(x)                       # (batch_size, 512, num_points) -> (batch_size, 256, num_points)
+        x = self.dp1(conv8)
         x = self.conv9(x)                       # (batch_size, 256, num_points) -> (batch_size, 13, num_points)
         # print(x.shape)
-        return x.transpose(1,2).contiguous().reshape(-1, self.out_channels)
+        if return_feats:
+            return x.transpose(1,2).contiguous().reshape(-1, self.out_channels), conv8[0].transpose(0,1)
+        else:
+            return x.transpose(1,2).contiguous().reshape(-1, self.out_channels)
 
     def convert_sync_batchnorm(self):
         return
