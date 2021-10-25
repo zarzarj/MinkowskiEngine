@@ -16,7 +16,7 @@ from plyfile import PlyElement, PlyData
 # import examples.transforms as t
 from examples.str2bool import str2bool
 from examples.utils import interpolate_grid_feats, get_embedder, gather_nd, sparse_collate
-from examples.DeepGCN_nopyg.gcn_lib.dense.torch_edge import dense_knn_matrix
+# from examples.DeepGCN_nopyg.gcn_lib.dense.torch_edge import dense_knn_matrix
 # import MinkowskiEngine as ME
 
 
