@@ -104,7 +104,7 @@ class RevGNN_Rooms(LightningModule):
                               )
         # print(self)
 
-    def forward(self, batch) -> Tensor:
+    def forward(self, batch, return_feats=False) -> Tensor:
         # print(coords, coords.max(), coords.min())
         # coords = batch['coords']
         x = batch['feats']
@@ -122,6 +122,8 @@ class RevGNN_Rooms(LightningModule):
             x = self.forward_single(x, adj, i)
         # x = x.unsqueeze(-1)
         # print(x.shape, coords.shape)
+        if return_feats:
+            return self.mlp(x.unsqueeze(-1)).squeeze(-1), x
         return self.mlp(x.unsqueeze(-1)).squeeze(-1)
 
     def forward_single(self, x: Tensor, adj, cur_layer: int):

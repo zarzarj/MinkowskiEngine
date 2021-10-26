@@ -83,6 +83,8 @@ class MainArgs():
         parser.add_argument('--seed', type=int, default=42)
         parser.add_argument("--pl_module", type=str, default='examples.TwoStreamSeg.TwoStreamSegmentationModule')
         parser.add_argument("--pl_datamodule", type=str, default='examples.ScanNetLightningPrecomputed.ScanNetPrecomputed')
+        parser.add_argument("--color_backbone", type=str, default=None)
+        parser.add_argument("--structure_backbone", type=str, default=None)
         parser.add_argument("--use_wandb", type=str2bool, nargs='?', const=True, default=True)
         parser.add_argument("--log_conf_matrix", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument("--save_feats", type=str2bool, nargs='?', const=True, default=False)
@@ -103,8 +105,24 @@ if __name__ == "__main__":
     pl_datamodule = get_obj_from_str(main_args.pl_datamodule)
     pl_datamodule, args, pl_datamodule_args = init_module_from_args(pl_datamodule, args)
 
+    if main_args.color_backbone is not None:
+        color_backbone = get_obj_from_str(main_args.color_backbone)
+        _, args, color_backbone_args = init_module_from_args(color_backbone, args)
+    else:
+        color_backbone_args = None
+
+    if main_args.structure_backbone is not None:
+        structure_backbone = get_obj_from_str(main_args.structure_backbone)
+        _, args, structure_backbone_args = init_module_from_args(structure_backbone, args)
+    else:
+        structure_backbone_args = None
+
     pl_module = get_obj_from_str(main_args.pl_module)
     pl_module, args, pl_module_args = init_module_from_args(pl_module, args,
+                                                            color_backbone_class=main_args.color_backbone,
+                                                            color_backbone_args=color_backbone_args,
+                                                            structure_backbone_class=main_args.structure_backbone,
+                                                            structure_backbone_args=structure_backbone_args,
                                                             feat_channels=pl_datamodule.feat_channels,
                                                             num_classes=pl_datamodule.NUM_LABELS,
                                                             label_weights=pl_datamodule.labelweights)

@@ -9,6 +9,7 @@ import numpy as np
 from examples.basic_blocks import MLP, norm_layer
 
 import importlib
+import argparse
 
 def get_obj_from_str(string):
     # From https://github.com/CompVis/taming-transformers
@@ -19,12 +20,14 @@ class TwoStreamSegmentationModule(BaseSegmentationModule):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         if self.color_backbone_class is not None:
-            self.color_backbone = get_obj_from_str(self.color_backbone_class)(**kwargs,
+            self.color_backbone = get_obj_from_str(self.color_backbone_class)
+            self.color_backbone = self.color_backbone(**self.color_backbone_args,
                                             in_channels=self.feat_channels,
                                             out_channels=self.num_classes)
         if self.structure_backbone_class is not None:
             # print(self.feat_channels)
-            self.structure_backbone = get_obj_from_str(self.structure_backbone_class)(**kwargs,
+            self.structure_backbone = get_obj_from_str(self.structure_backbone_class)
+            self.structure_backbone = self.structure_backbone(**self.structure_backbone_args,
                                             in_channels=self.feat_channels,
                                             out_channels=self.num_classes)
 
@@ -80,9 +83,6 @@ class TwoStreamSegmentationModule(BaseSegmentationModule):
     def add_argparse_args(parent_parser):
         parent_parser = BaseSegmentationModule.add_argparse_args(parent_parser)
         parser = parent_parser.add_argument_group("ImplicitSegmentationModule")
-        parser.add_argument("--color_backbone_class", type=str, default=None)
-        parser.add_argument("--structure_backbone_class", type=str, default=None)
-
         parser.add_argument("--seg_head_in_bn", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument('--seg_head_dropout', type=float, default=0.3)
         parser.add_argument("--mlp_channels", type=str, default='512,256,128,64')
