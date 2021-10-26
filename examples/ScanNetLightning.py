@@ -329,4 +329,5 @@ class ScanNet(LightningDataModule):
 
         parser.add_argument("--in_memory", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument("--keep_same_labels", type=str2bool, nargs='?', const=True, default=True)
+        parser.add_argument("--rand_feats", type=str2bool, nargs='?', const=True, default=False)
         return parent_parser
