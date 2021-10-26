@@ -206,12 +206,13 @@ class ScanNet(LightningDataModule):
             colors = face_colors[:, 0, :] +                                        \
                               (face_colors[:, 1, :] - face_colors[:, 0, :]) * bary_pts[:,0].unsqueeze(1) + \
                               (face_colors[:, 2, :] - face_colors[:, 0, :]) * bary_pts[:,1].unsqueeze(1)
-            labels = labels[faces, 0]
+            labels = labels[faces]
             if self.keep_same_labels:
-                valid_face_labels = torch.all(face_labels == face_labels[:,0].unsqueeze(1), axis=1)
+                valid_face_labels = torch.all(labels == labels[:,0].unsqueeze(1), axis=1)
                 pts = pts[valid_face_labels]
                 colors = colors[valid_face_labels]
                 labels = labels[valid_face_labels]
+            labels = labels[:,0].long()
             # print("resampling mesh")
         return pts, colors, labels
 
