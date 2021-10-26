@@ -92,28 +92,30 @@ class ScanNetPrecomputed(LightningDataModule):
                 n_used += 1
         self.label_map[-100] = -100
         self.NUM_LABELS -= len(self.IGNORE_LABELS)
-
+        self.feat_channels = 3 * int(self.use_colors) + 3 * int(self.use_normals)
         self.labelweights = None
-
         self.cache = {}
 
 
-    # def prepare_data(self):
-    #     if self.load_graph:
-    #         all_scans = glob.glob(os.path.join(self.scans_dir, '*')) + glob.glob(os.path.join(self.scans_test_dir, '*'))
-    #         os.makedirs(os.path.join(self.data_dir, 'adjs_dense'), exist_ok=True)
-    #         for scan in tqdm(all_scans):
-    #             scene_name = scan.split('/')[-1]
-    #             adj_file = os.path.join(self.data_dir, 'adjs_dense', scene_name + '_adj.pt')
-    #             if not os.path.exists(adj_file):
-    #                 scan_file = os.path.join(scan, scene_name + '_vh_clean_2.ply')
-    #                 with open(scan_file, 'rb') as f:
-    #                     plydata = PlyData.read(f)
-    #                 pts = torch.from_numpy(np.stack((plydata['vertex']['x'],
-    #                                        plydata['vertex']['y'],
-    #                                        plydata['vertex']['z'])).T)
-    #                 adj = dense_knn_matrix(x=pts.transpose(0,1).unsqueeze(0).unsqueeze(-1), k=16)
-    #                 torch.save(adj, adj_file)
+    def prepare_data(self):
+        if self.load_graph:
+            import torch_geometric
+            all_scans = glob.glob(os.path.join(self.scans_dir, '*')) + glob.glob(os.path.join(self.scans_test_dir, '*'))
+            os.makedirs(os.path.join(self.data_dir, 'adjs'), exist_ok=True)
+            for scan in tqdm(all_scans):
+                scene_name = scan.split('/')[-1]
+                adj_file = os.path.join(self.data_dir, 'adjs', scene_name + '_adj.pt')
+                if not os.path.exists(adj_file):
+                    scan_file = os.path.join(scan, scene_name + '_vh_clean_2.ply')
+                    with open(scan_file, 'rb') as f:
+                        plydata = PlyData.read(f)
+                    pts = torch.from_numpy(np.stack((plydata['vertex']['x'],
+                                           plydata['vertex']['y'],
+                                           plydata['vertex']['z'])).T)
+                    adj = torch_geometric.nn.pool.knn_graph(x=pts, k=16,
+                                                    loop=False, flow='source_to_target',
+                                                    cosine=False)
+                    torch.save(adj, adj_file)
 
     def setup(self, stage: Optional[str] = None):
         with open(os.path.join(self.data_dir, 'splits', 'scannetv2_train.txt'), 'r') as f:
@@ -146,11 +148,10 @@ class ScanNetPrecomputed(LightningDataModule):
 
     def convert_batch(self, idxs):
         in_dict = self.load_scan_files(idxs)
-        # print(torch.stack(in_dict['color_feats']).shape)
         for k, v in in_dict.items():
-            if np.all([it is not None for it in v]):
+            # print(v)
+            if np.all([isinstance(it, torch.Tensor) for it in v]):
                 in_dict[k] = torch.cat(v, axis=0)
-
         return in_dict
 
 
@@ -163,9 +164,8 @@ class ScanNetPrecomputed(LightningDataModule):
                 in_dict = self.load_sample(scene)
                 if self.in_memory:
                     self.cache[scene] = copy.deepcopy(in_dict)
-
+            in_dict['batch_idx'] = batch_idx
             in_dict = self.process_input(in_dict)
-            in_dict['batch_idx'] = torch.ones(in_dict['pts'].shape[0]) * batch_idx
             for k, v in in_dict.items():
                 if scene == idxs[0]:
                     out_dict[k] = [v]
@@ -203,14 +203,30 @@ class ScanNetPrecomputed(LightningDataModule):
             out_dict['color_feats'] = None
 
         if self.load_graph:
-            out_dict['adj'] = torch.load(os.path.join(self.data_dir, 'adjs_dense', idx + '_adj.pt'))
+            out_dict['adj'] = torch.load(os.path.join(self.data_dir, 'adjs', idx + '_adj.pt'))
 
         return out_dict
 
     def process_input(self, in_dict):
         if self.use_colors:
             in_dict['colors'] /= 255. # normalize the rgb values to [0, 1]
+        in_dict['feats'] = self.get_features(in_dict)
+        in_dict['coords'] = in_dict['pts'] / self.voxel_size
+        in_dict['coords'] = torch.floor(in_dict['coords'])
+        in_dict['coords'] = torch.cat([torch.ones(in_dict['pts'].shape[0], 1)*in_dict['batch_idx'], in_dict['coords']], axis=-1).long()
+        # print(in_dict['coords'].shape, in_dict['feats'].shape)
         return in_dict
+
+    def get_features(self, in_dict):
+        feats = []
+        if self.use_colors:
+            feats.append(in_dict['colors'])
+        if self.use_normals:
+            feats.append(in_dict['normals'])
+        if len(feats) == 0:
+            feats.append(torch.ones((in_dict['pts'].shape[0], 1)))
+        out_feats = torch.cat(feats, dim=-1).float()
+        return out_feats
 
     def callbacks(self):
         return []
@@ -229,9 +245,11 @@ class ScanNetPrecomputed(LightningDataModule):
         parser.add_argument("--structure_feats", type=str, default=None) #"feats_mink"
         parser.add_argument("--color_feats", type=str, default=None) #"feats_pointnet"
 
-        parser.add_argument("--use_colors", type=str2bool, nargs='?', const=True, default=False)
+        parser.add_argument("--use_colors", type=str2bool, nargs='?', const=True, default=True)
         parser.add_argument("--use_normals", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument("--load_graph", type=str2bool, nargs='?', const=True, default=False)
 
         parser.add_argument("--use_orig_pcs", type=str2bool, nargs='?', const=True, default=False)
+
+        parser.add_argument("--voxel_size", type=float, default=0.02)
         return parent_parser

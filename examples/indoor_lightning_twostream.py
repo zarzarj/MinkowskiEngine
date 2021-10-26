@@ -105,6 +105,7 @@ if __name__ == "__main__":
 
     pl_module = get_obj_from_str(main_args.pl_module)
     pl_module, args, pl_module_args = init_module_from_args(pl_module, args,
+                                                            feat_channels=pl_datamodule.feat_channels,
                                                             num_classes=pl_datamodule.NUM_LABELS,
                                                             label_weights=pl_datamodule.labelweights)
 

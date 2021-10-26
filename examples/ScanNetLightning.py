@@ -234,47 +234,47 @@ class ScanNet(LightningDataModule):
         # self.samples[idx] = copy.deepcopy(out_dict)
         return out_dict
 
-    def process_input(self, input_dict):
-        if self.trainer.training and self.max_num_pts > 0 and self.max_num_pts < input_dict['pts'].shape[0]:
-            perm = torch.randperm(input_dict['pts'].shape[0])[:self.max_num_pts]
+    def process_input(self, in_dict):
+        if self.trainer.training and self.max_num_pts > 0 and self.max_num_pts < in_dict['pts'].shape[0]:
+            perm = torch.randperm(in_dict['pts'].shape[0])[:self.max_num_pts]
         else:
-            perm = torch.arange(input_dict['pts'].shape[0])
+            perm = torch.arange(in_dict['pts'].shape[0])
             
         if self.permute_points:
             perm = perm[torch.randperm(perm.shape[0])]
 
 
-        input_dict['pts'] = input_dict['pts'][perm]
-        input_dict['colors'] = input_dict['colors'][perm]
-        input_dict['labels'] = input_dict['labels'][perm]
+        in_dict['pts'] = in_dict['pts'][perm]
+        in_dict['colors'] = in_dict['colors'][perm]
+        in_dict['labels'] = in_dict['labels'][perm]
 
-        input_dict['colors'] = (input_dict['colors'] / 255.) - 0.5
-        input_dict['coords'] = input_dict['pts'] / self.voxel_size
-        input_dict['coords'] = torch.floor(input_dict['coords']).long()
+        in_dict['colors'] = (in_dict['colors'] / 255.) - 0.5
+        in_dict['coords'] = in_dict['pts'] / self.voxel_size
+        in_dict['coords'] = torch.floor(in_dict['coords']).long()
         if self.shift_coords and self.trainer.training:
-            input_dict['rand_shift'] = (torch.rand(3) * 100).type_as(input_dict['coords'])
-            input_dict['coords'] += input_dict['rand_shift']
+            in_dict['rand_shift'] = (torch.rand(3) * 100).type_as(in_dict['coords'])
+            in_dict['coords'] += in_dict['rand_shift']
         else:
-            input_dict['rand_shift'] = None
+            in_dict['rand_shift'] = None
         
-        input_dict['feats'] = self.get_features(input_dict)
-        # print(input_dict['coords'].shape, input_dict['feats'].shape)
-        input_dict['seg_feats'] = None
-        # del input_dict['pts']
-        return input_dict
+        in_dict['feats'] = self.get_features(in_dict)
+        # print(in_dict['coords'].shape, in_dict['feats'].shape)
+        in_dict['seg_feats'] = None
+        # del in_dict['pts']
+        return in_dict
 
-    def get_features(self, input_dict):
+    def get_features(self, in_dict):
         feats = []
         if self.use_colors:
-            feats.append(input_dict['colors'])
+            feats.append(in_dict['colors'])
         if self.use_coords:
-            feats.append(input_dict['pts'])
+            feats.append(in_dict['pts'])
         if self.use_implicit_feats:
-            feats.append(input_dict['implicit_feats'])
+            feats.append(in_dict['implicit_feats'])
         if self.use_coord_pos_encoding:
-            feats.append(self.embedder(input_dict['pts']))
+            feats.append(self.embedder(in_dict['pts']))
         if len(feats) == 0:
-            feats.append(torch.ones((input_dict['pts'].shape[0], 1)))
+            feats.append(torch.ones((in_dict['pts'].shape[0], 1)))
         # for feat in feats:
         #     print(feat.shape)
         out_feats = torch.cat(feats, dim=-1)

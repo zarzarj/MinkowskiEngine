@@ -23,6 +23,7 @@ class TwoStreamSegmentationModule(BaseSegmentationModule):
                                             in_channels=self.feat_channels,
                                             out_channels=self.num_classes)
         if self.structure_backbone_class is not None:
+            # print(self.feat_channels)
             self.structure_backbone = get_obj_from_str(self.structure_backbone_class)(**kwargs,
                                             in_channels=self.feat_channels,
                                             out_channels=self.num_classes)
@@ -60,11 +61,16 @@ class TwoStreamSegmentationModule(BaseSegmentationModule):
         if self.use_structure_feats:
             fused_feats.append(structure_feats)
 
+        # print(fused_feats)
+
         fused_feats = torch.cat(fused_feats, axis=1).unsqueeze(-1)
         # print(fused_feats.shape)
 
         logits = self.seg_head(fused_feats).squeeze(-1)
-
+        if self.color_backbone_class is not None:
+            logits += color_logits
+        if self.structure_backbone_class is not None:
+            logits += structure_logits
         return logits
 
     def convert_sync_batchnorm(self):
@@ -79,8 +85,8 @@ class TwoStreamSegmentationModule(BaseSegmentationModule):
 
         parser.add_argument("--seg_head_in_bn", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument('--seg_head_dropout', type=float, default=0.3)
-        parser.add_argument("--mlp_channels", type=str, default='1,4,8,4')
-        parser.add_argument("--relative_mlp_channels", type=str2bool, nargs='?', const=True, default=True)
+        parser.add_argument("--mlp_channels", type=str, default='512,256,128,64')
+        parser.add_argument("--relative_mlp_channels", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument("--use_color_feats", type=str2bool, nargs='?', const=True, default=True)
         parser.add_argument("--use_structure_feats", type=str2bool, nargs='?', const=True, default=True)
         return parent_parser

@@ -85,7 +85,7 @@ class MinkUNetBase(ResNetBase):
     # To use the model, must call initialize_coords before forward pass.
     # Once data is processed, call clear to reset the model before calling
     # initialize_coords
-    def __init__(self, in_channels=3, out_channels=20, bn_momentum=0.1, D=3):
+    def __init__(self, in_channels=3, out_channels=20, bn_momentum=0.1, D=3, **kwargs):
         self.bn_momentum=bn_momentum
         ResNetBase.__init__(self, in_channels, out_channels, D)
         
@@ -162,7 +162,7 @@ class MinkUNetBase(ResNetBase):
             dimension=D)
         self.relu = ME.MinkowskiReLU(inplace=True)
 
-    def forward(self, in_dict):
+    def forward(self, in_dict, return_feats=False):
         in_field = ME.TensorField(
             features=in_dict['feats'],
             coordinates=in_dict['coords'],
@@ -172,6 +172,7 @@ class MinkUNetBase(ResNetBase):
             # device=self.device,
         )
         # print(in_field)
+        # print(in_dict['feats'].shape)
         x = in_field.sparse()
         out = self.conv0p1s1(x)
         out = self.bn0(out)
@@ -228,8 +229,8 @@ class MinkUNetBase(ResNetBase):
         out = self.relu(out)
 
         out = ME.cat(out, out_p1)
-        out = self.block8(out)
-        out = self.final(out)
+        out_feats = self.block8(out)
+        out = self.final(out_feats)
 
         # if in_dict['rand_shift'] is not None:
         #     coords = []
@@ -240,6 +241,8 @@ class MinkUNetBase(ResNetBase):
         #     coords, feats = out.decomposed_coordinates_and_features
         feats = out.slice(in_field).F
         # feats = torch.cat(feats, axis=0)
+        if return_feats:
+            return feats, out_feats.slice(in_field).F
         return feats
 
     @staticmethod
