@@ -24,15 +24,22 @@ class TwoStreamSegmentationModule(BaseSegmentationModule):
             self.color_backbone = self.color_backbone(**self.color_backbone_args,
                                             in_channels=self.feat_channels,
                                             out_channels=self.num_classes)
+            color_feats = self.color_backbone.hidden_channels
+        else:
+            color_feats = 128
+            
         if self.structure_backbone_class is not None:
             # print(self.feat_channels)
             self.structure_backbone = get_obj_from_str(self.structure_backbone_class)
             self.structure_backbone = self.structure_backbone(**self.structure_backbone_args,
                                             in_channels=self.feat_channels,
                                             out_channels=self.num_classes)
+            structure_feats = self.structure_backbone.hidden_channels
+        else:
+            structure_feats = 96
 
         # seg_feat_channels = self.color_backbone.feat_channels + self.structure_backbone.feat_channels
-        seg_feat_channels = 96 * self.use_structure_feats + 128 * self.use_color_feats
+        seg_feat_channels = structure_feats * self.use_structure_feats + color_feats * self.use_color_feats
 
         self.mlp_channels = [int(i) for i in self.mlp_channels.split(',')]
         if self.relative_mlp_channels:
