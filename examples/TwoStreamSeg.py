@@ -19,12 +19,14 @@ def get_obj_from_str(string):
 class TwoStreamSegmentationModule(BaseSegmentationModule):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+        self.loss_weights = [1]
         if self.color_backbone_class is not None:
             self.color_backbone = get_obj_from_str(self.color_backbone_class)
             self.color_backbone = self.color_backbone(**self.color_backbone_args,
                                             in_channels=self.feat_channels,
                                             out_channels=self.num_classes)
             color_feats = self.color_backbone.hidden_channels
+            self.loss_weights.append(1)
         else:
             color_feats = 128
 
@@ -34,6 +36,7 @@ class TwoStreamSegmentationModule(BaseSegmentationModule):
             self.structure_backbone = self.structure_backbone(**self.structure_backbone_args,
                                             in_channels=self.feat_channels,
                                             out_channels=self.num_classes)
+            self.loss_weights.append(1)
 
 
         # seg_feat_channels = self.color_backbone.feat_channels + self.structure_backbone.feat_channels
@@ -50,6 +53,14 @@ class TwoStreamSegmentationModule(BaseSegmentationModule):
         seg_head_list += [MLP(self.mlp_channels, dropout=self.seg_head_dropout),
                          nn.Conv1d(self.mlp_channels[-1], self.num_classes, kernel_size=1, bias=True)]
         self.seg_head = nn.Sequential(*seg_head_list)
+
+        self.loss_weights = torch.tensor(self.loss_weights, requires_grad=False)
+        self.base_criterion = self.criterion
+        self.criterion = MultiStreamLoss(self.base_criterion, self.loss_weights)
+        if self.gradient_blend_frequency != -1:
+            self.last_val_loss = torch.zeros_like(self.loss_weights)
+            self.current_val_loss = torch.zeros_like(self.loss_weights)
+            self.last_train_loss = torch.zeros_like(self.loss_weights)
         
 
     def forward(self, in_dict):
@@ -69,20 +80,39 @@ class TwoStreamSegmentationModule(BaseSegmentationModule):
         if self.use_structure_feats:
             fused_feats.append(structure_feats)
 
-        # print(fused_feats)
-
         fused_feats = torch.cat(fused_feats, axis=1).unsqueeze(-1)
         # print(fused_feats.shape)
 
-        logits = self.seg_head(fused_feats).squeeze(-1)
+        logits = [self.seg_head(fused_feats).squeeze(-1)]
         if self.color_backbone_class is not None:
-            logits += color_logits
+            logits.append(color_logits)
         if self.structure_backbone_class is not None:
-            logits += structure_logits
-        return logits
+            logits.append(structure_logits)
+        return torch.stack(logits)
 
     def convert_sync_batchnorm(self):
         pass
+
+    def training_epoch_end(self, training_step_outputs):
+        if self.gradient_blend_frequency != -1 and self.trainer.current_epoch % self.gradient_blend_frequency == 0:
+            epoch_losses = torch.tensor([[loss.detach().cpu() for loss in pred['losses']] for pred in training_step_outputs]).mean(axis=0, keepdim=False)
+            delta_G_Nn = self.last_val_loss - self.current_val_loss
+            O_Nn = self.current_val_loss - epoch_losses
+            O_N = self.last_val_loss - self.last_train_loss
+            delta_O_Nn = O_Nn - O_N
+            if self.trainer.current_epoch != 0:
+                self.loss_weights = (delta_G_Nn/(delta_O_Nn**2)).abs()
+                self.loss_weights /= self.loss_weights.sum()
+                # print(self.loss_weights)
+            self.last_train_loss = epoch_losses
+
+
+    def validation_epoch_end(self, validation_step_outputs):
+        if self.gradient_blend_frequency != -1 and self.trainer.current_epoch % self.gradient_blend_frequency == 0:
+            epoch_losses = torch.tensor([[loss.detach().cpu() for loss in pred['losses']] for pred in validation_step_outputs]).mean(axis=0, keepdim=False)
+            self.last_val_loss = self.current_val_loss
+            self.current_val_loss = epoch_losses
+    
 
     @staticmethod
     def add_argparse_args(parent_parser):
@@ -94,5 +124,22 @@ class TwoStreamSegmentationModule(BaseSegmentationModule):
         parser.add_argument("--relative_mlp_channels", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument("--use_color_feats", type=str2bool, nargs='?', const=True, default=True)
         parser.add_argument("--use_structure_feats", type=str2bool, nargs='?', const=True, default=True)
+        parser.add_argument("--gradient_blend_frequency", type=int, default=-1)
         return parent_parser
 
+
+class MultiStreamLoss(torch.nn.Module):
+    def __init__(self, loss_fn, loss_weights):
+        super().__init__()
+        self.loss_fn = loss_fn
+        self.loss_weights = loss_weights
+
+    def forward(self, multi_logits, targets):
+        loss = 0
+        losses = []
+        # print(multi_logits.shape, targets.shape)
+        for i, logits in enumerate(multi_logits):
+            # print(logits.shape, targets.shape)
+            losses.append(self.loss_fn(logits, targets) * self.loss_weights[i])
+            loss += losses[-1]
+        return {"loss":loss, "losses": [l.detach() for l in losses]}

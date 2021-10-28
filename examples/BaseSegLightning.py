@@ -93,8 +93,14 @@ class BaseSegmentationModule(LightningModule):
         # target = torch.cat(batch['labels'], dim=0).long()
         target = batch['labels'].long()
         train_loss = self.criterion(logits, target)
-        self.log('train_loss', train_loss, sync_dist=True, prog_bar=True, on_step=False, on_epoch=True)
+        if type(train_loss) is dict:
+            self.log('train_loss', train_loss['loss'], sync_dist=True, prog_bar=True, on_step=False, on_epoch=True)
+        else:
+            self.log('train_loss', train_loss, sync_dist=True, prog_bar=True, on_step=False, on_epoch=True)
         preds = logits.argmax(dim=-1)
+        if len(preds.shape) > 1:
+            preds = preds[0]
+        # print(preds.shape)
         valid_targets = target != -100
         self.train_metrics(preds[valid_targets], target[valid_targets])
         self.log_dict(self.train_metrics, sync_dist=True, prog_bar=False, on_step=False, on_epoch=True)
@@ -111,8 +117,13 @@ class BaseSegmentationModule(LightningModule):
         # target = torch.cat(batch['labels'], dim=0).long()
         target = batch['labels'].long()
         val_loss = self.criterion(logits, target)
-        self.log('val_loss', val_loss, sync_dist=True, prog_bar=True, on_step=False, on_epoch=True)
+        if type(val_loss) is dict:
+            self.log('val_loss', val_loss['loss'], sync_dist=True, prog_bar=True, on_step=False, on_epoch=True)
+        else:
+            self.log('val_loss', val_loss, sync_dist=True, prog_bar=True, on_step=False, on_epoch=True)
         preds = logits.argmax(dim=-1)
+        if len(preds.shape) > 1:
+            preds = preds[0]
         valid_targets = target != -100
         self.val_metrics(preds[valid_targets], target[valid_targets])
         self.log_dict(self.val_metrics, sync_dist=True, prog_bar=True, on_step=False, on_epoch=True)
