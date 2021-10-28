@@ -34,7 +34,7 @@ class TwoStreamSegmentationModule(BaseSegmentationModule):
             self.structure_backbone = self.structure_backbone(**self.structure_backbone_args,
                                             in_channels=self.feat_channels,
                                             out_channels=self.num_classes)
-            structure_feats = self.structure_backbone.hidden_channels
+            # structure_feats = self.structure_backbone.hidden_channels
         else:
             structure_feats = 96
 
