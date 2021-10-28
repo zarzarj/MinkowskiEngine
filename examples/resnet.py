@@ -29,26 +29,8 @@ import torch
 import torch.nn as nn
 from torch.optim import SGD
 
-try:
-    import open3d as o3d
-except ImportError:
-    raise ImportError("Please install open3d with `pip install open3d`.")
-
 import MinkowskiEngine as ME
 from MinkowskiEngine.modules.resnet_block import BasicBlock, Bottleneck
-
-
-if not os.path.isfile("1.ply"):
-    print('Downloading an example pointcloud...')
-    urlretrieve("https://bit.ly/3c2iLhg", "1.ply")
-
-
-def load_file(file_name):
-    pcd = o3d.io.read_point_cloud(file_name)
-    coords = np.array(pcd.points)
-    colors = np.array(pcd.colors)
-    return coords, colors, pcd
-
 
 class ResNetBase(nn.Module):
     BLOCK = None
@@ -235,48 +217,3 @@ class ResFieldNet50(ResFieldNetBase):
 class ResFieldNet101(ResFieldNetBase):
     BLOCK = Bottleneck
     LAYERS = (3, 4, 23, 3)
-
-
-if __name__ == "__main__":
-    # loss and network
-    voxel_size = 0.02
-    N_labels = 10
-
-    criterion = nn.CrossEntropyLoss()
-    net = ResNet14(in_channels=3, out_channels=N_labels, D=3)
-    print(net)
-
-    # a data loader must return a tuple of coords, features, and labels.
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-    net = net.to(device)
-    optimizer = SGD(net.parameters(), lr=1e-2)
-
-    coords, colors, pcd = load_file("1.ply")
-    coords = torch.from_numpy(coords)
-    # Get new data
-    coordinates = ME.utils.batched_coordinates(
-        [coords / voxel_size, coords / 2 / voxel_size, coords / 4 / voxel_size],
-        dtype=torch.float32,
-    )
-    features = torch.rand((len(coordinates), 3), device=device)
-    for i in range(10):
-        optimizer.zero_grad()
-
-        input = ME.SparseTensor(features, coordinates, device=device)
-        dummy_label = torch.randint(0, N_labels, (3,), device=device)
-
-        # Forward
-        output = net(input)
-
-        # Loss
-        loss = criterion(output.F, dummy_label)
-        print("Iteration: ", i, ", Loss: ", loss.item())
-
-        # Gradient
-        loss.backward()
-        optimizer.step()
-
-    # Saving and loading a network
-    torch.save(net.state_dict(), "test.pth")
-    net.load_state_dict(torch.load("test.pth"))
