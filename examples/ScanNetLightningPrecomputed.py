@@ -213,6 +213,11 @@ class ScanNetPrecomputed(LightningDataModule):
         in_dict['feats'] = self.get_features(in_dict)
         in_dict['coords'] = in_dict['pts'] / self.voxel_size
         in_dict['coords'] = torch.floor(in_dict['coords'])
+        if self.shift_coords and self.trainer.training:
+            in_dict['rand_shift'] = (torch.rand(3) * 100).type_as(in_dict['coords'])
+            in_dict['coords'] += in_dict['rand_shift']
+        # else:
+        #     in_dict['rand_shift'] = None
         in_dict['coords'] = torch.cat([torch.ones(in_dict['pts'].shape[0], 1)*in_dict['batch_idx'], in_dict['coords']], axis=-1).long()
         # print(in_dict['coords'].shape, in_dict['feats'].shape)
         return in_dict
@@ -250,6 +255,7 @@ class ScanNetPrecomputed(LightningDataModule):
         parser.add_argument("--load_graph", type=str2bool, nargs='?', const=True, default=False)
 
         parser.add_argument("--use_orig_pcs", type=str2bool, nargs='?', const=True, default=False)
+        parser.add_argument("--shift_coords", type=str2bool, nargs='?', const=True, default=False)
 
         parser.add_argument("--voxel_size", type=float, default=0.02)
         return parent_parser
