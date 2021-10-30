@@ -295,6 +295,8 @@ class ScanNet(LightningDataModule):
 
         return implicit_feats
 
+    
+
     def callbacks(self):
         return []
 

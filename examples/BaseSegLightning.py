@@ -107,8 +107,8 @@ class BaseSegmentationModule(LightningModule):
         self.train_conf_metrics(preds[valid_targets], target[valid_targets])
         self.log_dict(self.train_conf_metrics, sync_dist=True, prog_bar=False, on_step=False, on_epoch=False)
 
-        if self.global_step % 1 == 0:
-            torch.cuda.empty_cache()
+        # if self.global_step % 1 == 0:
+        #     torch.cuda.empty_cache()
 
         return train_loss
         
@@ -130,8 +130,8 @@ class BaseSegmentationModule(LightningModule):
         self.val_conf_metrics(preds[valid_targets], target[valid_targets])
         self.log_dict(self.val_conf_metrics, sync_dist=True, prog_bar=False, on_step=False, on_epoch=False)
 
-        if self.global_step % 1 == 0:
-            torch.cuda.empty_cache()
+        # if self.global_step % 1 == 0:
+        #     torch.cuda.empty_cache()
 
         return val_loss
 

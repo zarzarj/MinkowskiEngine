@@ -13,7 +13,7 @@ from pytorch_lightning import LightningDataModule
 import numpy as np
 from tqdm import tqdm
 from plyfile import PlyElement, PlyData
-# import examples.transforms as t
+import examples.transforms_dict as t
 from examples.str2bool import str2bool
 from examples.utils import interpolate_grid_feats, get_embedder, gather_nd, sparse_collate
 # from examples.DeepGCN_nopyg.gcn_lib.dense.torch_edge import dense_knn_matrix
@@ -95,6 +95,23 @@ class ScanNetPrecomputed(LightningDataModule):
         self.feat_channels = 3 * int(self.use_colors) + 3 * int(self.use_normals)
         self.labelweights = None
         self.cache = {}
+
+        if self.use_augmentation:
+            if self.load_graph:
+                transformations = []
+            else:
+                transformations = [t.RandomDropout(0.2)]
+            transformations.extend([
+                                      t.ElasticDistortion(0.2, 0.4),
+                                      t.ElasticDistortion(0.8, 1.6),
+                                      t.RandomScaling(0.9, 1.1),
+                                      t.RandomRotation(([-np.pi/6, np.pi/6], [-np.pi/6, np.pi/6], [-np.pi, np.pi])),
+                                      t.RandomHorizontalFlip('z'),
+                                      t.ChromaticAutoContrast(),
+                                      t.ChromaticTranslation(0.1),
+                                      t.ChromaticJitter(0.05),
+                                    ])
+            self.augment = t.Compose(transformations)
 
 
     def prepare_data(self):
@@ -208,18 +225,15 @@ class ScanNetPrecomputed(LightningDataModule):
         return out_dict
 
     def process_input(self, in_dict):
-        if self.use_colors:
-            in_dict['colors'] /= 255. # normalize the rgb values to [0, 1]
-        in_dict['feats'] = self.get_features(in_dict)
+        if self.use_augmentation and self.trainer.training:
+            in_dict = self.augment(in_dict)
         in_dict['coords'] = in_dict['pts'] / self.voxel_size
-        in_dict['coords'] = torch.floor(in_dict['coords'])
+        in_dict['coords'] = torch.floor(in_dict['coords']).long()
         if self.shift_coords and self.trainer.training:
-            in_dict['rand_shift'] = (torch.rand(3) * 100).type_as(in_dict['coords'])
-            in_dict['coords'] += in_dict['rand_shift']
-        # else:
-        #     in_dict['rand_shift'] = None
-        in_dict['coords'] = torch.cat([torch.ones(in_dict['pts'].shape[0], 1)*in_dict['batch_idx'], in_dict['coords']], axis=-1).long()
-        # print(in_dict['coords'].shape, in_dict['feats'].shape)
+            in_dict['coords'] += (torch.rand(3) * 100).type_as(in_dict['coords'])
+        in_dict['coords'] = torch.cat([torch.ones(in_dict['pts'].shape[0], 1).long()*in_dict['batch_idx'], in_dict['coords']], axis=-1)
+        in_dict['colors'] = (in_dict['colors'] / 255.) - 0.5
+        in_dict['feats'] = self.get_features(in_dict)
         return in_dict
 
     def get_features(self, in_dict):
@@ -249,13 +263,15 @@ class ScanNetPrecomputed(LightningDataModule):
 
         parser.add_argument("--structure_feats", type=str, default=None) #"feats_mink"
         parser.add_argument("--color_feats", type=str, default=None) #"feats_pointnet"
-
         parser.add_argument("--use_colors", type=str2bool, nargs='?', const=True, default=True)
         parser.add_argument("--use_normals", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument("--load_graph", type=str2bool, nargs='?', const=True, default=False)
 
         parser.add_argument("--use_orig_pcs", type=str2bool, nargs='?', const=True, default=False)
+
+        parser.add_argument("--use_augmentation", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument("--shift_coords", type=str2bool, nargs='?', const=True, default=False)
+        # parser.add_argument("--elastic_distortion", type=str2bool, nargs='?', const=True, default=False)
 
         parser.add_argument("--voxel_size", type=float, default=0.02)
         return parent_parser
