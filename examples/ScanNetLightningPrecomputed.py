@@ -100,7 +100,7 @@ class ScanNetPrecomputed(LightningDataModule):
             if self.load_graph:
                 transformations = []
             else:
-                transformations = [t.RandomDropout(0.2)]
+                transformations = [t.RandomDropout(0.2, 0.2)]
             # transformations = [t.RandomDropout(0.2, 1.0)]
             transformations.extend([
                                       t.ElasticDistortion(0.2, 0.4),
