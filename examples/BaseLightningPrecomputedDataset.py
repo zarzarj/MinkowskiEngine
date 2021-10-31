@@ -15,7 +15,7 @@ from tqdm import tqdm
 from plyfile import PlyElement, PlyData
 import examples.transforms_dict as t
 from examples.str2bool import str2bool
-from examples.utils import interpolate_grid_feats, get_embedder, gather_nd, sparse_collate
+from examples.utils import interpolate_grid_feats, get_embedder, gather_nd, sparse_collate, save_pc
 
 
 class BasePrecomputed(LightningDataModule):
@@ -82,7 +82,13 @@ class BasePrecomputed(LightningDataModule):
                 if self.in_memory:
                     self.cache[scene] = copy.deepcopy(in_dict)
             in_dict['batch_idx'] = batch_idx
+
             in_dict = self.process_input(in_dict)
+            # print(in_dict['labels'].max(), in_dict['labels'].min(), in_dict['labels'].shape)
+            # labels = [self.valid_class_ids[label] if label != -1 else -1 for label in in_dict['labels'] ]
+            # colors = [self.scannet_color_map[label] for label in labels]
+            # save_pc(in_dict['pts'], colors, 'test_pc.ply')
+            # assert(True==False)
             for k, v in in_dict.items():
                 if scene == idxs[0]:
                     out_dict[k] = [v]
@@ -99,6 +105,7 @@ class BasePrecomputed(LightningDataModule):
         in_dict['coords'] = torch.floor(in_dict['coords']).long()
         if self.shift_coords and self.trainer.training:
             in_dict['coords'] += (torch.rand(3) * 100).type_as(in_dict['coords'])
+            # print(in_dict['coords'])
         in_dict['coords'] = torch.cat([torch.ones(in_dict['pts'].shape[0], 1).long()*in_dict['batch_idx'], in_dict['coords']], axis=-1)
         if 'colors' in in_dict:
             # print(in_dict['colors'].max())

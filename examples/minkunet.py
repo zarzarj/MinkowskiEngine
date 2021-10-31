@@ -167,8 +167,8 @@ class MinkUNetBase(ResNetBase):
             features=in_dict['feats'],
             coordinates=in_dict['coords'],
             quantization_mode=ME.SparseTensorQuantizationMode.UNWEIGHTED_AVERAGE,
-            minkowski_algorithm=ME.MinkowskiAlgorithm.SPEED_OPTIMIZED,
-            # minkowski_algorithm=ME.MinkowskiAlgorithm.MEMORY_EFFICIENT,
+            # minkowski_algorithm=ME.MinkowskiAlgorithm.SPEED_OPTIMIZED,
+            minkowski_algorithm=ME.MinkowskiAlgorithm.MEMORY_EFFICIENT,
             # device=self.device,
         )
         # print(in_field)

@@ -89,6 +89,7 @@ class TwoStreamSegmentationModule(BaseSegmentationModule):
             logits.append(color_logits)
         if self.structure_backbone_class is not None:
             logits.append(structure_logits)
+        # print(logits)
         return torch.stack(logits)
 
     def convert_sync_batchnorm(self):
@@ -144,4 +145,5 @@ class MultiStreamLoss(torch.nn.Module):
             # print(logits.shape, targets.shape)
             losses.append(self.loss_fn(logits, targets) * self.loss_weights[i])
             loss += losses[-1]
+            # print(loss)
         return {"loss":loss, "losses": [l.detach() for l in losses]}

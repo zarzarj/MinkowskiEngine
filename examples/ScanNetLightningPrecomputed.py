@@ -78,6 +78,7 @@ class ScanNetPrecomputed(BasePrecomputed):
             38: (94., 106., 211.),
             39: (82., 84., 163.),
             40: (100., 85., 144.),
+            -1: (255., 0., 0.),
         }
 
         self.NUM_LABELS = 150  # Will be converted to 20 as defined in IGNORE_LABELS.
@@ -87,11 +88,11 @@ class ScanNetPrecomputed(BasePrecomputed):
         n_used = 0
         for l in range(self.NUM_LABELS):
             if l in self.IGNORE_LABELS:
-                self.label_map[l] = -100
+                self.label_map[l] = -1
             else:
                 self.label_map[l] = n_used
                 n_used += 1
-        self.label_map[-100] = -100
+        self.label_map[-1] = -1
         self.NUM_LABELS -= len(self.IGNORE_LABELS)
 
     def prepare_data(self):
@@ -130,7 +131,7 @@ class ScanNetPrecomputed(BasePrecomputed):
         if self.use_orig_pcs:
             scene_data = torch.from_numpy(np.load(os.path.join(self.data_dir, 'scans_processed_full_normals', idx + '.npy')))
             labels = scene_data[:, 9].long()
-            labels[labels == 156] = -100
+            labels[labels == 156] = -1
         else:
             scene_data = torch.from_numpy(np.load(os.path.join(self.data_dir, 'preprocessing', 'scannet_scenes', idx + '.npy')))
             labels = scene_data[:, 10].long()
