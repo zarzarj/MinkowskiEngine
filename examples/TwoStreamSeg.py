@@ -19,7 +19,9 @@ def get_obj_from_str(string):
 class TwoStreamSegmentationModule(BaseSegmentationModule):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.loss_weights = [1]
+        self.loss_weights = []
+        if self.use_fused_feats:
+            self.loss_weights.append(1)
         if self.color_backbone_class is not None:
             self.color_backbone = get_obj_from_str(self.color_backbone_class)
             self.color_backbone = self.color_backbone(**self.color_backbone_args,
@@ -39,20 +41,20 @@ class TwoStreamSegmentationModule(BaseSegmentationModule):
             self.loss_weights.append(1)
 
 
-        # seg_feat_channels = self.color_backbone.feat_channels + self.structure_backbone.feat_channels
-        seg_feat_channels = 96 * self.use_structure_feats + color_feats * self.use_color_feats
-
-        self.mlp_channels = [int(i) for i in self.mlp_channels.split(',')]
-        if self.relative_mlp_channels:
-            self.mlp_channels = (seg_feat_channels) * np.array(self.mlp_channels)
-        else:
-            self.mlp_channels = [seg_feat_channels] + self.mlp_channels
-        seg_head_list = []
-        if self.seg_head_in_bn:
-            seg_head_list.append(norm_layer(norm_type='batch', nc=self.mlp_channels[0]))
-        seg_head_list += [MLP(self.mlp_channels, dropout=self.seg_head_dropout),
-                         nn.Conv1d(self.mlp_channels[-1], self.num_classes, kernel_size=1, bias=True)]
-        self.seg_head = nn.Sequential(*seg_head_list)
+        if self.use_fused_feats:
+            # seg_feat_channels = self.color_backbone.feat_channels + self.structure_backbone.feat_channels
+            seg_feat_channels = 96 * self.use_structure_feats + color_feats * self.use_color_feats
+            self.mlp_channels = [int(i) for i in self.mlp_channels.split(',')]
+            if self.relative_mlp_channels:
+                self.mlp_channels = (seg_feat_channels) * np.array(self.mlp_channels)
+            else:
+                self.mlp_channels = [seg_feat_channels] + self.mlp_channels
+            seg_head_list = []
+            if self.seg_head_in_bn:
+                seg_head_list.append(norm_layer(norm_type='batch', nc=self.mlp_channels[0]))
+            seg_head_list += [MLP(self.mlp_channels, dropout=self.seg_head_dropout),
+                             nn.Conv1d(self.mlp_channels[-1], self.num_classes, kernel_size=1, bias=True)]
+            self.seg_head = nn.Sequential(*seg_head_list)
 
         self.loss_weights = torch.tensor(self.loss_weights, requires_grad=False)
         self.base_criterion = self.criterion
@@ -73,17 +75,16 @@ class TwoStreamSegmentationModule(BaseSegmentationModule):
             structure_logits, structure_feats = self.structure_backbone(in_dict, return_feats=True)
         else:
             structure_feats = in_dict['structure_feats']
-        
-        fused_feats = []
-        if self.use_color_feats:
-            fused_feats.append(color_feats)
-        if self.use_structure_feats:
-            fused_feats.append(structure_feats)
 
-        fused_feats = torch.cat(fused_feats, axis=1).unsqueeze(-1)
-        # print(fused_feats.shape)
-
-        logits = [self.seg_head(fused_feats).squeeze(-1)]
+        logits = []
+        if self.use_fused_feats:
+            fused_feats = []
+            if self.use_color_feats:
+                fused_feats.append(color_feats)
+            if self.use_structure_feats:
+                fused_feats.append(structure_feats)
+            fused_feats = torch.cat(fused_feats, axis=1).unsqueeze(-1)
+            logits.append(self.seg_head(fused_feats).squeeze(-1))
         if self.color_backbone_class is not None:
             logits.append(color_logits)
         if self.structure_backbone_class is not None:
@@ -124,6 +125,7 @@ class TwoStreamSegmentationModule(BaseSegmentationModule):
         parser.add_argument("--relative_mlp_channels", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument("--use_color_feats", type=str2bool, nargs='?', const=True, default=True)
         parser.add_argument("--use_structure_feats", type=str2bool, nargs='?', const=True, default=True)
+        parser.add_argument("--use_fused_feats", type=str2bool, nargs='?', const=True, default=True)
         parser.add_argument("--gradient_blend_frequency", type=int, default=-1)
         return parent_parser
 
