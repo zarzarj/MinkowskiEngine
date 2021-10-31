@@ -14,6 +14,7 @@ from examples.str2bool import str2bool
 from examples.basic_blocks import MLP
 
 from examples.utils import save_pc
+import gc
 
 class LambdaStepLR(LambdaLR):
   def __init__(self, optimizer, lr_lambda, last_step=-1):
@@ -97,7 +98,7 @@ class BaseSegmentationModule(LightningModule):
             self.log('train_loss', train_loss['loss'], sync_dist=True, prog_bar=True, on_step=False, on_epoch=True)
         else:
             self.log('train_loss', train_loss, sync_dist=True, prog_bar=True, on_step=False, on_epoch=True)
-        preds = logits.argmax(dim=-1)
+        preds = logits.detach().argmax(dim=-1)
         if len(preds.shape) > 1:
             preds = preds[0]
         # print(preds.shape)
@@ -108,7 +109,8 @@ class BaseSegmentationModule(LightningModule):
         self.log_dict(self.train_conf_metrics, sync_dist=True, prog_bar=False, on_step=False, on_epoch=False)
 
         # if self.global_step % 1 == 0:
-        #     torch.cuda.empty_cache()
+        gc.collect()
+        torch.cuda.empty_cache()
 
         return train_loss
         
@@ -131,7 +133,8 @@ class BaseSegmentationModule(LightningModule):
         self.log_dict(self.val_conf_metrics, sync_dist=True, prog_bar=False, on_step=False, on_epoch=False)
 
         # if self.global_step % 1 == 0:
-        #     torch.cuda.empty_cache()
+        gc.collect()
+        torch.cuda.empty_cache()
 
         return val_loss
 
