@@ -101,6 +101,7 @@ class ScanNetPrecomputed(LightningDataModule):
                 transformations = []
             else:
                 transformations = [t.RandomDropout(0.2)]
+            # transformations = [t.RandomDropout(0.2, 1.0)]
             transformations.extend([
                                       t.ElasticDistortion(0.2, 0.4),
                                       t.ElasticDistortion(0.8, 1.6),
@@ -201,6 +202,7 @@ class ScanNetPrecomputed(LightningDataModule):
 
         out_dict = {'pts': scene_data[:, :3],  # include xyz by default
                     'labels': labels,
+                    'scene_name': idx,
                     } 
 
         if self.use_colors:

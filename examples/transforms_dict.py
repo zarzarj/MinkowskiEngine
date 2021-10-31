@@ -27,10 +27,15 @@ class RandomDropout(object):
   def __call__(self, in_dict):
     if random.random() < self.dropout_application_ratio:
       N = len(in_dict['pts'])
-      inds = torch.randperm(N)[int(N * (1 - self.dropout_ratio))]
+      inds = torch.randperm(N)[:int(N * (1 - self.dropout_ratio))]
       for k, v in in_dict.items():
         if isinstance(v, torch.Tensor):
-          # print(v, v.shape)
+          # if 'adj' in k:
+          #   knn = int(v.shape[1] / N)
+          #   adj_inds = v.repeat_interleave(knn)
+          #   adj_inds *= knn
+          #   adj_inds += torch.arange(knn).repeat(inds.shape[0])
+          # else:
           in_dict[k] = v[inds]
     return in_dict
 
