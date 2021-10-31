@@ -89,52 +89,63 @@ class BaseSegmentationModule(LightningModule):
         self.val_conf_metrics = conf_metrics.clone(prefix='val_')
 
     def training_step(self, batch, batch_idx):
-        logits = self(batch)
+        try:
+            logits = self(batch)
 
-        # target = torch.cat(batch['labels'], dim=0).long()
-        target = batch['labels'].long()
-        train_loss = self.criterion(logits, target)
-        if type(train_loss) is dict:
-            self.log('train_loss', train_loss['loss'], sync_dist=True, prog_bar=True, on_step=False, on_epoch=True)
-        else:
-            self.log('train_loss', train_loss, sync_dist=True, prog_bar=True, on_step=False, on_epoch=True)
-        preds = logits.detach().argmax(dim=-1)
-        if len(preds.shape) > 1:
-            preds = preds[0]
-        # print(preds.shape)
-        valid_targets = target != -100
-        self.train_metrics(preds[valid_targets], target[valid_targets])
-        self.log_dict(self.train_metrics, sync_dist=True, prog_bar=False, on_step=False, on_epoch=True)
-        self.train_conf_metrics(preds[valid_targets], target[valid_targets])
-        self.log_dict(self.train_conf_metrics, sync_dist=True, prog_bar=False, on_step=False, on_epoch=False)
+            # target = torch.cat(batch['labels'], dim=0).long()
+            target = batch['labels'].long()
+            train_loss = self.criterion(logits, target)
+            if type(train_loss) is dict:
+                self.log('train_loss', train_loss['loss'], sync_dist=True, prog_bar=True, on_step=False, on_epoch=True)
+            else:
+                self.log('train_loss', train_loss, sync_dist=True, prog_bar=True, on_step=False, on_epoch=True)
+            preds = logits.detach().argmax(dim=-1)
+            if len(preds.shape) > 1:
+                preds = preds[0]
+            # print(preds.shape)
+            valid_targets = target != -100
+            self.train_metrics(preds[valid_targets], target[valid_targets])
+            self.log_dict(self.train_metrics, sync_dist=True, prog_bar=False, on_step=False, on_epoch=True)
+            self.train_conf_metrics(preds[valid_targets], target[valid_targets])
+            self.log_dict(self.train_conf_metrics, sync_dist=True, prog_bar=False, on_step=False, on_epoch=False)
 
-        # if self.global_step % 1 == 0:
-        gc.collect()
-        torch.cuda.empty_cache()
+            # if self.global_step % 1 == 0:
+            gc.collect()
+            torch.cuda.empty_cache()
+        except Exception as e:
+            print(f"Train exception occurred: {e} -> {traceback.format_exc()}")
+            print(batch)
+            pass
+        
 
         return train_loss
         
     def validation_step(self, batch, batch_idx):
-        logits = self(batch)
-        # target = torch.cat(batch['labels'], dim=0).long()
-        target = batch['labels'].long()
-        val_loss = self.criterion(logits, target)
-        if type(val_loss) is dict:
-            self.log('val_loss', val_loss['loss'], sync_dist=True, prog_bar=True, on_step=False, on_epoch=True)
-        else:
-            self.log('val_loss', val_loss, sync_dist=True, prog_bar=True, on_step=False, on_epoch=True)
-        preds = logits.argmax(dim=-1)
-        if len(preds.shape) > 1:
-            preds = preds[0]
-        valid_targets = target != -100
-        self.val_metrics(preds[valid_targets], target[valid_targets])
-        self.log_dict(self.val_metrics, sync_dist=True, prog_bar=True, on_step=False, on_epoch=True)
-        self.val_conf_metrics(preds[valid_targets], target[valid_targets])
-        self.log_dict(self.val_conf_metrics, sync_dist=True, prog_bar=False, on_step=False, on_epoch=False)
-
+        try:
+            logits = self(batch)
+            # target = torch.cat(batch['labels'], dim=0).long()
+            target = batch['labels'].long()
+            val_loss = self.criterion(logits, target)
+            if type(val_loss) is dict:
+                self.log('val_loss', val_loss['loss'], sync_dist=True, prog_bar=True, on_step=False, on_epoch=True)
+            else:
+                self.log('val_loss', val_loss, sync_dist=True, prog_bar=True, on_step=False, on_epoch=True)
+            preds = logits.argmax(dim=-1)
+            if len(preds.shape) > 1:
+                preds = preds[0]
+            valid_targets = target != -100
+            self.val_metrics(preds[valid_targets], target[valid_targets])
+            self.log_dict(self.val_metrics, sync_dist=True, prog_bar=True, on_step=False, on_epoch=True)
+            self.val_conf_metrics(preds[valid_targets], target[valid_targets])
+            self.log_dict(self.val_conf_metrics, sync_dist=True, prog_bar=False, on_step=False, on_epoch=False)
+            gc.collect()
+            torch.cuda.empty_cache()
+        except Exception as e:
+            print(f"Val exception occurred: {e} -> {traceback.format_exc()}")
+            print(batch)
+            pass
         # if self.global_step % 1 == 0:
-        gc.collect()
-        torch.cuda.empty_cache()
+        
 
         return val_loss
 
