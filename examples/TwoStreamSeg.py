@@ -11,6 +11,8 @@ from examples.basic_blocks import MLP, norm_layer
 import importlib
 import argparse
 
+import MinkowskiEngine as ME
+
 def get_obj_from_str(string):
     # From https://github.com/CompVis/taming-transformers
     module, cls = string.rsplit(".", 1)
@@ -93,7 +95,8 @@ class TwoStreamSegmentationModule(BaseSegmentationModule):
         return torch.stack(logits)
 
     def convert_sync_batchnorm(self):
-        pass
+        if self.structure_backbone is not None:
+            self.structure_backbone = ME.MinkowskiSyncBatchNorm.convert_sync_batchnorm(self.structure_backbone)
 
     def training_epoch_end(self, training_step_outputs):
         if self.gradient_blend_frequency != -1 and self.trainer.current_epoch % self.gradient_blend_frequency == 0:

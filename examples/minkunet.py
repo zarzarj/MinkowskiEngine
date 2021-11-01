@@ -163,17 +163,20 @@ class MinkUNetBase(ResNetBase):
         self.relu = ME.MinkowskiReLU(inplace=True)
 
     def forward(self, in_dict, return_feats=False):
-        in_field = ME.TensorField(
-            features=in_dict['feats'],
-            coordinates=in_dict['coords'],
-            quantization_mode=ME.SparseTensorQuantizationMode.UNWEIGHTED_AVERAGE,
-            # minkowski_algorithm=ME.MinkowskiAlgorithm.SPEED_OPTIMIZED,
-            minkowski_algorithm=ME.MinkowskiAlgorithm.MEMORY_EFFICIENT,
-            # device=self.device,
-        )
+        # print(in_dict['feats'].shape, in_dict['coords'].shape)
+        # in_field = ME.TensorField(
+        #     features=in_dict['feats'],
+        #     coordinates=in_dict['coords'],
+        #     quantization_mode=ME.SparseTensorQuantizationMode.UNWEIGHTED_AVERAGE,
+        #     # minkowski_algorithm=ME.MinkowskiAlgorithm.SPEED_OPTIMIZED,
+        #     minkowski_algorithm=ME.MinkowskiAlgorithm.MEMORY_EFFICIENT,
+        #     # device=self.device,
+        # )
+        
+        x = ME.SparseTensor(in_dict['feats'], in_dict['coords'])
         # print(in_field)
         # print(in_dict['feats'].shape)
-        x = in_field.sparse()
+        # x = in_field.sparse()
         out = self.conv0p1s1(x)
         out = self.bn0(out)
         out_p1 = self.relu(out)
@@ -239,10 +242,12 @@ class MinkUNetBase(ResNetBase):
         #     feats = out.decomposed_features
         # else:
         #     coords, feats = out.decomposed_coordinates_and_features
-        feats = out.slice(in_field).F
+        # feats = out.slice(in_field).F
+        feats = out.F
         # feats = torch.cat(feats, axis=0)
         if return_feats:
-            return feats, out_feats.slice(in_field).F
+            return feats, out_feats.F
+            # return feats, out_feats.slice(in_field).F
         return feats
 
     @staticmethod

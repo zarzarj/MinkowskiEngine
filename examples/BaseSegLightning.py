@@ -81,19 +81,23 @@ class BaseSegmentationModule(LightningModule):
         else:
             logits = logits[valid_targets]
             preds = logits.detach().argmax(dim=-1)
+        # print(preds, logits)
         train_loss = self.criterion(logits, target)
         if type(train_loss) is dict:
-            self.log('train_loss', train_loss['loss'].detach(), sync_dist=True, prog_bar=True, on_step=False, on_epoch=True)
+            self.log('train_loss', train_loss['loss'], sync_dist=True, prog_bar=True, on_step=False, on_epoch=True)
         else:
-            self.log('train_loss', train_loss.detach(), sync_dist=True, prog_bar=True, on_step=False, on_epoch=True)
+            self.log('train_loss', train_loss, sync_dist=True, prog_bar=True, on_step=False, on_epoch=True)
+        # print(self.trainer.optimizers)
+        # if self.trainer.global_step % 40 == 0:
+        #     print("lr", self.trainer.global_step, self.trainer.optimizers[0].param_groups[0]['lr'])
         
         # print(len(preds.shape), preds.shape)
         # print(preds.shape)
         
         self.train_metrics(preds, target)
         self.log_dict(self.train_metrics, sync_dist=True, prog_bar=False, on_step=False, on_epoch=True)
-        self.train_conf_metrics(preds, target)
-        self.log_dict(self.train_conf_metrics, sync_dist=True, prog_bar=False, on_step=False, on_epoch=False)
+        # self.train_conf_metrics(preds, target)
+        # self.log_dict(self.train_conf_metrics, sync_dist=True, prog_bar=False, on_step=False, on_epoch=False)
 
         # gc.collect()
         # torch.cuda.empty_cache()
@@ -121,8 +125,8 @@ class BaseSegmentationModule(LightningModule):
 
         self.val_metrics(preds, target)
         self.log_dict(self.val_metrics, sync_dist=True, prog_bar=True, on_step=False, on_epoch=True)
-        self.val_conf_metrics(preds, target)
-        self.log_dict(self.val_conf_metrics, sync_dist=True, prog_bar=False, on_step=False, on_epoch=False)
+        # self.val_conf_metrics(preds, target)
+        # self.log_dict(self.val_conf_metrics, sync_dist=True, prog_bar=False, on_step=False, on_epoch=False)
         # gc.collect()
         # torch.cuda.empty_cache()
         return val_loss
@@ -210,7 +214,7 @@ class BaseSegmentationModule(LightningModule):
 
         # Scheduler
         parser.add_argument('--scheduler', type=str, default='SquaredLR')
-        parser.add_argument('--max_iter', type=int, default=6e4)
+        parser.add_argument('--max_iter', type=int, default=60000)
         parser.add_argument('--step_size', type=int, default=2e4)
         parser.add_argument('--step_gamma', type=float, default=0.1)
         parser.add_argument('--poly_power', type=float, default=0.9)

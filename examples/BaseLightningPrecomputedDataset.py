@@ -16,6 +16,7 @@ from plyfile import PlyElement, PlyData
 import examples.transforms_dict as t
 from examples.str2bool import str2bool
 from examples.utils import interpolate_grid_feats, get_embedder, gather_nd, sparse_collate, save_pc
+import MinkowskiEngine as ME
 
 
 class BasePrecomputed(LightningDataModule):
@@ -38,7 +39,7 @@ class BasePrecomputed(LightningDataModule):
                                       t.ElasticDistortion(0.2, 0.4),
                                       t.ElasticDistortion(0.8, 1.6),
                                       t.RandomScaling(0.9, 1.1),
-                                      t.RandomRotation(([-np.pi/6, np.pi/6], [-np.pi/6, np.pi/6], [-np.pi, np.pi])),
+                                      t.RandomRotation(([-np.pi/64, np.pi/64], [-np.pi/64, np.pi/64], [-np.pi, np.pi])),
                                       t.RandomHorizontalFlip('z'),
                                       t.ChromaticAutoContrast(),
                                       t.ChromaticTranslation(0.1),
@@ -99,6 +100,7 @@ class BasePrecomputed(LightningDataModule):
     def process_input(self, in_dict):
         if self.use_augmentation and self.trainer.training:
             # print(in_dict['colors'][:10])
+            # print("augmenting")
             in_dict = self.augment(in_dict)
             # print(in_dict['colors'][:10])
         in_dict['coords'] = in_dict['pts'] / self.voxel_size
@@ -111,6 +113,11 @@ class BasePrecomputed(LightningDataModule):
             # print(in_dict['colors'].max())
             in_dict['colors'] = (in_dict['colors'] / 255.) - 0.5
         in_dict['feats'] = self.get_features(in_dict)
+        # if self.quantize_input:
+            # print(in_dict['coords'], in_dict['feats'], in_dict['labels'])
+        in_dict['coords'], in_dict['feats'], in_dict['labels'] = ME.utils.sparse_quantize(
+            in_dict['coords'].numpy(), in_dict['feats'].numpy(), labels=in_dict['labels'].long().numpy(), ignore_label=-1)
+        in_dict['coords'], in_dict['feats'], in_dict['labels'] = torch.from_numpy(in_dict['coords']), torch.from_numpy(in_dict['feats']), torch.from_numpy(in_dict['labels'])
         return in_dict
 
     def get_features(self, in_dict):
@@ -148,6 +155,7 @@ class BasePrecomputed(LightningDataModule):
 
         parser.add_argument("--use_augmentation", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument("--shift_coords", type=str2bool, nargs='?', const=True, default=False)
+        parser.add_argument("--quantize_input", type=str2bool, nargs='?', const=True, default=False)
         # parser.add_argument("--elastic_distortion", type=str2bool, nargs='?', const=True, default=False)
 
         parser.add_argument("--voxel_size", type=float, default=0.02)
