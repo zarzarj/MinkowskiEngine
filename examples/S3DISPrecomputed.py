@@ -81,15 +81,16 @@ class S3DISPrecomputed(BasePrecomputed):
             for room_folder in tqdm(all_rooms):
                 room_name = room_folder.split('/')[-1]
                 area_name = room_folder.split('/')[-2]
-                room_adj_file = os.path.join(adjs_path, area_name + '_' + room_name + '_adj.pt')
-                if not os.path.exists(room_adj_file):
-                    room_file = os.path.join(self.preprocess_path, room_name + '.pt')
-                    room = torch.load(room_file)
-                    pts = room[:,:3]
-                    adj = torch_geometric.nn.pool.knn_graph(x=pts, k=16,
-                                                    loop=False, flow='source_to_target',
-                                                    cosine=False)
-                    torch.save(adj, room_adj_file)
+                room_files = glob.glob(os.path.join(self.preprocess_path, area_name + '_' + room_name + '*.pt'))
+                for room_file in room_files:
+                    room_adj_file =  os.path.join('/', *room_file.split('/')[:-1], 'adjs', room_file.split('/')[-1][:-3] + '_adj.pt')
+                    if not os.path.exists(room_adj_file):
+                        room = torch.load(room_file)
+                        pts = room[:,:3]
+                        adj = torch_geometric.nn.pool.knn_graph(x=pts, k=16,
+                                                        loop=False, flow='source_to_target',
+                                                        cosine=False)
+                        torch.save(adj, room_adj_file)
 
     def partition_room(self, room, room_file):
         pts = room[:,:3].numpy()
@@ -159,7 +160,7 @@ class S3DISPrecomputed(BasePrecomputed):
             out_dict['colors'] = room_data[:, 3:6]
 
         if self.load_graph:
-            out_dict['adj'] = torch.load(os.path.join(*idx.split('/')[:-1], idx.split('/')[-1] + '_adj.pt'))
+            out_dict['adj'] = torch.load(os.path.join('/',*idx.split('/')[:-1], 'adjs', idx.split('/')[-1] + '_adj.pt'))
 
         return out_dict
 
