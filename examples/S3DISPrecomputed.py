@@ -47,7 +47,10 @@ class S3DISPrecomputed(BasePrecomputed):
         self.class_labels = self.label_to_names.values()
         self.name_to_label = {v: k for k, v in self.label_to_names.items()}
         self.NUM_LABELS = len(self.class_labels)
-        self.preprocess_path = os.path.join(self.data_dir, 'preprocessing', 'num_pts_' + str(self.preprocess_max_num_pts))
+        if self.preprocess_max_num_pts < 0:
+            self.preprocess_path = os.path.join(self.data_dir, 'preprocessing', 'base')
+        else:
+            self.preprocess_path = os.path.join(self.data_dir, 'preprocessing', 'num_pts_' + str(self.preprocess_max_num_pts))
 
 
     def prepare_data(self):
@@ -64,12 +67,13 @@ class S3DISPrecomputed(BasePrecomputed):
             room_files = glob.glob(os.path.join(self.preprocess_path, area_name + '_' + room_name + '*.pt'))
             if len(room_files) == 0:
                 room = torch.from_numpy(self.load_room(room_folder))
-                if room.shape[0] > self.preprocess_max_num_pts:
+                if self.preprocess_max_num_pts > 0 and room.shape[0] > self.preprocess_max_num_pts and room_folder in train_rooms:
                     room_file = os.path.join(self.preprocess_path, area_name + '_' + room_name)
                     self.partition_room(room, room_file)
                 else:
                     room_file = os.path.join(self.preprocess_path, area_name + '_' + room_name + '_0.pt')
                     torch.save(room, room_file)
+
         if self.load_graph:
             import torch_geometric
             adjs_path = os.path.join(self.preprocess_path, 'adjs')

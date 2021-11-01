@@ -92,11 +92,11 @@ class ScanNetPointNet(LightningDataModule):
         n_used = 0
         for l in range(self.NUM_LABELS):
             if l in self.IGNORE_LABELS:
-                self.label_map[l] = -100
+                self.label_map[l] = -1
             else:
                 self.label_map[l] = n_used
                 n_used += 1
-        self.label_map[-100] = -100
+        self.label_map[-1] = -1
         self.NUM_LABELS -= len(self.IGNORE_LABELS)
 
         with open(os.path.join(self.data_dir, 'splits', 'scannetv2_train.txt'), 'r') as f:
@@ -239,7 +239,7 @@ class ScannetDatasetWholeScene():
                     np.save(scene_file, scene_data)
                 else:
                     scene_data = np.load(scene_file)
-                    scene_data[scene_data[:,9] == 156,9] = -100
+                    scene_data[scene_data[:,9] == 156,9] = -1
                     # print(scene_data[:,9].max())
                     # print(scene_data.shape)
             else:
@@ -267,7 +267,7 @@ class ScannetDatasetWholeScene():
                         cur_seg = cur_point_set[:,9].astype(np.int32)
                     else:
                         cur_seg = cur_point_set[:,10].astype(np.int32)
-                    if len(cur_point_set) == 0 or np.all(cur_seg == -100):
+                    if len(cur_point_set) == 0 or np.all(cur_seg == -1):
                         continue
                     
                     # print(len(cur_point_set))
