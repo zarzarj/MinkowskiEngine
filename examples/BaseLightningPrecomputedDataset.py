@@ -115,9 +115,9 @@ class BasePrecomputed(LightningDataModule):
         in_dict['feats'] = self.get_features(in_dict)
         # if self.quantize_input:
             # print(in_dict['coords'], in_dict['feats'], in_dict['labels'])
-        in_dict['coords'], in_dict['feats'], in_dict['labels'] = ME.utils.sparse_quantize(
-            in_dict['coords'].numpy(), in_dict['feats'].numpy(), labels=in_dict['labels'].long().numpy(), ignore_label=-1)
-        in_dict['coords'], in_dict['feats'], in_dict['labels'] = torch.from_numpy(in_dict['coords']), torch.from_numpy(in_dict['feats']), torch.from_numpy(in_dict['labels'])
+        # in_dict['coords'], in_dict['feats'], in_dict['labels'] = ME.utils.sparse_quantize(
+        #     in_dict['coords'].numpy(), in_dict['feats'].numpy(), labels=in_dict['labels'].long().numpy(), ignore_label=-1)
+        # in_dict['coords'], in_dict['feats'], in_dict['labels'] = torch.from_numpy(in_dict['coords']), torch.from_numpy(in_dict['feats']), torch.from_numpy(in_dict['labels'])
         return in_dict
 
     def get_features(self, in_dict):
