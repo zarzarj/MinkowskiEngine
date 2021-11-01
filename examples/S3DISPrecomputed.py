@@ -78,7 +78,7 @@ class S3DISPrecomputed(BasePrecomputed):
             import torch_geometric
             adjs_path = os.path.join(self.preprocess_path, 'adjs')
             os.makedirs(adjs_path, exist_ok=True)
-            for room_folder in tqdm(self.all_rooms):
+            for room_folder in tqdm(all_rooms):
                 room_name = room_folder.split('/')[-1]
                 area_name = room_folder.split('/')[-2]
                 room_adj_file = os.path.join(adjs_path, area_name + '_' + room_name + '_adj.pt')
