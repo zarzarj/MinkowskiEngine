@@ -68,15 +68,19 @@ class TwoStreamSegmentationModule(BaseSegmentationModule):
         
 
     def forward(self, in_dict):
-        if self.color_backbone_class is not None:
-            color_logits, color_feats = self.color_backbone(in_dict, return_feats=True)
-        else:
-            color_feats = in_dict['color_feats']
-
-        if self.structure_backbone_class is not None:
-            structure_logits, structure_feats = self.structure_backbone(in_dict, return_feats=True)
-        else:
-            structure_feats = in_dict['structure_feats']
+        # print(in_dict['pts'].shape, in_dict['scene_name'])
+        # before = in_dict['feats'].clone()
+        if self.use_color_feats:
+            if self.color_backbone_class is not None:
+                color_logits, color_feats = self.color_backbone(in_dict, return_feats=True)
+            else:
+                color_feats = in_dict['color_feats']
+        # assert(torch.allclose(before, in_dict['feats']))
+        if self.use_structure_feats:
+            if self.structure_backbone_class is not None:
+                structure_logits, structure_feats = self.structure_backbone(in_dict, return_feats=True)
+            else:
+                structure_feats = in_dict['structure_feats']
 
         logits = []
         if self.use_fused_feats:
@@ -87,9 +91,9 @@ class TwoStreamSegmentationModule(BaseSegmentationModule):
                 fused_feats.append(structure_feats)
             fused_feats = torch.cat(fused_feats, axis=1).unsqueeze(-1)
             logits.append(self.seg_head(fused_feats).squeeze(-1))
-        if self.color_backbone_class is not None:
+        if self.use_color_feats and self.color_backbone_class is not None:
             logits.append(color_logits)
-        if self.structure_backbone_class is not None:
+        if self.use_structure_feats and self.structure_backbone_class is not None:
             logits.append(structure_logits)
         # print(logits)
         return torch.stack(logits)

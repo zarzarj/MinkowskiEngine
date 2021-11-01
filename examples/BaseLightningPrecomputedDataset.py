@@ -104,6 +104,7 @@ class BasePrecomputed(LightningDataModule):
             in_dict = self.augment(in_dict)
             # print(in_dict['colors'][:10])
         in_dict['coords'] = in_dict['pts'] / self.voxel_size
+        # print(in_dict['pts'])
         in_dict['coords'] = torch.floor(in_dict['coords']).long()
         if self.shift_coords and self.trainer.training:
             in_dict['coords'] += (torch.rand(3) * 100).type_as(in_dict['coords'])
