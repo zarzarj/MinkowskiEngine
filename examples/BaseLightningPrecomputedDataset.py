@@ -19,6 +19,7 @@ from examples.utils import interpolate_grid_feats, get_embedder, gather_nd, spar
 import MinkowskiEngine as ME
 
 
+
 class BasePrecomputed(LightningDataModule):
     def __init__(self, **kwargs):
         super().__init__()
@@ -70,7 +71,14 @@ class BasePrecomputed(LightningDataModule):
         for k, v in in_dict.items():
             # print(v)
             if np.all([isinstance(it, torch.Tensor) for it in v]):
-                in_dict[k] = torch.cat(v, axis=0)
+                if k == 'adj':
+                    num_pts = 0
+                    for i, adj in enumerate(v):
+                        adj += num_pts
+                        num_pts += in_dict['num_pts'][i]
+                    in_dict[k] = torch.cat(v, axis=1)
+                else:
+                    in_dict[k] = torch.cat(v, axis=0)
         return in_dict
 
     def load_scan_files(self, idxs):
@@ -84,6 +92,7 @@ class BasePrecomputed(LightningDataModule):
                     self.cache[scene] = copy.deepcopy(in_dict)
             in_dict['batch_idx'] = batch_idx
 
+            # import pdb; pdb.set_trace()
             in_dict = self.process_input(in_dict)
             # print(in_dict['labels'].max(), in_dict['labels'].min(), in_dict['labels'].shape)
             # labels = [self.valid_class_ids[label] if label != -1 else -1 for label in in_dict['labels'] ]
@@ -91,7 +100,7 @@ class BasePrecomputed(LightningDataModule):
             # save_pc(in_dict['pts'], colors, 'test_pc.ply')
             # assert(True==False)
             for k, v in in_dict.items():
-                if scene == idxs[0]:
+                if batch_idx == 0:
                     out_dict[k] = [v]
                 else:
                     out_dict[k].append(v)
@@ -103,13 +112,15 @@ class BasePrecomputed(LightningDataModule):
             # print("augmenting")
             in_dict = self.augment(in_dict)
             # print(in_dict['colors'][:10])
+        in_dict['num_pts'] = in_dict['pts'].shape[0]
         in_dict['coords'] = in_dict['pts'] / self.voxel_size
         # print(in_dict['pts'])
         # in_dict['coords'] = torch.floor(in_dict['coords']).long()
         if self.shift_coords and self.trainer.training:
             in_dict['coords'] += (torch.rand(3) * 100).type_as(in_dict['coords'])
             # print(in_dict['coords'])
-        in_dict['coords'] = torch.cat([torch.ones(in_dict['pts'].shape[0], 1).long()*in_dict['batch_idx'], in_dict['coords']], axis=-1)
+        in_dict['coords'] = torch.cat([torch.ones(in_dict['coords'].shape[0], 1).long()*in_dict['batch_idx'], in_dict['coords']], axis=-1)
+
         if 'colors' in in_dict:
             # print(in_dict['colors'].max())
             in_dict['colors'] = (in_dict['colors'] / 255.) - 0.5
