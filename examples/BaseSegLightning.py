@@ -69,8 +69,17 @@ class BaseSegmentationModule(LightningModule):
 
     def training_step(self, batch, batch_idx):
         # print('coords', batch['coords'])
+        # batch['sparse_tensor'] = ME.SparseTensor(
+        #     coordinates=batch["coords"].float(), features=batch["feats"]
+        # )
+        # batch['in_field'] = ME.TensorField(
+        #     features=batch['feats'],
+        #     coordinates=batch['coords'],
+        #     quantization_mode=ME.SparseTensorQuantizationMode.UNWEIGHTED_AVERAGE,
+        #     minkowski_algorithm=ME.MinkowskiAlgorithm.MEMORY_EFFICIENT,
+        # )
+        # batch['sparse_tensor'] = batch['in_field'].sparse()
         logits = self(batch)
-
         # target = torch.cat(batch['labels'], dim=0).long()
         target = batch['labels'].long()
         valid_targets = target != -1

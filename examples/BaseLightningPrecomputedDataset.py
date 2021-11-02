@@ -105,7 +105,7 @@ class BasePrecomputed(LightningDataModule):
             # print(in_dict['colors'][:10])
         in_dict['coords'] = in_dict['pts'] / self.voxel_size
         # print(in_dict['pts'])
-        in_dict['coords'] = torch.floor(in_dict['coords']).long()
+        # in_dict['coords'] = torch.floor(in_dict['coords']).long()
         if self.shift_coords and self.trainer.training:
             in_dict['coords'] += (torch.rand(3) * 100).type_as(in_dict['coords'])
             # print(in_dict['coords'])
@@ -114,6 +114,7 @@ class BasePrecomputed(LightningDataModule):
             # print(in_dict['colors'].max())
             in_dict['colors'] = (in_dict['colors'] / 255.) - 0.5
         in_dict['feats'] = self.get_features(in_dict)
+        
         # if self.quantize_input:
             # print(in_dict['coords'], in_dict['feats'], in_dict['labels'])
         # in_dict['coords'], in_dict['feats'], in_dict['labels'] = ME.utils.sparse_quantize(

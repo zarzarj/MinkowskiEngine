@@ -79,6 +79,10 @@ class TwoStreamSegmentationModule(BaseSegmentationModule):
         if self.use_structure_feats:
             if self.structure_backbone_class is not None:
                 structure_logits, structure_feats = self.structure_backbone(in_dict, return_feats=True)
+                # structure_logits = structure_logits.slice(in_dict['in_field']).F
+                # structure_feats = structure_feats.slice(in_dict['in_field']).F
+                # structure_logits = structure_logits.F
+                # structure_feats = structure_feats.F
             else:
                 structure_feats = in_dict['structure_feats']
 

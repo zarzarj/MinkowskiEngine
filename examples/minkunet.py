@@ -170,8 +170,9 @@ class MinkUNetBase(ResNetBase):
             quantization_mode=ME.SparseTensorQuantizationMode.UNWEIGHTED_AVERAGE,
             # minkowski_algorithm=ME.MinkowskiAlgorithm.SPEED_OPTIMIZED,
             minkowski_algorithm=ME.MinkowskiAlgorithm.MEMORY_EFFICIENT,
-            # device=self.device,
+            device=in_dict['feats'].device,
         )
+        # print(in_field.device)
         
         # x = ME.SparseTensor(in_dict['feats'], in_dict['coords'])
         # print(in_field)
