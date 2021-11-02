@@ -131,7 +131,7 @@ class BasePrecomputed(LightningDataModule):
             feats.append(torch.ones((in_dict['pts'].shape[0], 1)))
         out_feats = torch.cat(feats, dim=-1).float()
         if self.rand_feats:
-            out_feats = torch.rand_like(out_feats)
+            out_feats = torch.rand_like(out_feats) - 0.5
         return out_feats
 
     def callbacks(self):
