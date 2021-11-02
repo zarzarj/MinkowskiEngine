@@ -130,6 +130,8 @@ class BasePrecomputed(LightningDataModule):
         if len(feats) == 0:
             feats.append(torch.ones((in_dict['pts'].shape[0], 1)))
         out_feats = torch.cat(feats, dim=-1).float()
+        if self.rand_feats:
+            out_feats = torch.rand_like(out_feats)
         return out_feats
 
     def callbacks(self):
@@ -155,6 +157,7 @@ class BasePrecomputed(LightningDataModule):
         parser.add_argument("--use_orig_pcs", type=str2bool, nargs='?', const=True, default=False)
 
         parser.add_argument("--use_augmentation", type=str2bool, nargs='?', const=True, default=False)
+        parser.add_argument("--rand_feats", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument("--shift_coords", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument("--quantize_input", type=str2bool, nargs='?', const=True, default=False)
         # parser.add_argument("--elastic_distortion", type=str2bool, nargs='?', const=True, default=False)
