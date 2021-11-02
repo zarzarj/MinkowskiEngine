@@ -103,7 +103,7 @@ class TwoStreamSegmentationModule(BaseSegmentationModule):
         return torch.stack(logits)
 
     def convert_sync_batchnorm(self):
-        if self.structure_backbone is not None:
+        if self.structure_backbone_class is not None:
             self.structure_backbone = ME.MinkowskiSyncBatchNorm.convert_sync_batchnorm(self.structure_backbone)
 
     def training_epoch_end(self, training_step_outputs):
