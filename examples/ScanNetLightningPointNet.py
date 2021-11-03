@@ -260,8 +260,7 @@ class ScannetDatasetWholeScene():
                     curmax = coordmin+[(i+1)*xlength, (j+1)*ylength, coordmax[2]-coordmin[2]]
                     mask = np.sum((scene_data[:, :3]>=(curmin))*(scene_data[:, :3]<=(curmax)), axis=1)==3
                     cur_point_set = scene_data[mask,:]
-                    if self.return_point_idx:
-                        point_idx = np.arange(scene_data.shape[0])[mask]
+                    
                     # cur_semantic_seg = scene_data[mask, 10].astype(np.int32)
                     if self.use_orig_pcs:
                         cur_seg = cur_point_set[:,9].astype(np.int32)
@@ -269,6 +268,9 @@ class ScannetDatasetWholeScene():
                         cur_seg = cur_point_set[:,10].astype(np.int32)
                     if len(cur_point_set) == 0 or np.all(cur_seg == -1):
                         continue
+
+                    if self.return_point_idx:
+                        point_idx = np.arange(scene_data.shape[0])[mask]
                     
                     # print(len(cur_point_set))
                     if self.npoints > 0:
@@ -717,28 +719,29 @@ def build_collate_fn(dense_input=False, return_idx=False):
                 sample_weight,
                 fetch_time 
             ) = zip(*data)
-
-        # convert to tensor
-        point_set = torch.FloatTensor(point_set)
-        semantic_seg = torch.LongTensor(semantic_seg)
-        # sample_weight = torch.FloatTensor(sample_weight)
-        
-        # print(batch_idx, batch_idx.shape)
-        coords = point_set[:, :, :3]
-        feats = point_set[:, :, 3:]
-        
-        # split points to coords and feats
-        coords = point_set[:, :, :3] #B, N, 3
-
-        if not dense_input:
-            batch_size = point_set.shape[0]
-            num_pts = point_set.shape[1]
-            batch_idx = torch.arange(batch_size).repeat_interleave(num_pts).unsqueeze(1)
-            coords = coords.contiguous().reshape(-1, coords.shape[-1])
-            coords = torch.cat([batch_idx, coords], axis=1)
-
-            feats = feats.contiguous().reshape(-1, feats.shape[-1])
+            
+        # print(point_set)
+        if not dense_input or self.npoints < 0:
+            batch_size = len(point_set)
+            batch_idx = torch.cat([torch.ones(point_set[i].shape[0], 1) * i for i in range(batch_size)], axis=0)
+            # batch_idx = torch.arange(batch_size)
+            # coords = coords.contiguous().reshape(-1, coords.shape[-1])
+            point_set = np.concatenate(point_set, axis=0)
+            coords = torch.from_numpy(point_set[:, :3])
+            coords = torch.cat([batch_idx, coords], axis=-1)
+            feats = torch.from_numpy(point_set[:, 3:])
+            semantic_seg = torch.from_numpy(np.concatenate(semantic_seg, axis=0))
+            if return_idx:
+                point_idx = torch.from_numpy(np.concatenate(point_idx, axis=0)).long()
         else:
+            
+            point_set = torch.FloatTensor(point_set)
+            semantic_seg = torch.LongTensor(semantic_seg)
+            if return_idx:
+                point_idx = torch.LongTensor(point_idx)
+
+            coords = point_set[:, :, :3]
+            feats = point_set[:, :, 3:]
             feats = point_set[:, :, 3:].contiguous().transpose(1,2) #B, C, N
 
         # pack
@@ -747,7 +750,7 @@ def build_collate_fn(dense_input=False, return_idx=False):
                  'labels': semantic_seg.reshape(-1).long(),
         }
         if return_idx:
-            batch['point_idx'] = torch.LongTensor(point_idx)
+            batch['point_idx'] = point_idx
             batch['scene_id'] = scene_id
             batch['scene_index'] = index
         return batch

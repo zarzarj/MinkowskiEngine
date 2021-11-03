@@ -118,7 +118,9 @@ class BaseSegmentationModule(LightningModule):
 
         target = batch['labels'].long()
         valid_targets = target != -1
+
         target = target[valid_targets]
+        # print(target.shape, logits.shape)
         if len(logits.shape) == 3:
             logits = logits[:, valid_targets]
             preds = logits.detach().argmax(dim=-1)[0]
