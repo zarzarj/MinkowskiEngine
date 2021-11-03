@@ -97,6 +97,8 @@ class ScanNetPrecomputed(BasePrecomputed):
 
     def prepare_data(self):
         if self.load_graph:
+            if self.precompute_adjs:
+                import MinkowskiEngine as ME
             import torch_geometric
             all_scans = glob.glob(os.path.join(self.scans_dir, '*')) + glob.glob(os.path.join(self.scans_test_dir, '*'))
             os.makedirs(os.path.join(self.data_dir, 'adjs'), exist_ok=True)
@@ -113,6 +115,25 @@ class ScanNetPrecomputed(BasePrecomputed):
                     adj = torch_geometric.nn.pool.knn_graph(x=pts, k=16,
                                                     loop=False, flow='source_to_target',
                                                     cosine=False)
+                    if self.precompute_adjs:
+                        coords = (pts / self.voxel_size).contiguous()
+                        in_field = ME.TensorField(
+                            features=torch.ones_like(coords),
+                            coordinates=coords,
+                            quantization_mode=ME.SparseTensorQuantizationMode.UNWEIGHTED_AVERAGE,
+                            minkowski_algorithm=ME.MinkowskiAlgorithm.SPEED_OPTIMIZED,
+                            # minkowski_algorithm=ME.MinkowskiAlgorithm.MEMORY_EFFICIENT,
+                            # device=in_dict['feats'].device,
+                        )
+                        down_2 = in_field.sparse(2)
+                        # print(down_2)
+                        # print(down_2._C, down_2._C.shape)
+                        down_4 = in_field.sparse(4)
+                        # print(down_4)
+                        # print(down_4._C, down_4._C.shape)
+                        down_8 = in_field.sparse(8)
+                        # print(down_8)
+                        # print(down_8._C, down_8._C.shape)
                     torch.save(adj, adj_file)
 
     def setup(self, stage: Optional[str] = None):

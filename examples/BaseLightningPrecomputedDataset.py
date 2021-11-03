@@ -32,9 +32,8 @@ class BasePrecomputed(LightningDataModule):
         self.labelweights = None
         self.cache = {}
         if self.use_augmentation:
-            if self.load_graph:
-                transformations = []
-            else:
+            transformations = []
+            if self.point_dropout and not self.load_graph:
                 transformations = [t.RandomDropout(0.2, 0.2)]
             transformations.extend([
                                       t.ElasticDistortion(0.2, 0.4),
@@ -165,13 +164,14 @@ class BasePrecomputed(LightningDataModule):
         parser.add_argument("--use_colors", type=str2bool, nargs='?', const=True, default=True)
         parser.add_argument("--use_normals", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument("--load_graph", type=str2bool, nargs='?', const=True, default=False)
+        parser.add_argument("--precompute_adjs", type=str2bool, nargs='?', const=True, default=False)
 
         parser.add_argument("--use_orig_pcs", type=str2bool, nargs='?', const=True, default=False)
 
         parser.add_argument("--use_augmentation", type=str2bool, nargs='?', const=True, default=False)
+        parser.add_argument("--point_dropout", type=str2bool, nargs='?', const=True, default=True)
         parser.add_argument("--rand_feats", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument("--shift_coords", type=str2bool, nargs='?', const=True, default=False)
-        parser.add_argument("--quantize_input", type=str2bool, nargs='?', const=True, default=False)
         # parser.add_argument("--elastic_distortion", type=str2bool, nargs='?', const=True, default=False)
 
         parser.add_argument("--voxel_size", type=float, default=0.02)

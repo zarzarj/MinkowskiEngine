@@ -102,8 +102,9 @@ class ScanNetPointNet(LightningDataModule):
         with open(os.path.join(self.data_dir, 'splits', 'scannetv2_train.txt'), 'r') as f:
             self.train_files = f.readlines()
             self.train_files = [file[:-5] for file in self.train_files]
-        self.train_dataset = ScannetDataset(phase="train", scene_list=self.train_files, **self.kwargs)
-        self.labelweights = torch.from_numpy(self.train_dataset.labelweights)
+        # self.train_dataset = ScannetDataset(phase="train", scene_list=self.train_files, **self.kwargs)
+        # self.labelweights = torch.from_numpy(self.train_dataset.labelweights)
+        self.labelweights=None
 
     def setup(self, stage: Optional[str] = None):
         if stage == 'fit' or self.val_split == 'train':
@@ -266,7 +267,7 @@ class ScannetDatasetWholeScene():
                         cur_seg = cur_point_set[:,9].astype(np.int32)
                     else:
                         cur_seg = cur_point_set[:,10].astype(np.int32)
-                    if len(cur_point_set) == 0 or np.all(cur_seg == -1):
+                    if cur_point_set.shape[0] == 0 or np.all(cur_seg == -1):
                         continue
 
                     if self.return_point_idx:
