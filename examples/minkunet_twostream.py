@@ -28,6 +28,7 @@ from torch.optim import SGD
 import MinkowskiEngine as ME
 
 from MinkowskiEngine.modules.resnet_block import BasicBlock, Bottleneck
+from examples.utils import sort_coords, argsort_coords
 
 from examples.resnet import ResNetBase
 
@@ -147,16 +148,19 @@ class MinkUNetTwoStreamBase(ResNetBase):
         # print(in_field)
         x = in_field.sparse()
         out = self.conv0p1s1(x)
-        gnn_out = self.convs[0](in_dict['feats'], adj['p1'])
-        out._F = torch.cat([out._F, gnn_out], axis=-1)
+        gnn_out = self.convs[0](in_dict['feats'], adj['p1']) #S1
+        sort_idx = argsort_coords(out._C)
+        out._C = out._C[sort_idx]
+        out._F = torch.cat([out._F[sort_idx], gnn_out], axis=-1)
 
         out = self.bn0(out)
         out_p1 = self.relu(out)
-        
 
         out = self.conv1p1s2(out_p1)
-        gnn_out = self.convs[1](gnn_out, adj['p2'])
-        out._F = torch.cat([out._F, gnn_out], axis=-1)
+        gnn_out = self.convs[1](gnn_out, adj['p2']) #S2
+        sort_idx = argsort_coords(out._C)
+        out._C = out._C[sort_idx]
+        out._F = torch.cat([out._F[sort_idx], gnn_out], axis=-1)
 
         out = self.bn1(out)
         out = self.relu(out)
@@ -166,8 +170,10 @@ class MinkUNetTwoStreamBase(ResNetBase):
         # out._F = torch.cat([out._F, gnn_out], axis=-1)
 
         out = self.conv2p2s2(out_b1p2)
-        gnn_out = self.convs[2](gnn_out, adj['p4'])
-        out._F = torch.cat([out._F, gnn_out], axis=-1)
+        gnn_out = self.convs[2](gnn_out, adj['p4']) #S4
+        sort_idx = argsort_coords(out._C)
+        out._C = out._C[sort_idx]
+        out._F = torch.cat([out._F[sort_idx], gnn_out], axis=-1)
 
         out = self.bn2(out)
         out = self.relu(out)
@@ -177,8 +183,10 @@ class MinkUNetTwoStreamBase(ResNetBase):
         # out._F = torch.cat([out._F, gnn_out], axis=-1)
 
         out = self.conv3p4s2(out_b2p4)
-        gnn_out = self.convs[3](gnn_out, adj['p8'])
-        out._F = torch.cat([out._F, gnn_out], axis=-1)
+        gnn_out = self.convs[3](gnn_out, adj['p8']) #S8
+        sort_idx = argsort_coords(out._C)
+        out._C = out._C[sort_idx]
+        out._F = torch.cat([out._F[sort_idx], gnn_out], axis=-1)
 
         out = self.bn3(out)
         out = self.relu(out)
@@ -190,7 +198,9 @@ class MinkUNetTwoStreamBase(ResNetBase):
         # tensor_stride=16
         out = self.conv4p8s2(out_b3p8)
         gnn_out = self.convs[4](gnn_out, adj['p16'])
-        out._F = torch.cat([out._F, gnn_out], axis=-1)
+        sort_idx = argsort_coords(out._C)
+        out._C = out._C[sort_idx]
+        out._F = torch.cat([out._F[sort_idx], gnn_out], axis=-1)
 
         out = self.bn4(out)
         out = self.relu(out)
@@ -198,8 +208,6 @@ class MinkUNetTwoStreamBase(ResNetBase):
 
         # tensor_stride=8
         out = self.convtr4p16s2(out)
-        # gnn_out = self.convs[cur_gnn_layer](out._F, adj['p1'])
-        # out._F = torch.cat([out._F, gnn_out], axis=-1)
 
         out = self.bntr4(out)
         out = self.relu(out)

@@ -174,7 +174,8 @@ class ScanNetPointNet(LightningDataModule):
         parser.add_argument("--val_batch_size", type=int, default=6)
         parser.add_argument("--test_batch_size", type=int, default=6)
         parser.add_argument("--num_workers", type=int, default=5)
-        parser.add_argument("--npoints", type=int, default=8192)
+        parser.add_argument("--max_npoints", type=int, default=8192)
+        parser.add_argument("--min_npoints", type=int, default=8192)
 
         parser.add_argument("--use_implicit", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument("--use_color", type=str2bool, nargs='?', const=True, default=False)
@@ -274,16 +275,19 @@ class ScannetDatasetWholeScene():
                         point_idx = np.arange(scene_data.shape[0])[mask]
                     
                     # print(len(cur_point_set))
-                    if self.npoints > 0:
-                        choice = np.random.choice(len(cur_point_set), self.npoints, replace=True)
-                        cur_point_set = cur_point_set[choice,:] # Nx3
-                        if self.return_point_idx:
-                            point_idx = point_idx[choice]
-                    elif len(cur_point_set) < 50:
-                        choice = np.random.choice(len(cur_point_set), 1024, replace=True)
-                        cur_point_set = cur_point_set[choice,:] # Nx3
-                        if self.return_point_idx:
-                            point_idx = point_idx[choice]
+                    cur_num_pts = len(cur_point_set)
+                    if cur_num_pts > self.max_npoints and self.max_npoints > 0:
+                        choice = np.random.choice(cur_num_pts, self.max_npoints, replace=False)
+                    elif cur_num_pts < self.min_npoints and self.min_npoints > 0:
+                        choice = np.random.choice(cur_num_pts, self.min_npoints - cur_num_pts, replace=True)
+                        choice = np.concatenate([np.arange(cur_num_pts), choice])
+                    else:
+                        choice = np.arange(cur_num_pts)
+                    cur_point_set = cur_point_set[choice,:] # Nx3
+                    if self.return_point_idx:
+                        point_idx = point_idx[choice]
+                    #assert(not np.all(cur_point_set[:,-1] == 156))
+                    assert(not np.all(cur_point_set[:,-1] == -1))
 
 
                         # mask = mask[choice]
@@ -683,8 +687,15 @@ class ScannetDataset():
                 implicit_data = self.implicit_data[scene_id][curchoice]
                 cur_point_set = np.concatenate([cur_point_set, implicit_data], axis=1)
 
-            choices = np.random.choice(cur_point_set.shape[0], self.npoints, replace=True)
-            cur_point_set = cur_point_set[choices]
+            cur_num_pts = len(cur_point_set)
+            if cur_num_pts > self.max_npoints and self.max_npoints > 0:
+                choice = np.random.choice(cur_num_pts, self.max_npoints, replace=False)
+            elif cur_num_pts < self.min_npoints and self.min_npoints > 0:
+                choice = np.random.choice(cur_num_pts, self.min_npoints - cur_num_pts, replace=True)
+                choice = np.concatenate([np.arange(cur_num_pts), choice])
+            else:
+                choice = np.arange(cur_num_pts)
+            cur_point_set = cur_point_set[choice,:] # Nx3
             self.chunk_data[scene_id] = cur_point_set
             
         # print("done!\n")
@@ -722,7 +733,7 @@ def build_collate_fn(dense_input=False, return_idx=False):
             ) = zip(*data)
             
         # print(point_set)
-        if not dense_input or self.npoints < 0:
+        if not dense_input or self.max_npoints < 0 or self.min_npoints < 0:
             batch_size = len(point_set)
             batch_idx = torch.cat([torch.ones(point_set[i].shape[0], 1) * i for i in range(batch_size)], axis=0)
             # batch_idx = torch.arange(batch_size)
@@ -735,7 +746,6 @@ def build_collate_fn(dense_input=False, return_idx=False):
             if return_idx:
                 point_idx = torch.from_numpy(np.concatenate(point_idx, axis=0)).long()
         else:
-            
             point_set = torch.FloatTensor(point_set)
             semantic_seg = torch.LongTensor(semantic_seg)
             if return_idx:

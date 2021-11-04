@@ -15,7 +15,7 @@ from tqdm import tqdm
 from plyfile import PlyElement, PlyData
 import examples.transforms_dict as t
 from examples.str2bool import str2bool
-from examples.utils import interpolate_grid_feats, get_embedder, gather_nd, sparse_collate
+from examples.utils import interpolate_grid_feats, get_embedder, gather_nd, sparse_collate, sort_coords
 from examples.BaseLightningPrecomputedDataset import BasePrecomputed
 # from examples.DeepGCN_nopyg.gcn_lib.dense.torch_edge import dense_knn_matrix
 # import MinkowskiEngine as ME
@@ -115,8 +115,9 @@ class ScanNetPrecomputed(BasePrecomputed):
                     adj = torch_geometric.nn.pool.knn_graph(x=pts, k=16,
                                                     loop=False, flow='source_to_target',
                                                     cosine=False)
+                    torch.save(adj, adj_file)
                     if self.precompute_adjs:
-                        coords = (pts / self.voxel_size).contiguous()
+                        coords = torch.cat([torch.ones(pts.shape[0], 1), (pts / self.voxel_size).contiguous()], axis=-1)
                         in_field = ME.TensorField(
                             features=torch.ones_like(coords),
                             coordinates=coords,
@@ -125,16 +126,41 @@ class ScanNetPrecomputed(BasePrecomputed):
                             # minkowski_algorithm=ME.MinkowskiAlgorithm.MEMORY_EFFICIENT,
                             # device=in_dict['feats'].device,
                         )
-                        down_2 = in_field.sparse(2)
-                        # print(down_2)
-                        # print(down_2._C, down_2._C.shape)
-                        down_4 = in_field.sparse(4)
-                        # print(down_4)
-                        # print(down_4._C, down_4._C.shape)
-                        down_8 = in_field.sparse(8)
-                        # print(down_8)
-                        # print(down_8._C, down_8._C.shape)
-                    torch.save(adj, adj_file)
+
+                        knn_file_base = os.path.join(self.data_dir, 'knns')
+                        up_coords = pts
+                        for i in range(4):
+                            down_factor = 2**i
+                            os.makedirs(os.path.join(knn_file_base, 'down_' + str(down_factor)), exist_ok=True)
+                            down = in_field.sparse(down_factor)
+                            print(down)
+                            down_coords = down._C[:,1:].float()
+                            down_coords = sort_coords(down_coords)
+                            knn = torch_geometric.nn.pool.knn(up_coords, down_coords, k=16, num_workers=1)
+                            torch.save(knn, os.path.join(knn_file_base, 'down_' + str(down_factor), scene_name + '_knn.pt'))
+                            up_coords = down_coords
+                        
+                        # coords = torch.cat([torch.ones(pts.shape[0], 1), (pts / self.voxel_size).contiguous()], axis=-1).cuda()
+                        # in_field = ME.TensorField(
+                        #     features=torch.ones_like(coords),
+                        #     coordinates=coords,
+                        #     quantization_mode=ME.SparseTensorQuantizationMode.UNWEIGHTED_AVERAGE,
+                        #     minkowski_algorithm=ME.MinkowskiAlgorithm.SPEED_OPTIMIZED,
+                        #     # minkowski_algorithm=ME.MinkowskiAlgorithm.MEMORY_EFFICIENT,
+                        #     # device=in_dict['feats'].device,
+                        # )
+                        
+                        # for i in range(100):
+                        #     down = in_field.sparse(8)
+                        #     print(down)
+                        #     down_coords_2 = down._C[:,1:].float()
+                        #     down_coords_2 = self.sort_coords(down_coords_2)
+                        #     print(down_coords[:30], down_coords_2[:30])
+                        #     assert(torch.allclose(down_coords, down_coords_2.cpu()))
+                        # assert(True == False)
+
+
+    
 
     def setup(self, stage: Optional[str] = None):
         with open(os.path.join(self.data_dir, 'splits', 'scannetv2_train.txt'), 'r') as f:

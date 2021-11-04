@@ -18,6 +18,23 @@ def coord_mapping(tensor_coords):
     tensor_coord_idx[linear_idx] = torch.arange(linear_idx.shape[0], dtype=torch.long)
     return tensor_coord_idx, dense_dim
 
+def sort_coords(coords):
+    max_coords = coords.max(axis=0)[0]
+    coords_hash = coords[:,0]
+    for i in range(len(max_coords)-1):
+        coords_hash = coords_hash * max_coords[i+1] + coords[:,i+1]
+    sort_idx = coords_hash.sort()[1]
+    coords = coords[sort_idx]
+    return coords
+
+def argsort_coords(coords):
+    max_coords = coords.max(axis=0)[0]
+    coords_hash = coords[:,0]
+    for i in range(len(max_coords)-1):
+        coords_hash = coords_hash * max_coords[i+1] + coords[:,i+1]
+    sort_idx = coords_hash.sort()[1]
+    return sort_idx
+
 def features_at_coordinates(pts, coords, tensor_features):
     tensor_mapping, dense_dim = coord_mapping(coords)
     out_tensor = torch.zeros(pts.shape[0], tensor_features.shape[1]).type_as(tensor_features)
