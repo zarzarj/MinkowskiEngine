@@ -130,13 +130,13 @@ class MinkUNetTwoStreamBase(ResNetBase):
             self.gnn_convs.append(copy.deepcopy(conv))
             self.gnn_convs[-1].reset_parameters()
             
-        self.gnn_skips = ModuleList()
-        self.gnn_skips.append(Linear(in_channels, self.hidden_channels))
-        for _ in range(self.num_layers - 1):
-            self.gnn_skips.append(Linear(self.hidden_channels, self.hidden_channels))
+        # self.gnn_skips = ModuleList()
+        # self.gnn_skips.append(Linear(in_channels, self.hidden_channels))
+        # for _ in range(self.num_layers - 1):
+        #     self.gnn_skips.append(Linear(self.hidden_channels, self.hidden_channels))
 
     def forward(self, in_dict):
-        adj = in_dict['adj']
+        # adj = in_dict['adj']
         in_field = ME.TensorField(
             features=in_dict['feats'],
             coordinates=in_dict['coords'],
@@ -148,7 +148,7 @@ class MinkUNetTwoStreamBase(ResNetBase):
         # print(in_field)
         x = in_field.sparse()
         out = self.conv0p1s1(x)
-        gnn_out = self.convs[0](in_dict['feats'], adj['p1']) #S1
+        gnn_out = self.convs[0](in_dict['feats'], in_dict['p1']) #S1
         sort_idx = argsort_coords(out._C)
         out._C = out._C[sort_idx]
         out._F = torch.cat([out._F[sort_idx], gnn_out], axis=-1)
@@ -157,7 +157,7 @@ class MinkUNetTwoStreamBase(ResNetBase):
         out_p1 = self.relu(out)
 
         out = self.conv1p1s2(out_p1)
-        gnn_out = self.convs[1](gnn_out, adj['p2']) #S2
+        gnn_out = self.convs[1](gnn_out, in_dict['p2']) #S2
         sort_idx = argsort_coords(out._C)
         out._C = out._C[sort_idx]
         out._F = torch.cat([out._F[sort_idx], gnn_out], axis=-1)
@@ -170,7 +170,7 @@ class MinkUNetTwoStreamBase(ResNetBase):
         # out._F = torch.cat([out._F, gnn_out], axis=-1)
 
         out = self.conv2p2s2(out_b1p2)
-        gnn_out = self.convs[2](gnn_out, adj['p4']) #S4
+        gnn_out = self.convs[2](gnn_out, in_dict['p4']) #S4
         sort_idx = argsort_coords(out._C)
         out._C = out._C[sort_idx]
         out._F = torch.cat([out._F[sort_idx], gnn_out], axis=-1)
@@ -183,7 +183,7 @@ class MinkUNetTwoStreamBase(ResNetBase):
         # out._F = torch.cat([out._F, gnn_out], axis=-1)
 
         out = self.conv3p4s2(out_b2p4)
-        gnn_out = self.convs[3](gnn_out, adj['p8']) #S8
+        gnn_out = self.convs[3](gnn_out, in_dict['p8']) #S8
         sort_idx = argsort_coords(out._C)
         out._C = out._C[sort_idx]
         out._F = torch.cat([out._F[sort_idx], gnn_out], axis=-1)
@@ -197,7 +197,7 @@ class MinkUNetTwoStreamBase(ResNetBase):
 
         # tensor_stride=16
         out = self.conv4p8s2(out_b3p8)
-        gnn_out = self.convs[4](gnn_out, adj['p16'])
+        gnn_out = self.convs[4](gnn_out, in_dict['p16'])
         sort_idx = argsort_coords(out._C)
         out._C = out._C[sort_idx]
         out._F = torch.cat([out._F[sort_idx], gnn_out], axis=-1)
@@ -255,13 +255,13 @@ class MinkUNetTwoStreamBase(ResNetBase):
     def add_argparse_args(parent_parser):
         parser.add_argument("--hidden_channels", type=int, default=128)
         parser.add_argument("--heads", type=int, default=4)
-        parser.add_argument("--num_layers", type=int, default=6)
-        parser.add_argument("--group", type=int, default=2)
-        parser.add_argument("--dropout", type=int, default=0.0)
+        parser.add_argument("--num_layers", type=int, default=5)
+        # parser.add_argument("--group", type=int, default=2)
+        parser.add_argument("--dropout", type=int, default=0.3)
         parser.add_argument("--bn_momentum", type=int, default=0.1)
         parser.add_argument("--norm", type=str, default='batch', choices=['batch', 'layer', 'instance', 'none'])
-        parser.add_argument("--track_running_stats", type=str2bool, nargs='?', const=True, default=False)
-        parser.add_argument("--reversible", type=str2bool, nargs='?', const=True, default=True)
+        parser.add_argument("--track_running_stats", type=str2bool, nargs='?', const=True, default=True)
+        # parser.add_argument("--reversible", type=str2bool, nargs='?', const=True, default=True)
         parser.add_argument("--model", type=str, default='rgat', choices=['rgat'])
         return parent_parser
 

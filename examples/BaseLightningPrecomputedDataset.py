@@ -123,6 +123,8 @@ class BasePrecomputed(LightningDataModule):
         if 'colors' in in_dict:
             # print(in_dict['colors'].max())
             in_dict['colors'] = (in_dict['colors'] / 255.) - 0.5
+            if self.rand_colors:
+                in_dict['colors'] = torch.rand_like(in_dict['colors']) - 0.5
         in_dict['feats'] = self.get_features(in_dict)
         
         # if self.quantize_input:
@@ -143,6 +145,7 @@ class BasePrecomputed(LightningDataModule):
         out_feats = torch.cat(feats, dim=-1).float()
         if self.rand_feats:
             out_feats = torch.rand_like(out_feats) - 0.5
+
         return out_feats
 
     def callbacks(self):
@@ -171,6 +174,7 @@ class BasePrecomputed(LightningDataModule):
         parser.add_argument("--use_augmentation", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument("--point_dropout", type=str2bool, nargs='?', const=True, default=True)
         parser.add_argument("--rand_feats", type=str2bool, nargs='?', const=True, default=False)
+        parser.add_argument("--rand_colors", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument("--shift_coords", type=str2bool, nargs='?', const=True, default=False)
         # parser.add_argument("--elastic_distortion", type=str2bool, nargs='?', const=True, default=False)
 

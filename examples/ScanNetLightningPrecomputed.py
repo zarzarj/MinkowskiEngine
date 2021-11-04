@@ -96,7 +96,7 @@ class ScanNetPrecomputed(BasePrecomputed):
         self.NUM_LABELS -= len(self.IGNORE_LABELS)
 
     def prepare_data(self):
-        if self.load_graph:
+        if self.load_graph or self.precompute_adjs:
             if self.precompute_adjs:
                 import MinkowskiEngine as ME
             import torch_geometric
@@ -104,18 +104,29 @@ class ScanNetPrecomputed(BasePrecomputed):
             os.makedirs(os.path.join(self.data_dir, 'adjs'), exist_ok=True)
             for scan in tqdm(all_scans):
                 scene_name = scan.split('/')[-1]
+                needs_computing = False
+                if self.precompute_adjs:
+                    for i in range(5):
+                        down_factor = 2**i
+                        os.makedirs(os.path.join(self.data_dir, 'knns', 'down_' + str(down_factor)), exist_ok=True)
+                        knn_file = os.path.join(self.data_dir, 'knns', 'down_' + str(down_factor), scene_name + '_knn.pt')
+                        if not os.path.exists(knn_file):
+                            needs_computing = True
                 adj_file = os.path.join(self.data_dir, 'adjs', scene_name + '_adj.pt')
                 if not os.path.exists(adj_file):
+                    needs_computing = True
+                if needs_computing:
                     scan_file = os.path.join(scan, scene_name + '_vh_clean_2.ply')
                     with open(scan_file, 'rb') as f:
                         plydata = PlyData.read(f)
                     pts = torch.from_numpy(np.stack((plydata['vertex']['x'],
                                            plydata['vertex']['y'],
                                            plydata['vertex']['z'])).T)
-                    adj = torch_geometric.nn.pool.knn_graph(x=pts, k=16,
-                                                    loop=False, flow='source_to_target',
-                                                    cosine=False)
-                    torch.save(adj, adj_file)
+                    if not os.path.exists(adj_file):
+                        adj = torch_geometric.nn.pool.knn_graph(x=pts, k=16,
+                                                        loop=False, flow='source_to_target',
+                                                        cosine=False)
+                        torch.save(adj, adj_file)
                     if self.precompute_adjs:
                         coords = torch.cat([torch.ones(pts.shape[0], 1), (pts / self.voxel_size).contiguous()], axis=-1)
                         in_field = ME.TensorField(
@@ -126,18 +137,17 @@ class ScanNetPrecomputed(BasePrecomputed):
                             # minkowski_algorithm=ME.MinkowskiAlgorithm.MEMORY_EFFICIENT,
                             # device=in_dict['feats'].device,
                         )
-
-                        knn_file_base = os.path.join(self.data_dir, 'knns')
-                        up_coords = pts
-                        for i in range(4):
+                        up_coords = pts / self.voxel_size
+                        for i in range(5):
                             down_factor = 2**i
-                            os.makedirs(os.path.join(knn_file_base, 'down_' + str(down_factor)), exist_ok=True)
                             down = in_field.sparse(down_factor)
                             print(down)
                             down_coords = down._C[:,1:].float()
                             down_coords = sort_coords(down_coords)
-                            knn = torch_geometric.nn.pool.knn(up_coords, down_coords, k=16, num_workers=1)
-                            torch.save(knn, os.path.join(knn_file_base, 'down_' + str(down_factor), scene_name + '_knn.pt'))
+                            knn_file = os.path.join(self.data_dir, 'knns', 'down_' + str(down_factor), scene_name + '_knn.pt')
+                            if not os.path.exists(knn_file):
+                                knn = torch_geometric.nn.pool.knn(up_coords, down_coords, k=16, num_workers=1)
+                                torch.save(knn, knn_file)
                             up_coords = down_coords
                         
                         # coords = torch.cat([torch.ones(pts.shape[0], 1), (pts / self.voxel_size).contiguous()], axis=-1).cuda()
@@ -206,6 +216,11 @@ class ScanNetPrecomputed(BasePrecomputed):
 
         if self.load_graph:
             out_dict['adj'] = torch.load(os.path.join(self.data_dir, 'adjs', idx + '_adj.pt'))
+        if self.precompute_adjs:
+            for i in range(5):
+                down_factor = 2**i
+                knn_file = os.path.join(self.data_dir, 'knns', 'down_' + str(down_factor), scene_name + '_knn.pt')
+                out_dict['p'+str(down_factor)] = torch.load(knn_file)
 
         return out_dict
 

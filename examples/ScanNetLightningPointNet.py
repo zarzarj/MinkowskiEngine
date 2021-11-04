@@ -241,7 +241,7 @@ class ScannetDatasetWholeScene():
                     np.save(scene_file, scene_data)
                 else:
                     scene_data = np.load(scene_file)
-                    scene_data[scene_data[:,9] == 156,9] = -1
+                    scene_data[scene_data[:,9] >= 156,9] = -1
                     # print(scene_data[:,9].max())
                     # print(scene_data.shape)
             else:
