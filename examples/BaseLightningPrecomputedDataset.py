@@ -70,7 +70,18 @@ class BasePrecomputed(LightningDataModule):
         for k, v in in_dict.items():
             # print(v)
             if np.all([isinstance(it, torch.Tensor) for it in v]):
-                if 'adjacency' in k:
+                if 'adjacency_' in k:
+                    num_pts = [0, 0]
+                    for i, adj in enumerate(v):
+                        adj[0] += num_pts[0]
+                        down_factor = int(k.split('_')[1])
+                        
+                        num_pts[0] += in_dict['adjacency_' + str(int(down_factor/2)) + '_num_pts'][i]
+                        adj[1] += num_pts[1]
+                        num_pts[1] += in_dict[k + '_num_pts'][i]
+                        # print(num_pts)
+                    in_dict[k] = torch.cat(v, axis=1)
+                elif 'adjacency' in k:
                     num_pts = 0
                     for i, adj in enumerate(v):
                         adj += num_pts

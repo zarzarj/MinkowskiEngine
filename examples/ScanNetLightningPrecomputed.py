@@ -217,10 +217,12 @@ class ScanNetPrecomputed(BasePrecomputed):
         if self.load_graph:
             out_dict['adjacency'] = torch.load(os.path.join(self.data_dir, 'adjs', idx + '_adj.pt'))
         if self.precompute_adjs:
+            out_dict['adjacency_0_num_pts'] = out_dict['pts'].shape[0]
             for i in range(5):
                 down_factor = 2**i
                 knn_file = os.path.join(self.data_dir, 'knns', 'down_' + str(down_factor), idx + '_knn.pt')
                 out_dict['adjacency_'+str(down_factor)] = torch.load(knn_file).flip(dims=(0,))
+                out_dict['adjacency_'+str(down_factor)+'_num_pts'] = (out_dict['adjacency_'+str(down_factor)][1].max(axis=0)[0] + 1).item()
 
         return out_dict
 
