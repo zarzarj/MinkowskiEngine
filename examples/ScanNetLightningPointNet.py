@@ -740,9 +740,9 @@ def build_collate_fn(dense_input=False, return_idx=False):
             # coords = coords.contiguous().reshape(-1, coords.shape[-1])
             point_set = np.concatenate(point_set, axis=0)
             coords = torch.from_numpy(point_set[:, :3])
-            coords = torch.cat([batch_idx, coords], axis=-1)
-            feats = torch.from_numpy(point_set[:, 3:])
-            semantic_seg = torch.from_numpy(np.concatenate(semantic_seg, axis=0))
+            coords = torch.cat([batch_idx, coords], axis=-1).float()
+            feats = torch.from_numpy(point_set[:, 3:]).float()
+            semantic_seg = torch.from_numpy(np.concatenate(semantic_seg, axis=0)).long()
             if return_idx:
                 point_idx = torch.from_numpy(np.concatenate(point_idx, axis=0)).long()
         else:
@@ -752,7 +752,7 @@ def build_collate_fn(dense_input=False, return_idx=False):
                 point_idx = torch.LongTensor(point_idx)
 
             coords = point_set[:, :, :3]
-            feats = point_set[:, :, 3:]
+            # feats = point_set[:, :, 3:]
             feats = point_set[:, :, 3:].contiguous().transpose(1,2) #B, C, N
 
         # pack
