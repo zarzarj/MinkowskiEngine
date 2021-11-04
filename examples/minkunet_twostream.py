@@ -32,6 +32,13 @@ from examples.utils import sort_coords, argsort_coords
 
 from examples.resnet import ResNetBase
 
+from torch_sparse import SparseTensor
+from torch_geometric.nn import SAGEConv, GATConv, EdgeConv
+from examples.EdgeConvs import PointTransformerConv
+from examples.str2bool import str2bool
+import copy
+
+
 class MinkUNetTwoStreamBase(ResNetBase):
     BLOCK = None
     PLANES = None
@@ -44,21 +51,30 @@ class MinkUNetTwoStreamBase(ResNetBase):
     # To use the model, must call initialize_coords before forward pass.
     # Once data is processed, call clear to reset the model before calling
     # initialize_coords
-    def __init__(self, in_channels=3, out_channels=20, bn_momentum=0.1, D=3):
+    def __init__(self, in_channels=3, out_channels=20, bn_momentum=0.1, D=3, **kwargs):
         self.bn_momentum=bn_momentum
+        for name, value in kwargs.items():
+            if name != "self":
+                try:
+                    setattr(self, name, value)
+                except:
+                    print(name, value)
         ResNetBase.__init__(self, in_channels, out_channels, D)
-        
+        # self.save_hyperparameters(kwargs)
 
     def network_initialization(self, in_channels, out_channels, D):
         # Output of the first conv concated to conv6
         self.inplanes = self.INIT_DIM
         self.conv0p1s1 = ME.MinkowskiConvolution(
             in_channels, self.inplanes, kernel_size=5, dimension=D)
+        self.inplanes += self.hidden_channels
 
         self.bn0 = ME.MinkowskiBatchNorm(self.inplanes, momentum=self.bn_momentum)
 
         self.conv1p1s2 = ME.MinkowskiConvolution(
             self.inplanes, self.inplanes, kernel_size=2, stride=2, dimension=D)
+        self.inplanes += self.hidden_channels
+
         self.bn1 = ME.MinkowskiBatchNorm(self.inplanes, momentum=self.bn_momentum)
 
         self.block1 = self._make_layer(self.BLOCK, self.PLANES[0],
@@ -66,6 +82,8 @@ class MinkUNetTwoStreamBase(ResNetBase):
 
         self.conv2p2s2 = ME.MinkowskiConvolution(
             self.inplanes, self.inplanes, kernel_size=2, stride=2, dimension=D)
+        self.inplanes += self.hidden_channels
+
         self.bn2 = ME.MinkowskiBatchNorm(self.inplanes, momentum=self.bn_momentum)
 
         self.block2 = self._make_layer(self.BLOCK, self.PLANES[1],
@@ -73,6 +91,7 @@ class MinkUNetTwoStreamBase(ResNetBase):
 
         self.conv3p4s2 = ME.MinkowskiConvolution(
             self.inplanes, self.inplanes, kernel_size=2, stride=2, dimension=D)
+        self.inplanes += self.hidden_channels
 
         self.bn3 = ME.MinkowskiBatchNorm(self.inplanes, momentum=self.bn_momentum)
         self.block3 = self._make_layer(self.BLOCK, self.PLANES[2],
@@ -80,6 +99,8 @@ class MinkUNetTwoStreamBase(ResNetBase):
 
         self.conv4p8s2 = ME.MinkowskiConvolution(
             self.inplanes, self.inplanes, kernel_size=2, stride=2, dimension=D)
+        self.inplanes += self.hidden_channels
+
         self.bn4 = ME.MinkowskiBatchNorm(self.inplanes, momentum=self.bn_momentum)
         self.block4 = self._make_layer(self.BLOCK, self.PLANES[3],
                                        self.LAYERS[3])
@@ -109,7 +130,7 @@ class MinkUNetTwoStreamBase(ResNetBase):
             self.inplanes, self.PLANES[7], kernel_size=2, stride=2, dimension=D)
         self.bntr7 = ME.MinkowskiBatchNorm(self.PLANES[7], momentum=self.bn_momentum)
 
-        self.inplanes = self.PLANES[7] + self.INIT_DIM
+        self.inplanes = self.PLANES[7] + self.INIT_DIM + self.hidden_channels
         self.block8 = self._make_layer(self.BLOCK, self.PLANES[7],
                                        self.LAYERS[7])
 
@@ -123,11 +144,20 @@ class MinkUNetTwoStreamBase(ResNetBase):
 
 
         if self.gnn_model == 'rgat':
-            conv = GATConv(in_channels, self.hidden_channels // self.heads, self.heads,
+            in_conv = GATConv(in_channels, self.hidden_channels // self.heads, self.heads,
                               add_self_loops=False)
-        self.gnn_convs = []
+            back_conv = PointTransformerConv(in_channels=in_channels, out_channels=self.hidden_channels,
+                           pos_nn=None, attn_nn=None, add_self_loops=False)
+        elif self.gnn_model == 'ptrans':
+            in_conv = PointTransformerConv(in_channels=in_channels, out_channels=self.hidden_channels,
+                           pos_nn=None, attn_nn=None, add_self_loops=False)
+            back_conv = PointTransformerConv(in_channels=self.hidden_channels, out_channels=self.hidden_channels,
+                           pos_nn=None, attn_nn=None, add_self_loops=False)
+        self.gnn_convs = nn.ModuleList()
+        self.gnn_convs.append(copy.deepcopy(in_conv))
+        self.gnn_convs[-1].reset_parameters()
         for i in range(self.num_layers-1):
-            self.gnn_convs.append(copy.deepcopy(conv))
+            self.gnn_convs.append(copy.deepcopy(back_conv))
             self.gnn_convs[-1].reset_parameters()
             
         # self.gnn_skips = ModuleList()
@@ -135,7 +165,7 @@ class MinkUNetTwoStreamBase(ResNetBase):
         # for _ in range(self.num_layers - 1):
         #     self.gnn_skips.append(Linear(self.hidden_channels, self.hidden_channels))
 
-    def forward(self, in_dict):
+    def forward(self, in_dict, return_feats=False):
         # adj = in_dict['adj']
         in_field = ME.TensorField(
             features=in_dict['feats'],
@@ -147,60 +177,79 @@ class MinkUNetTwoStreamBase(ResNetBase):
         )
         # print(in_field)
         x = in_field.sparse()
+        sort_idx = argsort_coords(x.coordinates)
+        x._C = x._C[sort_idx]
+
         out = self.conv0p1s1(x)
-        gnn_out = self.convs[0](in_dict['feats'], in_dict['p1']) #S1
-        sort_idx = argsort_coords(out._C)
+        # adj = SparseTensor(row=in_dict['adjacency_1'][0], col=in_dict['adjacency_1'][1])
+        adj = in_dict['adjacency_1']
+        # print(adj.max(axis=1), in_dict['coords'].shape, out.coordinates.shape)
+        sort_idx = argsort_coords(out.coordinates)
         out._C = out._C[sort_idx]
-        out._F = torch.cat([out._F[sort_idx], gnn_out], axis=-1)
+        fake_feats = torch.zeros(out._C.shape[0], in_dict['feats'].shape[1], device=in_dict['feats'].device, dtype=in_dict['feats'].dtype)
+        gnn_out = self.gnn_convs[0](x=(in_dict['feats'], fake_feats),
+                                    pos=(in_dict['coords'][:,1:], out._C[:,1:]), edge_index=adj) #S1
+        out._F = torch.cat([out._F[sort_idx], gnn_out[:sort_idx.shape[0]]], axis=-1)
+        prev_out_coords = out._C[:,1:].clone().float()
 
         out = self.bn0(out)
         out_p1 = self.relu(out)
 
         out = self.conv1p1s2(out_p1)
-        gnn_out = self.convs[1](gnn_out, in_dict['p2']) #S2
-        sort_idx = argsort_coords(out._C)
+        adj = in_dict['adjacency_2']
+        # print(adj.max(axis=1), prev_out_coords.shape, out.coordinates.shape)
+        sort_idx = argsort_coords(out.coordinates)
         out._C = out._C[sort_idx]
+        fake_feats = torch.zeros(out._C.shape[0], gnn_out.shape[1], device=gnn_out.device, dtype=gnn_out.dtype)
+        gnn_out = self.gnn_convs[1](x=(gnn_out, fake_feats),
+                                    pos=(prev_out_coords, out._C[:,1:].float()), edge_index=adj) #S2
         out._F = torch.cat([out._F[sort_idx], gnn_out], axis=-1)
+        prev_out_coords = out._C[:,1:].clone()
 
         out = self.bn1(out)
         out = self.relu(out)
-
         out_b1p2 = self.block1(out)
-        # gnn_out = self.convs[0](out._F, adj[0])
-        # out._F = torch.cat([out._F, gnn_out], axis=-1)
 
         out = self.conv2p2s2(out_b1p2)
-        gnn_out = self.convs[2](gnn_out, in_dict['p4']) #S4
-        sort_idx = argsort_coords(out._C)
+        adj = in_dict['adjacency_4']
+        sort_idx = argsort_coords(out.coordinates)
         out._C = out._C[sort_idx]
+        fake_feats = torch.zeros(out._C.shape[0], gnn_out.shape[1], device=gnn_out.device, dtype=gnn_out.dtype)
+        gnn_out = self.gnn_convs[2](x=(gnn_out, fake_feats),
+                                    pos=(prev_out_coords, out._C[:,1:].float()), edge_index=adj) #S2
         out._F = torch.cat([out._F[sort_idx], gnn_out], axis=-1)
+        prev_out_coords = out._C[:,1:].clone().float()
 
         out = self.bn2(out)
         out = self.relu(out)
 
         out_b2p4 = self.block2(out)
-        # gnn_out = self.convs[0](in_dict['feats'], adj[0])
-        # out._F = torch.cat([out._F, gnn_out], axis=-1)
 
         out = self.conv3p4s2(out_b2p4)
-        gnn_out = self.convs[3](gnn_out, in_dict['p8']) #S8
-        sort_idx = argsort_coords(out._C)
+        adj = in_dict['adjacency_8']
+        sort_idx = argsort_coords(out.coordinates)
         out._C = out._C[sort_idx]
+        fake_feats = torch.zeros(out._C.shape[0], gnn_out.shape[1], device=gnn_out.device, dtype=gnn_out.dtype)
+        gnn_out = self.gnn_convs[3](x=(gnn_out, fake_feats),
+                                    pos=(prev_out_coords, out._C[:,1:].float()), edge_index=adj) #S2
         out._F = torch.cat([out._F[sort_idx], gnn_out], axis=-1)
+        prev_out_coords = out._C[:,1:].clone().float()
 
         out = self.bn3(out)
         out = self.relu(out)
 
         out_b3p8 = self.block3(out)
-        # gnn_out = self.convs[0](in_dict['feats'], adj[0])
-        # out._F = torch.cat([out._F, gnn_out], axis=-1)
 
         # tensor_stride=16
         out = self.conv4p8s2(out_b3p8)
-        gnn_out = self.convs[4](gnn_out, in_dict['p16'])
-        sort_idx = argsort_coords(out._C)
+        adj = in_dict['adjacency_16']
+        sort_idx = argsort_coords(out.coordinates)
         out._C = out._C[sort_idx]
+        fake_feats = torch.zeros(out._C.shape[0], gnn_out.shape[1], device=gnn_out.device, dtype=gnn_out.dtype)
+        gnn_out = self.gnn_convs[4](x=(gnn_out, fake_feats),
+                                    pos=(prev_out_coords, out._C[:,1:].float()), edge_index=adj) #S2
         out._F = torch.cat([out._F[sort_idx], gnn_out], axis=-1)
+        # prev_out_coords = out._C[:,1:].clone().float()
 
         out = self.bn4(out)
         out = self.relu(out)
@@ -237,8 +286,8 @@ class MinkUNetTwoStreamBase(ResNetBase):
         out = self.relu(out)
 
         out = ME.cat(out, out_p1)
-        out = self.block8(out)
-        out = self.final(out)
+        out_feats = self.block8(out)
+        out = self.final(out_feats)
 
         # if in_dict['rand_shift'] is not None:
         #     coords = []
@@ -248,11 +297,16 @@ class MinkUNetTwoStreamBase(ResNetBase):
         # else:
         #     coords, feats = out.decomposed_coordinates_and_features
         feats = out.slice(in_field).F
+        # feats = out.F
         # feats = torch.cat(feats, axis=0)
+        if return_feats:
+            # return feats, out_feats.F
+            return feats, out_feats.slice(in_field).F
         return feats
 
     @staticmethod
     def add_argparse_args(parent_parser):
+        parser = parent_parser.add_argument_group("RevGNNSegModel")
         parser.add_argument("--hidden_channels", type=int, default=128)
         parser.add_argument("--heads", type=int, default=4)
         parser.add_argument("--num_layers", type=int, default=5)
@@ -262,7 +316,7 @@ class MinkUNetTwoStreamBase(ResNetBase):
         parser.add_argument("--norm", type=str, default='batch', choices=['batch', 'layer', 'instance', 'none'])
         parser.add_argument("--track_running_stats", type=str2bool, nargs='?', const=True, default=True)
         # parser.add_argument("--reversible", type=str2bool, nargs='?', const=True, default=True)
-        parser.add_argument("--model", type=str, default='rgat', choices=['rgat'])
+        parser.add_argument("--gnn_model", type=str, default='ptrans', choices=['rgat, ptrans'])
         return parent_parser
 
     def convert_sync_batchnorm(self):

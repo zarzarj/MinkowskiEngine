@@ -215,12 +215,12 @@ class ScanNetPrecomputed(BasePrecomputed):
             out_dict['color_feats'] = None
 
         if self.load_graph:
-            out_dict['adj'] = torch.load(os.path.join(self.data_dir, 'adjs', idx + '_adj.pt'))
+            out_dict['adjacency'] = torch.load(os.path.join(self.data_dir, 'adjs', idx + '_adj.pt'))
         if self.precompute_adjs:
             for i in range(5):
                 down_factor = 2**i
-                knn_file = os.path.join(self.data_dir, 'knns', 'down_' + str(down_factor), scene_name + '_knn.pt')
-                out_dict['p'+str(down_factor)] = torch.load(knn_file)
+                knn_file = os.path.join(self.data_dir, 'knns', 'down_' + str(down_factor), idx + '_knn.pt')
+                out_dict['adjacency_'+str(down_factor)] = torch.load(knn_file).flip(dims=(0,))
 
         return out_dict
 

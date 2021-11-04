@@ -31,8 +31,9 @@ from torch.optim import SGD
 
 import MinkowskiEngine as ME
 from MinkowskiEngine.modules.resnet_block import BasicBlock, Bottleneck
+from pytorch_lightning.core import LightningModule
 
-class ResNetBase(nn.Module):
+class ResNetBase(LightningModule):
     BLOCK = None
     LAYERS = ()
     INIT_DIM = 64
