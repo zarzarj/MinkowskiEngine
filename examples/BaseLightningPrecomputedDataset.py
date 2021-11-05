@@ -33,7 +33,7 @@ class BasePrecomputed(LightningDataModule):
         self.cache = {}
         if self.use_augmentation:
             transformations = []
-            if self.point_dropout and not self.load_graph and not precompute_adjs:
+            if self.point_dropout and not self.load_graph and not self.precompute_adjs:
                 transformations = [t.RandomDropout(0.2, 0.2)]
             if self.color_aug:
                 transformations.extend([
