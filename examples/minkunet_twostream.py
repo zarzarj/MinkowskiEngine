@@ -39,6 +39,7 @@ from examples.str2bool import str2bool
 import copy
 
 from torch.nn import Sequential as Seq, Linear as Lin, ReLU, BatchNorm1d as BN
+# import torch_geometric
 
 def MLP(channels, batch_norm=True):
     return Seq(*[
@@ -194,13 +195,18 @@ class MinkUNetTwoStreamBase(ResNetBase):
         out = self.conv0p1s1(x)
         # adj = SparseTensor(row=in_dict['adjacency_1'][0], col=in_dict['adjacency_1'][1])
         adj = in_dict['adjacency_1']
+        # adj = torch_geometric.nn.pool.knn(in_dict['coords'][:,1:].float(), out.coordinates[:,1:].float(), batch_x=in_dict['coords'][:,0].long(), batch_y=out.coordinates[:,0].long(), k=16, num_workers=1).flip(dims=(0,))
         # print(adj.max(axis=1), in_dict['coords'].shape, out.coordinates.shape)
         sort_idx = argsort_coords(out.coordinates)
         out._C = out._C[sort_idx]
+        # print(out.coordinates)
         fake_feats = torch.zeros(out._C.shape[0], in_dict['feats'].shape[1], device=in_dict['feats'].device, dtype=in_dict['feats'].dtype)
+        pos=(in_dict['coords'][:,1:], out._C[:,1:])
+        if self.no_pos_info:
+            pos=(torch.zeros_like(pos[0]), torch.zeros_like(pos[1]))
         gnn_out = self.gnn_convs[0](x=(in_dict['feats'], fake_feats),
-                                    pos=(in_dict['coords'][:,1:], out._C[:,1:]), edge_index=adj) #S1
-        out._F = torch.cat([out._F[sort_idx], gnn_out[:sort_idx.shape[0]]], axis=-1)
+                                    pos=pos, edge_index=adj) #S1
+        out._F = torch.cat([out._F[sort_idx], gnn_out], axis=-1)
         prev_out_coords = out._C[:,1:].clone().float()
 
         out = self.bn0(out)
@@ -212,10 +218,13 @@ class MinkUNetTwoStreamBase(ResNetBase):
         sort_idx = argsort_coords(out.coordinates)
         out._C = out._C[sort_idx]
         fake_feats = torch.zeros(out._C.shape[0], gnn_out.shape[1], device=gnn_out.device, dtype=gnn_out.dtype)
+        pos = (prev_out_coords, out._C[:,1:].float())
+        if self.no_pos_info:
+            pos=(torch.zeros_like(pos[0]), torch.zeros_like(pos[1]))
         gnn_out = self.gnn_convs[1](x=(gnn_out, fake_feats),
-                                    pos=(prev_out_coords, out._C[:,1:].float()), edge_index=adj) #S2
+                                    pos=pos, edge_index=adj) #S2
         out._F = torch.cat([out._F[sort_idx], gnn_out], axis=-1)
-        prev_out_coords = out._C[:,1:].clone()
+        prev_out_coords = out._C[:,1:].clone().float()
 
         out = self.bn1(out)
         out = self.relu(out)
@@ -226,8 +235,11 @@ class MinkUNetTwoStreamBase(ResNetBase):
         sort_idx = argsort_coords(out.coordinates)
         out._C = out._C[sort_idx]
         fake_feats = torch.zeros(out._C.shape[0], gnn_out.shape[1], device=gnn_out.device, dtype=gnn_out.dtype)
+        pos = (prev_out_coords, out._C[:,1:].float())
+        if self.no_pos_info:
+            pos=(torch.zeros_like(pos[0]), torch.zeros_like(pos[1]))
         gnn_out = self.gnn_convs[2](x=(gnn_out, fake_feats),
-                                    pos=(prev_out_coords, out._C[:,1:].float()), edge_index=adj) #S2
+                                    pos=pos, edge_index=adj) #S2
         out._F = torch.cat([out._F[sort_idx], gnn_out], axis=-1)
         prev_out_coords = out._C[:,1:].clone().float()
 
@@ -241,8 +253,11 @@ class MinkUNetTwoStreamBase(ResNetBase):
         sort_idx = argsort_coords(out.coordinates)
         out._C = out._C[sort_idx]
         fake_feats = torch.zeros(out._C.shape[0], gnn_out.shape[1], device=gnn_out.device, dtype=gnn_out.dtype)
+        pos = (prev_out_coords, out._C[:,1:].float())
+        if self.no_pos_info:
+            pos=(torch.zeros_like(pos[0]), torch.zeros_like(pos[1]))
         gnn_out = self.gnn_convs[3](x=(gnn_out, fake_feats),
-                                    pos=(prev_out_coords, out._C[:,1:].float()), edge_index=adj) #S2
+                                    pos=pos, edge_index=adj) #S2
         out._F = torch.cat([out._F[sort_idx], gnn_out], axis=-1)
         prev_out_coords = out._C[:,1:].clone().float()
 
@@ -328,6 +343,7 @@ class MinkUNetTwoStreamBase(ResNetBase):
         parser.add_argument("--track_running_stats", type=str2bool, nargs='?', const=True, default=True)
         # parser.add_argument("--reversible", type=str2bool, nargs='?', const=True, default=True)
         parser.add_argument("--gnn_model", type=str, default='ptrans', choices=['rgat, ptrans', 'pointnet'])
+        parser.add_argument("--no_pos_info", type=str2bool, nargs='?', const=True, default=False)
         return parent_parser
 
     def convert_sync_batchnorm(self):
