@@ -102,7 +102,7 @@ class ScanNetLIG_graph(ScanNet):
             adj_file = os.path.join(self.data_dir, 'adjs', idx + f'_adj_{self.max_num_pts}.pt')
         else:
             adj_file = os.path.join(self.data_dir, 'adjs', idx + '_adj.pt')
-        in_dict['adj'] = torch.load(adj_file)
+        in_dict['adjacency'] = torch.load(adj_file)
         return in_dict
 
     def process_input(self, input_dict):
@@ -128,7 +128,7 @@ class ScanNetLIG_graph(ScanNet):
         input_dict = self.load_scan_files(idxs)
         coords_batch, feats_batch, labels_batch = sparse_collate(input_dict['coords'], input_dict['feats'], input_dict['labels'],
                                                                           dtype=torch.float32)
-        merged_adj = collate_adjs(input_dict['adj'])
+        merged_adj = collate_adjs(input_dict['adjacency'])
         update_dict = {"coords": coords_batch,
                     "labels": labels_batch.long(),
                     "feats": feats_batch,

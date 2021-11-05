@@ -108,7 +108,7 @@ class RevGNN_Rooms(LightningModule):
         # print(coords, coords.max(), coords.min())
         # coords = batch['coords']
         x = batch['feats']
-        adj = batch['adj']
+        adj = batch['adjacency']
         # print(x)
         # print(adj)
         # print(x.shape)
