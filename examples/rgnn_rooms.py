@@ -12,7 +12,7 @@ from torch_sparse import SparseTensor
 from torch_geometric.nn import SAGEConv, GATConv, EdgeConv
 import torch_geometric
 
-from examples.EdgeConvs import EdgeConvZ, EdgeOnlyConv, DenseEdgeOnlyConv, EdgeOnlyConvPos, EffSparseEdgeConv, DenseEdgeConvTriplets, DenseEdgeConv, DenseMRConv
+# from examples.EdgeConvs import EdgeConvZ, EdgeOnlyConv, DenseEdgeOnlyConv, EdgeOnlyConvPos, EffSparseEdgeConv, DenseEdgeConvTriplets, DenseEdgeConv, DenseMRConv
 from examples.model_rev import RevGCN
 from examples.MeanAccuracy import MeanAccuracy
 from examples.MeanIoU import MeanIoU
