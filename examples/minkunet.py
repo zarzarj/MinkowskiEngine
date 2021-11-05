@@ -164,10 +164,14 @@ class MinkUNetBase(ResNetBase):
 
     def forward(self, in_dict, return_feats=False):
         # print(in_dict['feats'].shape, in_dict['coords'].shape)
+        if self.quantization_mode == 'average':
+            quantization_mode=ME.SparseTensorQuantizationMode.UNWEIGHTED_AVERAGE
+        elif self.quantization_mode == 'random':
+            quantization_mode=ME.SparseTensorQuantizationMode.RANDOM_SUBSAMPLE
         in_field = ME.TensorField(
             features=in_dict['feats'],
             coordinates=in_dict['coords'],
-            quantization_mode=ME.SparseTensorQuantizationMode.UNWEIGHTED_AVERAGE,
+            quantization_mode=quantization_mode,
             # minkowski_algorithm=ME.MinkowskiAlgorithm.SPEED_OPTIMIZED,
             minkowski_algorithm=ME.MinkowskiAlgorithm.MEMORY_EFFICIENT,
             device=in_dict['feats'].device,
@@ -254,7 +258,7 @@ class MinkUNetBase(ResNetBase):
     @staticmethod
     def add_argparse_args(parent_parser):
         parser = parent_parser.add_argument_group("MinkUNet")
-        # parser.add_argument("--in_channels", type=int, default=3)
+        parser.add_argument("--quantization_mode", type=str, default='average')
         # parser.add_argument("--out_channels", type=int, default=32)
         return parent_parser
 
