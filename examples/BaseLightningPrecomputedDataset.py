@@ -33,17 +33,21 @@ class BasePrecomputed(LightningDataModule):
         self.cache = {}
         if self.use_augmentation:
             transformations = []
-            if self.point_dropout and not self.load_graph:
+            if self.point_dropout and not self.load_graph and not precompute_adjs:
                 transformations = [t.RandomDropout(0.2, 0.2)]
-            transformations.extend([
+            if self.color_aug:
+                transformations.extend([
+                                      t.ChromaticAutoContrast(),
+                                      t.ChromaticTranslation(0.1),
+                                      t.ChromaticJitter(0.05),
+                                      ])
+            if self.structure_aug:
+                transformations.extend([
                                       t.ElasticDistortion(0.2, 0.4),
                                       t.ElasticDistortion(0.8, 1.6),
                                       t.RandomScaling(0.9, 1.1),
                                       t.RandomRotation(([-np.pi/64, np.pi/64], [-np.pi/64, np.pi/64], [-np.pi, np.pi])),
                                       t.RandomHorizontalFlip('z'),
-                                      t.ChromaticAutoContrast(),
-                                      t.ChromaticTranslation(0.1),
-                                      t.ChromaticJitter(0.05),
                                     ])
             self.augment = t.Compose(transformations)
 
@@ -75,7 +79,7 @@ class BasePrecomputed(LightningDataModule):
                     for i, adj in enumerate(v):
                         adj[0] += num_pts[0]
                         down_factor = int(k.split('_')[1])
-                        
+
                         num_pts[0] += in_dict['adjacency_' + str(int(down_factor/2)) + '_num_pts'][i]
                         adj[1] += num_pts[1]
                         num_pts[1] += in_dict[k + '_num_pts'][i]
@@ -183,6 +187,8 @@ class BasePrecomputed(LightningDataModule):
         parser.add_argument("--use_orig_pcs", type=str2bool, nargs='?', const=True, default=False)
 
         parser.add_argument("--use_augmentation", type=str2bool, nargs='?', const=True, default=False)
+        parser.add_argument("--color_aug", type=str2bool, nargs='?', const=True, default=True)
+        parser.add_argument("--structure_aug", type=str2bool, nargs='?', const=True, default=True)
         parser.add_argument("--point_dropout", type=str2bool, nargs='?', const=True, default=True)
         parser.add_argument("--rand_feats", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument("--rand_colors", type=str2bool, nargs='?', const=True, default=False)
