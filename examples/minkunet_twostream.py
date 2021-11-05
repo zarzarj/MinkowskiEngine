@@ -33,10 +33,18 @@ from examples.utils import sort_coords, argsort_coords
 from examples.resnet import ResNetBase
 
 from torch_sparse import SparseTensor
-from torch_geometric.nn import SAGEConv, GATConv, EdgeConv
+from torch_geometric.nn import SAGEConv, GATConv, EdgeConv, PointNetConv
 from examples.EdgeConvs import PointTransformerConv
 from examples.str2bool import str2bool
 import copy
+
+from torch.nn import Sequential as Seq, Linear as Lin, ReLU, BatchNorm1d as BN
+
+def MLP(channels, batch_norm=True):
+    return Seq(*[
+        Seq(Lin(channels[i - 1], channels[i]), ReLU(), BN(channels[i]))
+        for i in range(1, len(channels))
+    ])
 
 
 class MinkUNetTwoStreamBase(ResNetBase):
@@ -146,13 +154,16 @@ class MinkUNetTwoStreamBase(ResNetBase):
         if self.gnn_model == 'rgat':
             in_conv = GATConv(in_channels, self.hidden_channels // self.heads, self.heads,
                               add_self_loops=False)
-            back_conv = PointTransformerConv(in_channels=in_channels, out_channels=self.hidden_channels,
-                           pos_nn=None, attn_nn=None, add_self_loops=False)
+            back_conv = GATConv(self.hidden_channels, self.hidden_channels // self.heads, self.heads,
+                              add_self_loops=False)
         elif self.gnn_model == 'ptrans':
             in_conv = PointTransformerConv(in_channels=in_channels, out_channels=self.hidden_channels,
                            pos_nn=None, attn_nn=None, add_self_loops=False)
             back_conv = PointTransformerConv(in_channels=self.hidden_channels, out_channels=self.hidden_channels,
                            pos_nn=None, attn_nn=None, add_self_loops=False)
+        elif self.gnn_model == 'pointnet':
+            in_conv = PointNetConv(local_nn=MLP([in_channels+3, self.hidden_channels]))
+            back_conv = PointNetConv(local_nn=MLP([self.hidden_channels+3, self.hidden_channels]))
         self.gnn_convs = nn.ModuleList()
         self.gnn_convs.append(copy.deepcopy(in_conv))
         self.gnn_convs[-1].reset_parameters()
@@ -316,7 +327,7 @@ class MinkUNetTwoStreamBase(ResNetBase):
         parser.add_argument("--norm", type=str, default='batch', choices=['batch', 'layer', 'instance', 'none'])
         parser.add_argument("--track_running_stats", type=str2bool, nargs='?', const=True, default=True)
         # parser.add_argument("--reversible", type=str2bool, nargs='?', const=True, default=True)
-        parser.add_argument("--gnn_model", type=str, default='ptrans', choices=['rgat, ptrans'])
+        parser.add_argument("--gnn_model", type=str, default='ptrans', choices=['rgat, ptrans', 'pointnet'])
         return parent_parser
 
     def convert_sync_batchnorm(self):
