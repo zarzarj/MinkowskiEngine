@@ -87,7 +87,12 @@ class MinkUNetBase(ResNetBase):
     # initialize_coords
     def __init__(self, in_channels=3, out_channels=20, bn_momentum=0.1, D=3, **kwargs):
         self.bn_momentum=bn_momentum
-        self.quantization_mode = quantization_mode
+        for name, value in kwargs.items():
+            if name != "self":
+                try:
+                    setattr(self, name, value)
+                except:
+                    print(name, value)
         ResNetBase.__init__(self, in_channels, out_channels, D)
         
 
