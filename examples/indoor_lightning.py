@@ -36,9 +36,9 @@ def plot_confusion_matrix(trainer, pl_module, confusion_metric, plot_title):
         if isinstance(logger, TensorBoardLogger):
             # print('tb_log')
             logger.experiment.add_image(plot_title, im, global_step=trainer.current_epoch)
-        # elif isinstance(logger, WandbLogger):
-        #     # print('wandb_log')
-        #     logger.experiment.log({plot_title: [wandb.Image(im)]})
+        elif isinstance(logger, WandbLogger):
+            # print('wandb_log')
+            logger.experiment.log({plot_title: [wandb.Image(im)]})
 
     # print(pl_module.current_epoch)
 
@@ -51,6 +51,7 @@ class ConfusionMatrixPlotCallback(Callback):
         pl_module.train_conf_metrics.reset()
         
     def on_validation_epoch_end(self, trainer, pl_module):
+        # print("PLOITTING")
         plot_confusion_matrix(trainer, pl_module, pl_module.val_conf_metrics["ConfusionMatrix"], "val_confusion_matrix")
         plot_confusion_matrix(trainer, pl_module, pl_module.val_conf_metrics["NormalizedConfusionMatrix"], "val_normalized_confusion_matrix")
         pl_module.val_conf_metrics.reset()
@@ -140,6 +141,7 @@ if __name__ == "__main__":
 
     callbacks = pl_datamodule.callbacks()
     if main_args.log_conf_matrix:
+        # print("Using Conf Matrix Callback")
         callbacks.append(ConfusionMatrixPlotCallback())
     callbacks.append(ModelCheckpoint(monitor='val_miou', mode = 'max', save_top_k=1,
                                     dirpath=os.path.join(lightning_root_dir, loggers[0].name, "version_"+str(loggers[0].version), 'checkpoints')))

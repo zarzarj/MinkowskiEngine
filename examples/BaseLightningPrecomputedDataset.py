@@ -126,8 +126,10 @@ class BasePrecomputed(LightningDataModule):
 
     def process_input(self, in_dict):
         if self.to_hsv:
+            print(in_dict['colors'].max())
             in_dict = self.color_transform(in_dict)
-        if self.trainer.training and self.use_augmentation:
+            print(in_dict['colors'].max())
+        if self.use_augmentation and self.trainer.training:
             # print(in_dict['colors'][:10])
             # print("augmenting")
             in_dict = self.augment(in_dict)
