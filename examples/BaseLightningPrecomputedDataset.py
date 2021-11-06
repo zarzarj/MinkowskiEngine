@@ -28,7 +28,12 @@ class BasePrecomputed(LightningDataModule):
                 # print(name, value)
                 setattr(self, name, value)
 
+
+
         self.feat_channels = 3 * int(self.use_colors) + 3 * int(self.use_normals)
+        if self.use_color_embedding:
+            self.embedder, embed_dims = get_embedder()
+            self.feat_channels += embed_dims
         self.labelweights = None
         self.cache = {}
         transformations = []
@@ -126,9 +131,9 @@ class BasePrecomputed(LightningDataModule):
 
     def process_input(self, in_dict):
         if self.to_hsv:
-            print(in_dict['colors'].max())
+            # print(in_dict['colors'].max())
             in_dict = self.color_transform(in_dict)
-            print(in_dict['colors'].max())
+            # print(in_dict['colors'].max())
         if self.use_augmentation and self.trainer.training:
             # print(in_dict['colors'][:10])
             # print("augmenting")
@@ -145,11 +150,11 @@ class BasePrecomputed(LightningDataModule):
 
         if 'colors' in in_dict:
             # print(in_dict['colors'].max())
-            
             in_dict['colors'] = (in_dict['colors'] / 255.) - 0.5
             if self.rand_colors:
                 in_dict['colors'] = torch.rand_like(in_dict['colors']) - 0.5
         in_dict['feats'] = self.get_features(in_dict)
+        # print(in_dict['feats'].shape)
         
         # if self.quantize_input:
             # print(in_dict['coords'], in_dict['feats'], in_dict['labels'])
@@ -162,6 +167,8 @@ class BasePrecomputed(LightningDataModule):
         feats = []
         if self.use_colors:
             feats.append(in_dict['colors'])
+        if self.use_color_embedding:
+            feats.append(self.embedder(in_dict['colors']))
         if self.use_normals:
             feats.append(in_dict['normals'])
         if len(feats) == 0:
@@ -189,6 +196,7 @@ class BasePrecomputed(LightningDataModule):
         parser.add_argument("--structure_feats", type=str, default=None) #"feats_mink"
         parser.add_argument("--color_feats", type=str, default=None) #"feats_pointnet"
         parser.add_argument("--use_colors", type=str2bool, nargs='?', const=True, default=True)
+        parser.add_argument("--use_color_embedding", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument("--use_normals", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument("--load_graph", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument("--precompute_adjs", type=str2bool, nargs='?', const=True, default=False)
