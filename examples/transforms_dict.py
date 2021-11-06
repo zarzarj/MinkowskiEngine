@@ -99,6 +99,19 @@ class RandomRotation(object):
 
     return in_dict
 
+class PositionJitter(object):
+
+  def __init__(self, std=0.01):
+    self.std = std
+
+  def __call__(self, in_dict):
+    # print("pos jitter")
+    if random.random() < 0.95:
+      noise = torch.randn_like(in_dict['pts'])
+      in_dict['pts'] += noise * self.std
+      # print(noise)
+    return in_dict
+
 
 class ChromaticTranslation(object):
   """Add random color to the image, input must be an array in [0,255] or a PIL image"""
@@ -149,7 +162,7 @@ class ChromaticJitter(object):
   def __call__(self, in_dict):
     if 'colors' in in_dict:
       if random.random() < 0.95:
-        noise = torch.randn(in_dict['colors'].shape[0], 3)
+        noise = torch.randn_like(in_dict['colors'])
         noise *= self.std * 255
         in_dict['colors'] = torch.clip(noise + in_dict['colors'], 0, 255)
     return in_dict
@@ -162,6 +175,7 @@ class RGBtoHSV(object):
 
   def __call__(self, in_dict):
     if 'colors' in in_dict:
+      # print("hsv")
       # Translated from source of colorsys.rgb_to_hsv
       # r,g,b should be a numpy arrays with values between 0 and 255
       # rgb_to_hsv returns an array of floats between 0.0 and 1.0.

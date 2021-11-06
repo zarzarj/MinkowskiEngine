@@ -201,7 +201,7 @@ class MinkUNetTwoStreamBase(ResNetBase):
         out._C = out._C[sort_idx]
         # print(out.coordinates)
         fake_feats = torch.zeros(out._C.shape[0], in_dict['feats'].shape[1], device=in_dict['feats'].device, dtype=in_dict['feats'].dtype)
-        pos=(in_dict['coords'][:,1:], out._C[:,1:])
+        pos=(in_dict['coords'][:,1:].float(), out._C[:,1:].float())
         if self.no_pos_info:
             pos=(torch.zeros_like(pos[0]), torch.zeros_like(pos[1]))
         gnn_out = self.gnn_convs[0](x=(in_dict['feats'], fake_feats),

@@ -32,8 +32,6 @@ class BasePrecomputed(LightningDataModule):
         self.labelweights = None
         self.cache = {}
         transformations = []
-        if self.to_hsv:
-                transformations.append(t.RGBtoHSV())
         if self.use_augmentation:
             if self.point_dropout and not self.load_graph and not self.precompute_adjs:
                 transformations = [t.RandomDropout(0.2, 0.2)]
@@ -51,7 +49,11 @@ class BasePrecomputed(LightningDataModule):
                                       t.RandomRotation(([-np.pi/64, np.pi/64], [-np.pi/64, np.pi/64], [-np.pi, np.pi])),
                                       t.RandomHorizontalFlip('z'),
                                     ])
+                if self.pos_jitter:
+                    transformations.append(t.PositionJitter(0.005))
         self.augment = t.Compose(transformations)
+        if self.to_hsv:
+            self.color_transform = t.RGBtoHSV()
 
 
     def train_dataloader(self):
@@ -123,7 +125,9 @@ class BasePrecomputed(LightningDataModule):
         return out_dict
 
     def process_input(self, in_dict):
-        if self.trainer.training:
+        if self.to_hsv:
+            in_dict = self.color_transform(in_dict)
+        if self.trainer.training and self.use_augmentation:
             # print(in_dict['colors'][:10])
             # print("augmenting")
             in_dict = self.augment(in_dict)
@@ -139,6 +143,7 @@ class BasePrecomputed(LightningDataModule):
 
         if 'colors' in in_dict:
             # print(in_dict['colors'].max())
+            
             in_dict['colors'] = (in_dict['colors'] / 255.) - 0.5
             if self.rand_colors:
                 in_dict['colors'] = torch.rand_like(in_dict['colors']) - 0.5
@@ -190,6 +195,7 @@ class BasePrecomputed(LightningDataModule):
 
         parser.add_argument("--use_augmentation", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument("--to_hsv", type=str2bool, nargs='?', const=True, default=False)
+        parser.add_argument("--pos_jitter", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument("--color_aug", type=str2bool, nargs='?', const=True, default=True)
         parser.add_argument("--structure_aug", type=str2bool, nargs='?', const=True, default=True)
         parser.add_argument("--point_dropout", type=str2bool, nargs='?', const=True, default=True)
