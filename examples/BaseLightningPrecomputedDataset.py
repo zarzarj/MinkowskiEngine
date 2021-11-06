@@ -31,8 +31,10 @@ class BasePrecomputed(LightningDataModule):
         self.feat_channels = 3 * int(self.use_colors) + 3 * int(self.use_normals)
         self.labelweights = None
         self.cache = {}
+        transformations = []
+        if self.to_hsv:
+                transformations.append(t.RGBtoHSV())
         if self.use_augmentation:
-            transformations = []
             if self.point_dropout and not self.load_graph and not self.precompute_adjs:
                 transformations = [t.RandomDropout(0.2, 0.2)]
             if self.color_aug:
@@ -49,7 +51,7 @@ class BasePrecomputed(LightningDataModule):
                                       t.RandomRotation(([-np.pi/64, np.pi/64], [-np.pi/64, np.pi/64], [-np.pi, np.pi])),
                                       t.RandomHorizontalFlip('z'),
                                     ])
-            self.augment = t.Compose(transformations)
+        self.augment = t.Compose(transformations)
 
 
     def train_dataloader(self):
@@ -121,7 +123,7 @@ class BasePrecomputed(LightningDataModule):
         return out_dict
 
     def process_input(self, in_dict):
-        if self.use_augmentation and self.trainer.training:
+        if self.trainer.training:
             # print(in_dict['colors'][:10])
             # print("augmenting")
             in_dict = self.augment(in_dict)
@@ -187,6 +189,7 @@ class BasePrecomputed(LightningDataModule):
         parser.add_argument("--use_orig_pcs", type=str2bool, nargs='?', const=True, default=False)
 
         parser.add_argument("--use_augmentation", type=str2bool, nargs='?', const=True, default=False)
+        parser.add_argument("--to_hsv", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument("--color_aug", type=str2bool, nargs='?', const=True, default=True)
         parser.add_argument("--structure_aug", type=str2bool, nargs='?', const=True, default=True)
         parser.add_argument("--point_dropout", type=str2bool, nargs='?', const=True, default=True)

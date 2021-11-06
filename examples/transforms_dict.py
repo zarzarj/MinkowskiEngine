@@ -155,6 +155,36 @@ class ChromaticJitter(object):
     return in_dict
 
 
+class RGBtoHSV(object):
+
+  def __init__(self):
+    pass
+
+  def __call__(self, in_dict):
+    if 'colors' in in_dict:
+      # Translated from source of colorsys.rgb_to_hsv
+      # r,g,b should be a numpy arrays with values between 0 and 255
+      # rgb_to_hsv returns an array of floats between 0.0 and 1.0.
+      rgb = in_dict['colors'].float().numpy()
+      hsv = np.zeros_like(rgb)
+
+      r, g, b = rgb[..., 0], rgb[..., 1], rgb[..., 2]
+      maxc = np.max(rgb[..., :3], axis=-1)
+      minc = np.min(rgb[..., :3], axis=-1)
+      hsv[..., 2] = maxc
+      mask = maxc != minc
+      hsv[mask, 1] = (maxc - minc)[mask] / maxc[mask]
+      rc = np.zeros_like(r)
+      gc = np.zeros_like(g)
+      bc = np.zeros_like(b)
+      rc[mask] = (maxc - r)[mask] / (maxc - minc)[mask]
+      gc[mask] = (maxc - g)[mask] / (maxc - minc)[mask]
+      bc[mask] = (maxc - b)[mask] / (maxc - minc)[mask]
+      hsv[..., 0] = np.select([r == maxc, g == maxc], [bc - gc, 2.0 + rc - bc], default=4.0 + gc - rc)
+      hsv[..., 0] = (hsv[..., 0] / 6.0) % 1.0
+      in_dict['colors'] = torch.from_numpy(hsv) * 255
+    return in_dict
+
 
 class Compose(object):
   """Composes several transforms together."""
