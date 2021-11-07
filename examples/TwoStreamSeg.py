@@ -125,6 +125,12 @@ class TwoStreamSegmentationModule(BaseSegmentationModule):
             epoch_losses = torch.tensor([[loss.detach().cpu() for loss in pred['losses']] for pred in validation_step_outputs]).mean(axis=0, keepdim=False)
             self.last_val_loss = self.current_val_loss
             self.current_val_loss = epoch_losses
+        if self.aug_policy_frequency != -1 and self.trainer.current_epoch % self.aug_policy_frequency == 0 and self.trainer.current_epoch!=0:
+            val_miou = self.val_metrics.compute()['val_miou'].item()
+            train_miou = self.train_metrics.compute()['train_miou'].item()
+            # print(val_miou, train_miou)
+            aug_multiplier = 1 + (train_miou - val_miou) / train_miou
+            self.trainer.datamodule.update_aug(aug_multiplier)
     
 
     @staticmethod
@@ -139,6 +145,7 @@ class TwoStreamSegmentationModule(BaseSegmentationModule):
         parser.add_argument("--use_structure_feats", type=str2bool, nargs='?', const=True, default=True)
         parser.add_argument("--use_fused_feats", type=str2bool, nargs='?', const=True, default=True)
         parser.add_argument("--gradient_blend_frequency", type=int, default=-1)
+        parser.add_argument("--aug_policy_frequency", type=int, default=-1)
         return parent_parser
 
 

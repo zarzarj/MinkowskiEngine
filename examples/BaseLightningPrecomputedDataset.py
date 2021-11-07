@@ -36,27 +36,9 @@ class BasePrecomputed(LightningDataModule):
             self.feat_channels += embed_dims
         self.labelweights = None
         self.cache = {}
-        transformations = []
+        
         if self.use_augmentation:
-            if self.point_dropout and not self.load_graph and not self.precompute_adjs:
-                transformations = [t.RandomDropout(0.2, 0.2)]
-            if self.color_aug:
-                transformations.extend([
-                                      t.ChromaticAutoContrast(),
-                                      t.ChromaticTranslation(0.1),
-                                      t.ChromaticJitter(0.05),
-                                      ])
-            if self.structure_aug:
-                transformations.extend([
-                                      t.ElasticDistortion(0.2, 0.4),
-                                      t.ElasticDistortion(0.8, 1.6),
-                                      t.RandomScaling(0.9, 1.1),
-                                      t.RandomRotation(([-np.pi/64, np.pi/64], [-np.pi/64, np.pi/64], [-np.pi, np.pi])),
-                                      t.RandomHorizontalFlip('z'),
-                                    ])
-                if self.pos_jitter:
-                    transformations.append(t.PositionJitter(0.005))
-        self.augment = t.Compose(transformations)
+            self.augment = self.create_augs()
         if self.to_hsv:
             self.color_transform = t.RGBtoHSV()
 
@@ -178,6 +160,31 @@ class BasePrecomputed(LightningDataModule):
             out_feats = torch.rand_like(out_feats) - 0.5
 
         return out_feats
+
+    def create_augs(self, m=1.0):
+        transformations = []
+        if self.point_dropout and not self.load_graph and not self.precompute_adjs:
+            transformations = [t.RandomDropout(0.2 * m)]
+        if self.color_aug:
+            transformations.extend([
+                                  t.ChromaticAutoContrast(),
+                                  t.ChromaticTranslation(0.1 * m),
+                                  t.ChromaticJitter(0.05 * m),
+                                  ])
+        if self.structure_aug:
+            transformations.extend([
+                                  t.ElasticDistortion(0.2 * m, 0.4 * m),
+                                  t.ElasticDistortion(0.8 * m, 1.6 * m),
+                                  t.RandomScaling(0.9 * m, 1.1 * m),
+                                  t.RandomRotation(([-np.pi/64 * m, np.pi/64 * m], [-np.pi/64 * m, np.pi/64 * m], [-np.pi, np.pi])),
+                                  t.RandomHorizontalFlip('z'),
+                                ])
+            if self.pos_jitter:
+                transformations.append(t.PositionJitter(0.005 * m))
+        return t.Compose(transformations)
+
+    def update_aug(self, m=1.0):
+        self.augment = self.create_augs(m)
 
     def callbacks(self):
         return []

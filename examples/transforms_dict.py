@@ -17,7 +17,7 @@ from scipy.linalg import expm, norm
 
 
 class RandomDropout(object):
-  def __init__(self, dropout_ratio=0.2, dropout_application_ratio=0.5):
+  def __init__(self, dropout_ratio=0.2, dropout_application_ratio=0.2):
     """
     upright_axis: axis index among x,y,z, i.e. 2 for z
     """
@@ -40,7 +40,7 @@ class RandomDropout(object):
     return in_dict
 
 class RandomHorizontalFlip(object):
-  def __init__(self, upright_axis):
+  def __init__(self, upright_axis, aug_prob=0.95):
     """
     upright_axis: axis index among x,y,z, i.e. 2 for z
     """
@@ -48,9 +48,10 @@ class RandomHorizontalFlip(object):
     self.upright_axis = {'x': 0, 'y': 1, 'z': 2}[upright_axis.lower()]
     # Use the rest of axes for flipping.
     self.horz_axes = set(range(self.D)) - set([self.upright_axis])
+    self.aug_prob = aug_prob
 
   def __call__(self, in_dict):
-    if random.random() < 0.95:
+    if random.random() < self.aug_prob:
       for curr_ax in self.horz_axes:
         if random.random() < 0.5:
           coord_max = torch.max(in_dict['pts'])
@@ -101,12 +102,13 @@ class RandomRotation(object):
 
 class PositionJitter(object):
 
-  def __init__(self, std=0.01):
+  def __init__(self, std=0.01, aug_prob=0.95):
     self.std = std
+    self.aug_prob=aug_prob
 
   def __call__(self, in_dict):
     # print("pos jitter")
-    if random.random() < 0.95:
+    if random.random() < self.aug_prob:
       noise = torch.randn_like(in_dict['pts'])
       in_dict['pts'] += noise * self.std
       # print(noise)
@@ -116,15 +118,16 @@ class PositionJitter(object):
 class ChromaticTranslation(object):
   """Add random color to the image, input must be an array in [0,255] or a PIL image"""
 
-  def __init__(self, trans_range_ratio=1e-1):
+  def __init__(self, trans_range_ratio=1e-1, aug_prob=0.95):
     """
     trans_range_ratio: ratio of translation i.e. 255 * 2 * ratio * rand(-0.5, 0.5)
     """
     self.trans_range_ratio = trans_range_ratio
+    self.aug_prob = aug_prob
 
   def __call__(self, in_dict):
     if 'colors' in in_dict:
-      if random.random() < 0.95:
+      if random.random() < self.aug_prob:
         tr = (torch.rand(1, 3) - 0.5) * 255 * 2 * self.trans_range_ratio
         in_dict['colors'] = torch.clip(tr + in_dict['colors'], 0, 255)
     return in_dict
