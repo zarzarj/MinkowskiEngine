@@ -185,6 +185,7 @@ class BasePrecomputed(LightningDataModule):
         return t.Compose(transformations)
 
     def update_aug(self, m=1.0):
+        print("Setting aug multiplier to: ", m)
         self.augment = self.create_augs(m)
 
     def callbacks(self):
