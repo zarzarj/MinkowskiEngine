@@ -13,6 +13,7 @@ import argparse
 
 import MinkowskiEngine as ME
 
+
 def get_obj_from_str(string):
     # From https://github.com/CompVis/taming-transformers
     module, cls = string.rsplit(".", 1)
@@ -65,7 +66,9 @@ class TwoStreamSegmentationModule(BaseSegmentationModule):
             self.last_val_loss = torch.zeros_like(self.loss_weights)
             self.current_val_loss = torch.zeros_like(self.loss_weights)
             self.last_train_loss = torch.zeros_like(self.loss_weights)
-        
+        if self.aug_policy_frequency != -1 and self.aug_policy_PID:
+            self.pid = PID(self.aug_policy_kp, self.aug_policy_ki, self.aug_policy_kd,
+                           dt=self.aug_policy_frequency)
 
     def forward(self, in_dict):
         # print(in_dict['pts'].shape, in_dict['scene_name'])
@@ -125,20 +128,32 @@ class TwoStreamSegmentationModule(BaseSegmentationModule):
             epoch_losses = torch.tensor([[loss.detach().cpu() for loss in pred['losses']] for pred in validation_step_outputs]).mean(axis=0, keepdim=False)
             self.last_val_loss = self.current_val_loss
             self.current_val_loss = epoch_losses
+        # val_miou = self.val_metrics.compute()['val_miou'].item()
+        # train_miou = self.train_metrics.compute()['train_miou'].item()
+        # # print(val_miou, train_miou)
+        # e = (train_miou - val_miou) / train_miou
+        # aug_multiplier = np.clip(self.pid(e), a_min=0.5, a_max=5)
+        # print(aug_multiplier)
+        # # aug_multiplier = train_miou / val_miou
+        # self.trainer.datamodule.update_aug(aug_multiplier)
         if self.aug_policy_frequency != -1 and self.trainer.current_epoch % self.aug_policy_frequency == 0 and self.trainer.current_epoch!=0:
             val_miou = self.val_metrics.compute()['val_miou'].item()
             train_miou = self.train_metrics.compute()['train_miou'].item()
             # print(val_miou, train_miou)
-            aug_multiplier = 1 + (train_miou - val_miou) * self.aug_policy_multiplier / train_miou
-            # aug_multiplier = train_miou / val_miou
+            if self.aug_policy_PID:
+                e = (train_miou - val_miou) / train_miou
+                aug_multiplier = np.clip(self.pid(e), a_min=0.5, a_max=5)
+            else:
+                aug_multiplier = 1 + (train_miou - val_miou) * self.aug_policy_multiplier / train_miou
+            # print(aug_multiplier)
             self.trainer.datamodule.update_aug(aug_multiplier)
         # print(self.val_metrics.items(keep_base=True))
 
         if self.miou_balance_frequency != -1 and self.trainer.current_epoch % self.miou_balance_frequency == 0 and self.trainer.current_epoch>=self.min_balance_epoch:
             val_metrics = self.val_metrics.items()
-            for metric in val_metrics:
-                if metric[0] == 'val_miou':
-                    val_miou = metric[1]
+            for name, metric in val_metrics:
+                if name == 'val_miou':
+                    val_miou = metric
             class_ious = val_miou.class_ious().detach()
             label_weights = torch.nn.functional.softmin(class_ious)
             # print(label_weights)
@@ -158,10 +173,15 @@ class TwoStreamSegmentationModule(BaseSegmentationModule):
         parser.add_argument("--use_structure_feats", type=str2bool, nargs='?', const=True, default=True)
         parser.add_argument("--use_fused_feats", type=str2bool, nargs='?', const=True, default=True)
         parser.add_argument("--gradient_blend_frequency", type=int, default=-1)
+        parser.add_argument("--aug_policy_PID", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument("--aug_policy_frequency", type=int, default=-1)
         parser.add_argument("--aug_policy_multiplier", type=float, default=1.0)
+        parser.add_argument("--aug_policy_kp", type=float, default=1.0)
+        parser.add_argument("--aug_policy_ki", type=float, default=0.0)
+        parser.add_argument("--aug_policy_kd", type=float, default=0.0)
         parser.add_argument("--miou_balance_frequency", type=int, default=-1)
         parser.add_argument("--min_balance_epoch", type=int, default=20)
+
         return parent_parser
 
 
@@ -181,3 +201,17 @@ class MultiStreamLoss(torch.nn.Module):
             loss += losses[-1]
             # print(loss)
         return {"loss":loss, "losses": [l.detach() for l in losses]}
+
+class PID(object):
+    def __init__(self, Kp=1.0, Ki=0.0, Kd=0.0, dt=1.0, u0=1.0):
+        self.A0 = Kp + Ki*dt + Kd/dt
+        self.A1 = -Kp - 2*Kd/dt
+        self.A2 = Kd/dt
+        self.error = np.zeros(3)
+        self.output = u0
+
+    def __call__(self, e):
+        self.error[1:] = self.error[:-1]
+        self.error[0] = e
+        self.output += self.A0 * self.error[0] + self.A1 * self.error[1] + self.A2 * self.error[2]
+        return self.output
