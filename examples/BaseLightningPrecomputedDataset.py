@@ -96,7 +96,6 @@ class BasePrecomputed(LightningDataModule):
                 if self.in_memory:
                     self.cache[scene] = copy.deepcopy(in_dict)
             in_dict['batch_idx'] = batch_idx
-
             # import pdb; pdb.set_trace()
             in_dict = self.process_input(in_dict)
             # print(in_dict['labels'].max(), in_dict['labels'].min(), in_dict['labels'].shape)
@@ -128,6 +127,8 @@ class BasePrecomputed(LightningDataModule):
         if self.shift_coords and self.trainer.training:
             in_dict['coords'] += (torch.rand(3) * 100).type_as(in_dict['coords'])
             # print(in_dict['coords'])
+        if self.batch_fusion and self.trainer.training:
+            in_dict['batch_idx'] = int(in_dict['batch_idx'] / 2)
         in_dict['coords'] = torch.cat([torch.ones(in_dict['coords'].shape[0], 1).long()*in_dict['batch_idx'], in_dict['coords']], axis=-1)
 
         if 'colors' in in_dict:
@@ -219,6 +220,7 @@ class BasePrecomputed(LightningDataModule):
         parser.add_argument("--rand_feats", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument("--rand_colors", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument("--shift_coords", type=str2bool, nargs='?', const=True, default=False)
+        parser.add_argument("--batch_fusion", type=str2bool, nargs='?', const=True, default=False)
         # parser.add_argument("--elastic_distortion", type=str2bool, nargs='?', const=True, default=False)
 
         parser.add_argument("--voxel_size", type=float, default=0.02)
