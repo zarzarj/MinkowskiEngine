@@ -139,8 +139,9 @@ class TwoStreamSegmentationModule(BaseSegmentationModule):
             for metric in val_metrics:
                 if metric[0] == 'val_miou':
                     val_miou = metric[1]
-            class_ious = val_miou.class_ious().detach().cpu()
+            class_ious = val_miou.class_ious().detach()
             label_weights = torch.nn.functional.softmin(class_ious)
+            # print(label_weights)
             self.criterion = nn.CrossEntropyLoss(weight=label_weights, ignore_index=-1)
             self.criterion = MultiStreamLoss(self.criterion, self.loss_weights)
     
