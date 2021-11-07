@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 from torch.optim import SGD, Adam, AdamW
-from torch.optim.lr_scheduler import LambdaLR, StepLR
+from torch.optim.lr_scheduler import LambdaLR, StepLR, OneCycleLR
 
 from pytorch_lightning.core import LightningModule
 from torchmetrics import ConfusionMatrix, MetricCollection
@@ -182,6 +182,8 @@ class BaseSegmentationModule(LightningModule):
                 optimizer, step_size=self.step_size, gamma=self.step_gamma, last_epoch=-1)
         elif self.scheduler == 'SquaredLR':
             scheduler = SquaredLR(optimizer, max_iter=self.max_iter, last_step=-1)
+        elif self.scheduler == 'OneCycleLR':
+            scheduler = OneCycleLR(optimizer, max_lr=self.lr, total_steps=self.max_iter)
         elif self.scheduler == 'None':
             return [optimizer]
         else:
