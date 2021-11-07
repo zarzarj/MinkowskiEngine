@@ -129,8 +129,8 @@ class TwoStreamSegmentationModule(BaseSegmentationModule):
             val_miou = self.val_metrics.compute()['val_miou'].item()
             train_miou = self.train_metrics.compute()['train_miou'].item()
             # print(val_miou, train_miou)
-            # aug_multiplier = 1 + (train_miou - val_miou) / train_miou
-            aug_multiplier = train_miou / val_miou
+            aug_multiplier = 1 + (train_miou - val_miou) * self.aug_policy_multiplier / train_miou
+            # aug_multiplier = train_miou / val_miou
             self.trainer.datamodule.update_aug(aug_multiplier)
         # print(self.val_metrics.items(keep_base=True))
 
@@ -158,6 +158,7 @@ class TwoStreamSegmentationModule(BaseSegmentationModule):
         parser.add_argument("--use_fused_feats", type=str2bool, nargs='?', const=True, default=True)
         parser.add_argument("--gradient_blend_frequency", type=int, default=-1)
         parser.add_argument("--aug_policy_frequency", type=int, default=-1)
+        parser.add_argument("--aug_policy_multiplier", type=float, default=1.0)
         parser.add_argument("--miou_balance_frequency", type=int, default=-1)
         parser.add_argument("--min_balance_epoch", type=int, default=20)
         return parent_parser
