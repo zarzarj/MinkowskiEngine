@@ -24,3 +24,9 @@ class MeanIoU(Metric):
         ious = ious[~ious.isnan()]
         # print(ious)
         return torch.mean(ious)
+
+    def class_ious(self):
+        ious = self.intersection.float() / self.union
+        ious[ious.isnan()] = 0.0
+        # print(ious)
+        return ious

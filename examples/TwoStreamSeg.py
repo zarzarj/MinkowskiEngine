@@ -59,8 +59,8 @@ class TwoStreamSegmentationModule(BaseSegmentationModule):
             self.seg_head = nn.Sequential(*seg_head_list)
 
         self.loss_weights = torch.tensor(self.loss_weights, requires_grad=False)
-        self.base_criterion = self.criterion
-        self.criterion = MultiStreamLoss(self.base_criterion, self.loss_weights)
+        # self.base_criterion = 
+        self.criterion = MultiStreamLoss(self.criterion, self.loss_weights)
         if self.gradient_blend_frequency != -1:
             self.last_val_loss = torch.zeros_like(self.loss_weights)
             self.current_val_loss = torch.zeros_like(self.loss_weights)
@@ -132,6 +132,17 @@ class TwoStreamSegmentationModule(BaseSegmentationModule):
             # aug_multiplier = 1 + (train_miou - val_miou) / train_miou
             aug_multiplier = train_miou / val_miou
             self.trainer.datamodule.update_aug(aug_multiplier)
+        # print(self.val_metrics.items(keep_base=True))
+
+        if self.miou_balance_frequency != -1 and self.trainer.current_epoch % self.miou_balance_frequency == 0 and self.trainer.current_epoch>=self.min_balance_epoch:
+            val_metrics = self.val_metrics.items()
+            for metric in val_metrics:
+                if metric[0] == 'val_miou':
+                    val_miou = metric[1]
+            class_ious = val_miou.class_ious().detach().cpu()
+            label_weights = torch.nn.functional.softmin(class_ious)
+            self.criterion = nn.CrossEntropyLoss(weight=label_weights, ignore_index=-1)
+            self.criterion = MultiStreamLoss(self.criterion, self.loss_weights)
     
 
     @staticmethod
@@ -147,6 +158,8 @@ class TwoStreamSegmentationModule(BaseSegmentationModule):
         parser.add_argument("--use_fused_feats", type=str2bool, nargs='?', const=True, default=True)
         parser.add_argument("--gradient_blend_frequency", type=int, default=-1)
         parser.add_argument("--aug_policy_frequency", type=int, default=-1)
+        parser.add_argument("--miou_balance_frequency", type=int, default=-1)
+        parser.add_argument("--min_balance_epoch", type=int, default=20)
         return parent_parser
 
 
