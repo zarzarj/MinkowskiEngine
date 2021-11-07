@@ -129,7 +129,8 @@ class TwoStreamSegmentationModule(BaseSegmentationModule):
             val_miou = self.val_metrics.compute()['val_miou'].item()
             train_miou = self.train_metrics.compute()['train_miou'].item()
             # print(val_miou, train_miou)
-            aug_multiplier = 1 + (train_miou - val_miou) / train_miou
+            # aug_multiplier = 1 + (train_miou - val_miou) / train_miou
+            aug_multiplier = train_miou / val_miou
             self.trainer.datamodule.update_aug(aug_multiplier)
     
 
