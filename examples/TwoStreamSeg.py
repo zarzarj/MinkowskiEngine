@@ -150,13 +150,23 @@ class TwoStreamSegmentationModule(BaseSegmentationModule):
         # print(self.val_metrics.items(keep_base=True))
 
         if self.miou_balance_frequency != -1 and self.trainer.current_epoch % self.miou_balance_frequency == 0 and self.trainer.current_epoch>=self.min_balance_epoch:
-            val_metrics = self.val_metrics.items()
-            for name, metric in val_metrics:
-                if name == 'val_miou':
-                    val_miou = metric
-            class_ious = val_miou.class_ious().detach()
-            label_weights = torch.nn.functional.softmin(class_ious)
-            # print(label_weights)
+
+            train_metrics = self.train_metrics.items()
+            metrics = {}
+            for name, metric in train_metrics:
+                metrics[name] = metric
+
+            label_weights = torch.ones(self.num_classes, device=self.device)
+            if self.loss_miou_balance:
+                class_ious = metrics['train_miou'].class_ious().detach()
+                label_weights *= torch.nn.functional.softmin(class_ious)
+
+            if self.loss_macc_balance:
+                class_gt_counts = metrics['train_macc'].class_gt_total()
+                class_pred_counts = metrics['train_macc'].class_pred_total()
+                label_weights *= class_gt_counts / (class_pred_counts * class_pred_counts.shape[0])
+                # label_weights[class_pred_counts == 0] = 0
+                # print(label_weights)
             self.criterion = nn.CrossEntropyLoss(weight=label_weights, ignore_index=-1)
             self.criterion = MultiStreamLoss(self.criterion, self.loss_weights)
     
@@ -180,6 +190,8 @@ class TwoStreamSegmentationModule(BaseSegmentationModule):
         parser.add_argument("--aug_policy_ki", type=float, default=0.0)
         parser.add_argument("--aug_policy_kd", type=float, default=0.0)
         parser.add_argument("--miou_balance_frequency", type=int, default=-1)
+        parser.add_argument("--loss_miou_balance", type=str2bool, nargs='?', const=True, default=True)
+        parser.add_argument("--loss_macc_balance", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument("--min_balance_epoch", type=int, default=20)
 
         return parent_parser

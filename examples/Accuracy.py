@@ -18,3 +18,6 @@ class Accuracy(Metric):
             return 0
         acc = self.correct.float() / self.total
         return acc
+
+    # def class_counts(self):
+    #     return self.total
