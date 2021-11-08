@@ -176,7 +176,7 @@ class BasePrecomputed(LightningDataModule):
             transformations.extend([
                                   t.ElasticDistortion(0.2 * m, 0.4 * m),
                                   t.ElasticDistortion(0.8 * m, 1.6 * m),
-                                  t.RandomScaling(0.9 * m, 1.1 * m),
+                                  t.RandomScaling(0.9 / m, 1.1 * m),
                                   t.RandomRotation(([-np.pi/64 * m, np.pi/64 * m], [-np.pi/64 * m, np.pi/64 * m], [-np.pi, np.pi])),
                                   t.RandomHorizontalFlip('z'),
                                 ])
