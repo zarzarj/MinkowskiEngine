@@ -163,8 +163,8 @@ class TwoStreamSegmentationModule(BaseSegmentationModule):
 
             if self.loss_macc_balance:
                 class_gt_counts = metrics['train_macc'].class_gt_total()
-                class_pred_counts = metrics['train_macc'].class_pred_total()
-                label_weights *= class_gt_counts / (class_pred_counts * class_pred_counts.shape[0])
+                # class_pred_counts = metrics['train_macc'].class_pred_total()
+                label_weights *= class_gt_counts.sum() / (class_gt_counts * class_gt_counts.shape[0])
                 # label_weights[class_pred_counts == 0] = 0
                 # print(label_weights)
             self.criterion = nn.CrossEntropyLoss(weight=label_weights, ignore_index=-1)
