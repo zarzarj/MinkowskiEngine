@@ -96,13 +96,7 @@ class BasePrecomputed(LightningDataModule):
                 if self.in_memory:
                     self.cache[scene] = copy.deepcopy(in_dict)
             in_dict['batch_idx'] = batch_idx
-            # import pdb; pdb.set_trace()
             in_dict = self.process_input(in_dict)
-            # print(in_dict['labels'].max(), in_dict['labels'].min(), in_dict['labels'].shape)
-            # labels = [self.valid_class_ids[label] if label != -1 else -1 for label in in_dict['labels'] ]
-            # colors = [self.scannet_color_map[label] for label in labels]
-            # save_pc(in_dict['pts'], colors, 'test_pc.ply')
-            # assert(True==False)
             for k, v in in_dict.items():
                 if batch_idx == 0:
                     out_dict[k] = [v]
@@ -112,38 +106,25 @@ class BasePrecomputed(LightningDataModule):
 
     def process_input(self, in_dict):
         if self.to_hsv:
-            # print(in_dict['colors'].max())
             in_dict = self.color_transform(in_dict)
-            # print(in_dict['colors'].max())
         if self.use_augmentation and self.trainer.training:
-            # print(in_dict['colors'][:10])
-            # print("augmenting")
             in_dict = self.augment(in_dict)
-            # print(in_dict['colors'][:10])
         in_dict['num_pts'] = in_dict['pts'].shape[0]
         in_dict['coords'] = in_dict['pts'] / self.voxel_size
-        # print(in_dict['pts'])
-        # in_dict['coords'] = torch.floor(in_dict['coords']).long()
         if self.shift_coords and self.trainer.training:
             in_dict['coords'] += (torch.rand(3) * 100).type_as(in_dict['coords'])
-            # print(in_dict['coords'])
         if self.batch_fusion and self.trainer.training:
             in_dict['batch_idx'] = int(in_dict['batch_idx'] / 2)
+        # if self.room_subnpts > 0:
+
+        # else:
         in_dict['coords'] = torch.cat([torch.ones(in_dict['coords'].shape[0], 1).long()*in_dict['batch_idx'], in_dict['coords']], axis=-1)
 
         if 'colors' in in_dict:
-            # print(in_dict['colors'].max())
             in_dict['colors'] = (in_dict['colors'] / 255.) - 0.5
             if self.rand_colors:
                 in_dict['colors'] = torch.rand_like(in_dict['colors']) - 0.5
         in_dict['feats'] = self.get_features(in_dict)
-        # print(in_dict['feats'].shape)
-        
-        # if self.quantize_input:
-            # print(in_dict['coords'], in_dict['feats'], in_dict['labels'])
-        # in_dict['coords'], in_dict['feats'], in_dict['labels'] = ME.utils.sparse_quantize(
-        #     in_dict['coords'].numpy(), in_dict['feats'].numpy(), labels=in_dict['labels'].long().numpy(), ignore_label=-1)
-        # in_dict['coords'], in_dict['feats'], in_dict['labels'] = torch.from_numpy(in_dict['coords']), torch.from_numpy(in_dict['feats']), torch.from_numpy(in_dict['labels'])
         return in_dict
 
     def get_features(self, in_dict):
@@ -222,6 +203,7 @@ class BasePrecomputed(LightningDataModule):
         parser.add_argument("--rand_colors", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument("--shift_coords", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument("--batch_fusion", type=str2bool, nargs='?', const=True, default=False)
+        parser.add_argument("--room_subnpts", type=int, default=-1)
         # parser.add_argument("--elastic_distortion", type=str2bool, nargs='?', const=True, default=False)
 
         parser.add_argument("--voxel_size", type=float, default=0.02)

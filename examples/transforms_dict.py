@@ -30,13 +30,79 @@ class RandomDropout(object):
       inds = torch.randperm(N)[:int(N * (1 - self.dropout_ratio))]
       for k, v in in_dict.items():
         if isinstance(v, torch.Tensor):
-          # if 'adj' in k:
-          #   knn = int(v.shape[1] / N)
-          #   adj_inds = v.repeat_interleave(knn)
-          #   adj_inds *= knn
-          #   adj_inds += torch.arange(knn).repeat(inds.shape[0])
-          # else:
           in_dict[k] = v[inds]
+    return in_dict
+
+
+def room_partition_idx(self, pts, partition_idx=1, max_num_pts=8096):
+  if pts.shape[0] < max_num_pts:
+    return partition_idx
+  min_coords = pts.min(axis=0)[:2]
+  max_coords = pts.max(axis=0)[:2]
+  side_len = max_coords - min_coords
+  split_idx = int(side_len[0] <= side_len[1])
+  for i in range(2): 
+      cur_min = min_coords.copy()
+      cur_min[split_idx] += i * side_len[split_idx] / 2
+      cur_max = max_coords.copy()
+      cur_max[split_idx] -= (1 - i) * side_len[split_idx] / 2
+      # print(i, side_len, split_idx, cur_max, cur_min, max_coords, min_coords)
+      # assert(True == False)
+      mask = np.sum((pts[:,:2]>=(cur_min))*(pts[:,:2]<=(cur_max)),axis=1)==2
+      masked_room = room[mask]
+      return room_partition_idx(masked_room, 2*(partition_idx)+i, max_num_pts) 
+
+class ChunkSampling(object):
+  def __init__(self, x=0.75, y=0.75, z=1.5, min_npoints=-1, max_npoints=-1):
+    """
+    upright_axis: axis index among x,y,z, i.e. 2 for z
+    """
+    self.x=x
+    self.y=y
+    self.z=z
+    self.min_npoints=min_npoints
+    self.max_npoints=max_npoints
+
+  def __call__(self, in_dict):
+    labels = in_dict['labels']
+    pts = in_dict['pts']
+
+    coordmax = np.max(pts, axis=0)
+    coordmin = np.min(pts, axis=0)
+    
+    for _ in range(5):
+        curcenter = scene[np.random.choice(len(labels), 1)[0],:3]
+        curmin = curcenter-[0.75,0.75,1.5]
+        curmax = curcenter+[0.75,0.75,1.5]
+        curmin[2] = coordmin[2]
+        curmax[2] = coordmax[2]
+        curchoice = np.sum((pts>=(curmin-0.2))*(pts<=(curmax+0.2)),axis=1)==3
+        cur_point_set = scene[curchoice]
+        cur_semantic_seg = labels[curchoice]
+
+        if len(cur_semantic_seg)==0:
+            continue
+
+        mask = np.sum((cur_point_set[:, :3]>=(curmin-0.01))*(cur_point_set[:, :3]<=(curmax+0.01)),axis=1)==3
+        vidx = np.ceil((cur_point_set[mask,:3]-curmin)/(curmax-curmin)*[31.0,31.0,62.0])
+        vidx = np.unique(vidx[:,0]*31.0*62.0+vidx[:,1]*62.0+vidx[:,2])
+        isvalid = np.sum(cur_semantic_seg>0)/len(cur_semantic_seg)>=0.7 and len(vidx)/31.0/31.0/62.0>=0.02
+
+        if isvalid:
+            break
+
+    cur_num_pts = len(cur_point_set)
+    if cur_num_pts > self.max_npoints and self.max_npoints > 0:
+        choice = np.random.choice(cur_num_pts, self.max_npoints, replace=False)
+    elif cur_num_pts < self.min_npoints and self.min_npoints > 0:
+        choice = np.random.choice(cur_num_pts, self.min_npoints - cur_num_pts, replace=True)
+        choice = np.concatenate([np.arange(cur_num_pts), choice])
+    else:
+        choice = np.arange(cur_num_pts)
+
+    for k, v in in_dict.items():
+        if isinstance(v, torch.Tensor):
+          in_dict[k] = v[choice]
     return in_dict
 
 class RandomHorizontalFlip(object):

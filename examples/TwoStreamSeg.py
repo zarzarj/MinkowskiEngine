@@ -71,21 +71,14 @@ class TwoStreamSegmentationModule(BaseSegmentationModule):
                            dt=self.aug_policy_frequency)
 
     def forward(self, in_dict):
-        # print(in_dict['pts'].shape, in_dict['scene_name'])
-        # before = in_dict['feats'].clone()
         if self.use_color_feats:
             if self.color_backbone_class is not None:
                 color_logits, color_feats = self.color_backbone(in_dict, return_feats=True)
             else:
                 color_feats = in_dict['color_feats']
-        # assert(torch.allclose(before, in_dict['feats']))
         if self.use_structure_feats:
             if self.structure_backbone_class is not None:
                 structure_logits, structure_feats = self.structure_backbone(in_dict, return_feats=True)
-                # structure_logits = structure_logits.slice(in_dict['in_field']).F
-                # structure_feats = structure_feats.slice(in_dict['in_field']).F
-                # structure_logits = structure_logits.F
-                # structure_feats = structure_feats.F
             else:
                 structure_feats = in_dict['structure_feats']
 
@@ -128,14 +121,7 @@ class TwoStreamSegmentationModule(BaseSegmentationModule):
             epoch_losses = torch.tensor([[loss.detach().cpu() for loss in pred['losses']] for pred in validation_step_outputs]).mean(axis=0, keepdim=False)
             self.last_val_loss = self.current_val_loss
             self.current_val_loss = epoch_losses
-        # val_miou = self.val_metrics.compute()['val_miou'].item()
-        # train_miou = self.train_metrics.compute()['train_miou'].item()
-        # # print(val_miou, train_miou)
-        # e = (train_miou - val_miou) / train_miou
-        # aug_multiplier = np.clip(self.pid(e), a_min=0.5, a_max=5)
-        # print(aug_multiplier)
-        # # aug_multiplier = train_miou / val_miou
-        # self.trainer.datamodule.update_aug(aug_multiplier)
+
         if self.aug_policy_frequency != -1 and self.trainer.current_epoch % self.aug_policy_frequency == 0 and self.trainer.current_epoch!=0:
             val_miou = self.val_metrics.compute()['val_miou'].item()
             train_miou = self.train_metrics.compute()['train_miou'].item()
@@ -156,15 +142,17 @@ class TwoStreamSegmentationModule(BaseSegmentationModule):
             for name, metric in train_metrics:
                 metrics[name] = metric
 
-            label_weights = torch.ones(self.num_classes, device=self.device)
+            # label_weights = torch.ones(self.num_classes, device=self.device)
             if self.loss_miou_balance:
-                class_ious = metrics['train_miou'].class_ious().detach()
-                label_weights *= torch.nn.functional.softmin(class_ious)
-
-            if self.loss_macc_balance:
-                class_gt_counts = metrics['train_macc'].class_gt_total()
+                # class_ious = metrics['train_miou'].class_ious().detach()
+                # label_weights *= torch.nn.functional.softmin(class_ious)
+                gt_total = metrics['train_acc'].total().detach()
+                class_union = metrics['train_miou'].class_union().detach()
+                label_weights = gt_total / (class_union * class_union.shape[0])
+            elif self.loss_macc_balance:
+                class_gt_counts = metrics['train_macc'].class_gt_total().detach()
                 # class_pred_counts = metrics['train_macc'].class_pred_total()
-                label_weights *= class_gt_counts.sum() / (class_gt_counts * class_gt_counts.shape[0])
+                label_weights = class_gt_counts.sum() / (class_gt_counts * class_gt_counts.shape[0])
                 # label_weights[class_pred_counts == 0] = 0
                 # print(label_weights)
             self.criterion = nn.CrossEntropyLoss(weight=label_weights, ignore_index=-1)

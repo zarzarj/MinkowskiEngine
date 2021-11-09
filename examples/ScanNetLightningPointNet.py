@@ -157,14 +157,6 @@ class ScanNetPointNet(LightningDataModule):
         else:
             return [ChunkGeneratorCallback()]
 
-    # def on_train_epoch_start(self):
-    #     print("TRAIN EPOCH START")
-    #     self.train_dataset.generate_chunks()
-
-    # def on_validation_epoch_start(self):
-    #     print("VAL EPOCH START")
-    #     self.val_dataset.generate_chunks()
-
     @staticmethod
     def add_argparse_args(parent_parser):
         parser = parent_parser.add_argument_group("ScanNetPointNet")
@@ -182,7 +174,7 @@ class ScanNetPointNet(LightningDataModule):
         parser.add_argument("--use_normal", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument("--random_feats", type=str2bool, nargs='?', const=True, default=False)
 
-        parser.add_argument("--weighting", type=str2bool, nargs='?', const=True, default=True)
+
         parser.add_argument("--augment_points", type=str2bool, nargs='?', const=True, default=True)
 
         parser.add_argument("--overlap_factor", type=int, default=2)
@@ -295,21 +287,6 @@ class ScannetDatasetWholeScene():
                     if self.return_point_idx:
                         self.point_idx_list.append(point_idx)
                         self.scene_id_list.append(scene_id)
-
-        if self.weighting:
-            labelweights = np.zeros(self.num_classes)
-            for scene_data in self.scene_points_list:
-                if self.use_orig_pcs:
-                    seg = scene_data[:,9].astype(np.int32)
-                else:
-                    seg = scene_data[:,10].astype(np.int32)
-                tmp,_ = np.histogram(seg,range(self.num_classes + 1))
-                labelweights += tmp
-            labelweights = labelweights.astype(np.float32)
-            labelweights = labelweights/np.sum(labelweights)
-            self.labelweights = 1/np.log(1.2+labelweights)
-        else:
-            self.labelweights = np.ones(self.num_classes)
 
     def __getitem__(self, index):
         start = time.time()
@@ -485,17 +462,6 @@ class ScannetDataset():
             self.scene_data[scene_id] = scene_data
             if self.use_implicit:
                 self.implicit_data[scene_id] = np.load(os.path.join(self.data_dir, 'implicit_feats_pointnet2', scene_id + '.feats.npy'))
-
-        if self.weighting:
-            labelweights = np.zeros(self.num_classes)
-            for seg in semantic_labels_list:
-                tmp,_ = np.histogram(seg,range(self.num_classes + 1))
-                labelweights += tmp
-            labelweights = labelweights.astype(np.float32)
-            labelweights = labelweights/np.sum(labelweights)
-            self.labelweights = 1/np.log(1.2+labelweights)
-        else:
-            self.labelweights = np.ones(self.num_classes)
 
     # @background()
     def __getitem__(self, index):
@@ -677,7 +643,7 @@ class ScannetDataset():
                 mask = np.sum((cur_point_set[:, :3]>=(curmin-0.01))*(cur_point_set[:, :3]<=(curmax+0.01)),axis=1)==3
                 vidx = np.ceil((cur_point_set[mask,:3]-curmin)/(curmax-curmin)*[31.0,31.0,62.0])
                 vidx = np.unique(vidx[:,0]*31.0*62.0+vidx[:,1]*62.0+vidx[:,2])
-                isvalid = np.sum(cur_semantic_seg>0)/len(cur_semantic_seg)>=0.7 and len(vidx)/31.0/31.0/62.0>=0.02
+                isvalid = np.sum(cur_semantic_seg>=0)/len(cur_semantic_seg)>=0.7 and len(vidx)/31.0/31.0/62.0>=0.02
 
                 if isvalid:
                     break

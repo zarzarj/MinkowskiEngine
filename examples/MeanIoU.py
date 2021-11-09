@@ -33,5 +33,5 @@ class MeanIoU(Metric):
         # print(ious)
         return ious
 
-    # def class_counts(self):
-    #     return gt_totals
+    def class_union(self):
+        return self.union

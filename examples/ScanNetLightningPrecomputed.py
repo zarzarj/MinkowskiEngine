@@ -149,28 +149,6 @@ class ScanNetPrecomputed(BasePrecomputed):
                                 knn = torch_geometric.nn.pool.knn(up_coords, down_coords, k=16, num_workers=1)
                                 torch.save(knn, knn_file)
                             up_coords = down_coords
-                        
-                        # coords = torch.cat([torch.ones(pts.shape[0], 1), (pts / self.voxel_size).contiguous()], axis=-1).cuda()
-                        # in_field = ME.TensorField(
-                        #     features=torch.ones_like(coords),
-                        #     coordinates=coords,
-                        #     quantization_mode=ME.SparseTensorQuantizationMode.UNWEIGHTED_AVERAGE,
-                        #     minkowski_algorithm=ME.MinkowskiAlgorithm.SPEED_OPTIMIZED,
-                        #     # minkowski_algorithm=ME.MinkowskiAlgorithm.MEMORY_EFFICIENT,
-                        #     # device=in_dict['feats'].device,
-                        # )
-                        
-                        # for i in range(100):
-                        #     down = in_field.sparse(8)
-                        #     print(down)
-                        #     down_coords_2 = down._C[:,1:].float()
-                        #     down_coords_2 = self.sort_coords(down_coords_2)
-                        #     print(down_coords[:30], down_coords_2[:30])
-                        #     assert(torch.allclose(down_coords, down_coords_2.cpu()))
-                        # assert(True == False)
-
-
-    
 
     def setup(self, stage: Optional[str] = None):
         with open(os.path.join(self.data_dir, 'splits', 'scannetv2_train.txt'), 'r') as f:
