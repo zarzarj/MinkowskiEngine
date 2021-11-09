@@ -159,6 +159,7 @@ class TwoStreamSegmentationModule(BaseSegmentationModule):
                 label_weights = class_gt_counts.sum() / (class_gt_counts * class_gt_counts.shape[0])
                 # label_weights[class_pred_counts == 0] = 0
                 # print(label_weights)
+            print("Setting class weights to: ", label_weights)
             criterion = nn.CrossEntropyLoss(weight=label_weights, ignore_index=-1)
             self.criterion = MultiStreamLoss(criterion, self.loss_weights)
     
