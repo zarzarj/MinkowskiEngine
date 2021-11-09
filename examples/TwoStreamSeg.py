@@ -146,11 +146,11 @@ class TwoStreamSegmentationModule(BaseSegmentationModule):
             if self.loss_miou_balance:
                 # class_ious = metrics['train_miou'].class_ious().detach()
                 # label_weights *= torch.nn.functional.softmin(class_ious)
-                gt_total = metrics['train_acc'].total().detach()
-                class_union = metrics['train_miou'].class_union().detach()
+                gt_total = metrics['train_acc'].total()
+                class_union = metrics['train_miou'].class_union()
                 label_weights = gt_total / (class_union * class_union.shape[0])
             elif self.loss_macc_balance:
-                class_gt_counts = metrics['train_macc'].class_gt_total().detach()
+                class_gt_counts = metrics['train_macc'].class_gt_total()
                 # class_pred_counts = metrics['train_macc'].class_pred_total()
                 label_weights = class_gt_counts.sum() / (class_gt_counts * class_gt_counts.shape[0])
                 # label_weights[class_pred_counts == 0] = 0
