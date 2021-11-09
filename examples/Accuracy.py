@@ -19,5 +19,5 @@ class Accuracy(Metric):
         acc = self.correct.float() / self.total
         return acc
 
-    def total(self):
-        return self.total
+    # def total(self):
+    #     return self.total
