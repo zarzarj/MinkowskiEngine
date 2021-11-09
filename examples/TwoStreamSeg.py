@@ -137,9 +137,12 @@ class TwoStreamSegmentationModule(BaseSegmentationModule):
 
         if self.miou_balance_frequency != -1 and self.trainer.current_epoch % self.miou_balance_frequency == 0 and self.trainer.current_epoch>=self.min_balance_epoch:
 
-            train_metrics = self.train_metrics.items()
+            if self.loss_balance_val:
+                metrics_odict = self.val_metrics.items()
+            else:
+                metrics_odict = self.train_metrics.items()
             metrics = {}
-            for name, metric in train_metrics:
+            for name, metric in metrics_odict:
                 metrics[name] = metric
 
             # label_weights = torch.ones(self.num_classes, device=self.device)
@@ -181,6 +184,7 @@ class TwoStreamSegmentationModule(BaseSegmentationModule):
         parser.add_argument("--miou_balance_frequency", type=int, default=-1)
         parser.add_argument("--loss_miou_balance", type=str2bool, nargs='?', const=True, default=True)
         parser.add_argument("--loss_macc_balance", type=str2bool, nargs='?', const=True, default=False)
+        parser.add_argument("--loss_balance_val", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument("--min_balance_epoch", type=int, default=20)
 
         return parent_parser

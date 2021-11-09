@@ -18,8 +18,6 @@ from examples.str2bool import str2bool
 from examples.utils import interpolate_grid_feats, get_embedder, gather_nd, sparse_collate, save_pc
 import MinkowskiEngine as ME
 
-
-
 class BasePrecomputed(LightningDataModule):
     def __init__(self, **kwargs):
         super().__init__()
@@ -27,8 +25,6 @@ class BasePrecomputed(LightningDataModule):
             if name != "self":
                 # print(name, value)
                 setattr(self, name, value)
-
-
 
         self.feat_channels = 3 * int(self.use_colors) + 3 * int(self.use_normals)
         if self.use_color_embedding:
