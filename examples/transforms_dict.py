@@ -133,7 +133,7 @@ class RandomScaling(object):
     self.scale_augmentation_max = scale_augmentation_max
 
   def __call__(self, in_dict):
-    scale = torch.rand(1) * (self.scale_augmentation_min - self.scale_augmentation_max) + self.scale_augmentation_min
+    scale = torch.rand(1) * (self.scale_augmentation_max - self.scale_augmentation_min) + self.scale_augmentation_min
     in_dict['pts'] *= scale
     return in_dict
 

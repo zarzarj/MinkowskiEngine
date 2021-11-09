@@ -13,11 +13,8 @@ from torch.utils.data import DataLoader
 from pytorch_lightning import LightningDataModule
 from examples.str2bool import str2bool
 
-import multiprocessing as mp
 from tqdm import tqdm
 from pytorch_lightning.callbacks import Callback
-from plyfile import PlyData, PlyElement
-# from prefetch_generator import background
 
 class ChunkGeneratorCallback(Callback):
     def on_train_epoch_start(self, trainer, pl_module):
@@ -35,7 +32,6 @@ class BasePointNetLightning(LightningDataModule):
         self.feat_channels = 3 * int(self.use_color) + 3 * int(self.use_normal)
         self.seg_feat_channels = None
         self.kwargs = kwargs
-        
         self.labelweights=None
         
     
