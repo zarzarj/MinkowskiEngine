@@ -156,7 +156,6 @@ if __name__ == "__main__":
     loggers = [TensorBoardLogger(save_dir=lightning_root_dir, name='lightning_logs')]
     os.makedirs(lightning_root_dir, exist_ok=True)
     if main_args.use_wandb:
-        wandb.init()
         tags = ()
         tags += (main_args.pl_module.split('.')[-1],)
         tags += (main_args.pl_datamodule.split('.')[-1],)
