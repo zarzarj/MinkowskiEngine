@@ -393,7 +393,7 @@ class PointNetv2(LightningModule):
         self.lin2 = torch.nn.Linear(128, 128)
         self.lin3 = torch.nn.Linear(128, out_channels)
 
-    def forward(self, batch):
+    def forward(self, batch, return_feats=False):
         # batch_0_idx = batch['coords'][:,0] == 0
         # save_pc(batch['coords'][batch_0_idx,1:].cpu().numpy(), batch['feats'][batch_0_idx,:3].cpu().numpy(), 'test_s3dis_fwd.ply')
         # assert(True == False)
@@ -409,9 +409,11 @@ class PointNetv2(LightningModule):
 
         x = F.relu(self.lin1(x))
         x = F.dropout(x, p=0.5, training=self.training)
-        x = self.lin2(x)
-        x = F.dropout(x, p=0.5, training=self.training)
+        out_feats = self.lin2(x)
+        x = F.dropout(out_feats, p=0.5, training=self.training)
         x = self.lin3(x)
+        if return_feats:
+            return x, out_feats
         return x
         
     def convert_sync_batchnorm(self):

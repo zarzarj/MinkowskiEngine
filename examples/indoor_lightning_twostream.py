@@ -177,7 +177,7 @@ if __name__ == "__main__":
     callbacks.append(ModelCheckpoint(monitor='val_miou', mode = 'max', save_top_k=1,
                                     dirpath=os.path.join(lightning_root_dir, loggers[0].name, "version_"+str(loggers[0].version), 'checkpoints')))
     callbacks.append(LearningRateMonitor(logging_interval='step'))
-    print(callbacks)
+    # print(callbacks)
 
     
     train_dir = os.path.join(lightning_root_dir, 'lightning_logs')

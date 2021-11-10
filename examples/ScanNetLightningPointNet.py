@@ -33,7 +33,7 @@ class ScanNetPointNet(LightningDataModule):
             if name != "self":
                 setattr(self, name, value)  
         self.feat_channels = 32 * int(self.use_implicit) \
-                           + 3 * int(self.use_color) + 3 * int(self.use_normal)
+                           + 3 * int(self.use_colors) + 3 * int(self.use_normals)
         self.seg_feat_channels = None
         self.kwargs = kwargs
         self.class_labels = ('wall', 'floor', 'cabinet', 'bed', 'chair', 'sofa', 'table',
@@ -170,9 +170,10 @@ class ScanNetPointNet(LightningDataModule):
         parser.add_argument("--min_npoints", type=int, default=8192)
 
         parser.add_argument("--use_implicit", type=str2bool, nargs='?', const=True, default=False)
-        parser.add_argument("--use_color", type=str2bool, nargs='?', const=True, default=False)
-        parser.add_argument("--use_normal", type=str2bool, nargs='?', const=True, default=False)
+        parser.add_argument("--use_colors", type=str2bool, nargs='?', const=True, default=False)
+        parser.add_argument("--use_normals", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument("--random_feats", type=str2bool, nargs='?', const=True, default=False)
+        parser.add_argument("--rand_colors", type=str2bool, nargs='?', const=True, default=False)
 
 
         parser.add_argument("--augment_points", type=str2bool, nargs='?', const=True, default=True)
@@ -302,10 +303,12 @@ class ScannetDatasetWholeScene():
         else:
             label = scene_data[:,10].astype(np.int32)
 
-        if self.use_color:
+        if self.use_colors:
+            if self.rand_colors:
+                color = np.random.rand(color.shape[0], color.shape[1])
             point_set = np.concatenate([point_set, color], axis=1)
 
-        if self.use_normal:
+        if self.use_normals:
             point_set = np.concatenate([point_set, normal], axis=1)
 
         if self.use_implicit:
@@ -479,10 +482,12 @@ class ScannetDataset():
         if self.use_implicit:
             implicit = scene_data[:, -32:]
 
-        if self.use_color:
+        if self.use_colors:
+            if self.rand_colors:
+                rgb = np.random.rand(rgb.shape[0], rgb.shape[1])
             point_set = np.concatenate([point_set, rgb], axis=1)
 
-        if self.use_normal:
+        if self.use_normals:
             point_set = np.concatenate([point_set, normal], axis=1)
 
         if self.use_implicit:
