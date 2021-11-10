@@ -17,28 +17,31 @@ from sklearn.metrics import ConfusionMatrixDisplay
 from pytorch_lightning.callbacks import ModelCheckpoint, LearningRateMonitor, Callback
 from pytorch_lightning.plugins import DDPPlugin
 from examples.str2bool import str2bool
-
 import wandb
 
-def plot_iou(trainer, pl_module, ious, plot_title):
+def plot_class_metric(trainer, pl_module, metric, plot_title):
     labels = trainer.datamodule.class_labels
-    data = [[label, val] for (label, val) in zip(labels, ious)]
+    data = [[label, val] for (label, val) in zip(labels, metric)]
     for logger in pl_module.logger:
         if isinstance(logger, TensorBoardLogger):
             pass
         elif isinstance(logger, WandbLogger):
-            table = wandb.Table(data=data, columns = ["label", "iou"])
+            table = wandb.Table(data=data, columns = ["label", plot_title.split('_')[-1]])
             logger.experiment.log({plot_title : wandb.plot.bar(table, "label",
-                               "iou", title=plot_title)})
+                               plot_title.split('_')[-1], title=plot_title)})
 
 class IoUPlotCallback(Callback):
     def on_train_epoch_end(self, trainer, pl_module, unused=None):
-        plot_iou(trainer, pl_module, pl_module.train_class_iou.compute(), "train_ious")
+        plot_class_metric(trainer, pl_module, pl_module.train_class_iou.compute(), "train_ious")
+        plot_class_metric(trainer, pl_module, pl_module.train_class_acc.compute(), "train_accs")
         pl_module.train_class_iou.reset()
+        pl_module.train_class_acc.reset()
         
     def on_validation_epoch_end(self, trainer, pl_module):
-        plot_iou(trainer, pl_module, pl_module.val_class_iou.compute(), "val_ious")
-        pl_module.val_conf_metrics.reset()
+        plot_class_metric(trainer, pl_module, pl_module.val_class_iou.compute(), "val_ious")
+        plot_class_metric(trainer, pl_module, pl_module.val_class_acc.compute(), "val_accs")
+        pl_module.val_class_iou.reset()
+        pl_module.val_class_acc.reset()
 
 
 def plot_confusion_matrix(trainer, pl_module, confusion_metric, plot_title):
@@ -153,6 +156,7 @@ if __name__ == "__main__":
     loggers = [TensorBoardLogger(save_dir=lightning_root_dir, name='lightning_logs')]
     os.makedirs(lightning_root_dir, exist_ok=True)
     if main_args.use_wandb:
+        wandb.init()
         tags = ()
         tags += (main_args.pl_module.split('.')[-1],)
         tags += (main_args.pl_datamodule.split('.')[-1],)
@@ -163,6 +167,7 @@ if __name__ == "__main__":
         tags += ("wd_"+str(pl_module.weight_decay),)
         tags += ("seed_"+str(main_args.seed),)
         loggers.append(WandbLogger(save_dir=lightning_root_dir, name=main_args.exp_name, tags=tags))
+        
 
 
     callbacks = pl_datamodule.callbacks()
@@ -181,9 +186,10 @@ if __name__ == "__main__":
     if main_args.weights is not None:
         pl_module = pl_module.load_from_checkpoint(
                         checkpoint_path=main_args.weights,
+                        strict=False,
                         **pl_module_args)
         print(f'Restored {main_args.weights}')
-        resume_from_checkpoint = main_args.weights
+        resume_from_checkpoint = None
     elif len(train_versions) > 0:
         most_recent_train_version = max([int(x.split(os.sep)[-1].split('_')[-1]) for x in train_versions])
         most_recent_train_logdir = os.path.join(train_dir, f'version_{most_recent_train_version}')

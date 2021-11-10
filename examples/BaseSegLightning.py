@@ -4,7 +4,7 @@ from torch.optim import SGD, Adam, AdamW
 from torch.optim.lr_scheduler import LambdaLR, StepLR, OneCycleLR
 
 from pytorch_lightning.core import LightningModule
-from torchmetrics import ConfusionMatrix, MetricCollection, IoU
+from torchmetrics import ConfusionMatrix, MetricCollection, IoU, Accuracy as Acc
 
 from examples.MeanAccuracy import MeanAccuracy
 from examples.Accuracy import Accuracy
@@ -65,6 +65,8 @@ class BaseSegmentationModule(LightningModule):
         self.val_conf_metrics = conf_metrics.clone(prefix='val_')
         self.train_class_iou = IoU(num_classes=self.num_classes, reduction='none', dist_sync_on_step=True)
         self.val_class_iou = IoU(num_classes=self.num_classes, reduction='none', dist_sync_on_step=True)
+        self.train_class_acc = Acc(num_classes=self.num_classes, average='none', dist_sync_on_step=True)
+        self.val_class_acc = Acc(num_classes=self.num_classes, average='none', dist_sync_on_step=True)
 
     def training_step(self, batch, batch_idx):
         logits = self(batch)
@@ -87,6 +89,7 @@ class BaseSegmentationModule(LightningModule):
         self.train_metrics(preds, target)
         self.log_dict(self.train_metrics, sync_dist=True, prog_bar=False, on_step=False, on_epoch=True)
         self.train_class_iou(preds, target)
+        self.train_class_acc(preds, target)
         # self.log_dict(dict(zip(['train_'+l+'_iou' for l in self.trainer.datamodule.class_labels], self.train_class_iou.compute())), sync_dist=True, prog_bar=False, on_step=False, on_epoch=True)
         # self.train_conf_metrics(preds, target)
         # self.log_dict(self.train_conf_metrics, sync_dist=True, prog_bar=False, on_step=False, on_epoch=False)
@@ -115,6 +118,7 @@ class BaseSegmentationModule(LightningModule):
         self.val_metrics(preds, target)
         self.log_dict(self.val_metrics, sync_dist=True, prog_bar=True, on_step=False, on_epoch=True)
         self.val_class_iou(preds, target)
+        self.val_class_acc(preds, target)
         # self.log_dict(dict(zip(['val_'+ l+'_iou' for l in self.trainer.datamodule.class_labels], self.val_class_iou.compute())), sync_dist=True, prog_bar=False, on_step=False, on_epoch=True)
         # self.val_conf_metrics(preds, target)
         # self.log_dict(self.val_conf_metrics, sync_dist=True, prog_bar=False, on_step=False, on_epoch=False)
