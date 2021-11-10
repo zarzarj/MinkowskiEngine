@@ -153,10 +153,11 @@ class BasePrecomputed(LightningDataModule):
             transformations.extend([
                                   t.ElasticDistortion(0.2 * m, 0.4 * m),
                                   t.ElasticDistortion(0.8 * m, 1.6 * m),
-                                  t.RandomScaling(0.9 / m, 1.1 * m),
                                   t.RandomRotation(([-np.pi/64 * m, np.pi/64 * m], [-np.pi/64 * m, np.pi/64 * m], [-np.pi, np.pi])),
                                   t.RandomHorizontalFlip('z'),
                                 ])
+            if self.random_scaling:
+                transformations.append(t.RandomScaling(0.9 * m, 1.1 * m))
             if self.pos_jitter:
                 transformations.append(t.PositionJitter(0.005 * m))
         return t.Compose(transformations)
@@ -195,8 +196,10 @@ class BasePrecomputed(LightningDataModule):
         parser.add_argument("--color_aug", type=str2bool, nargs='?', const=True, default=True)
         parser.add_argument("--structure_aug", type=str2bool, nargs='?', const=True, default=True)
         parser.add_argument("--point_dropout", type=str2bool, nargs='?', const=True, default=True)
+        parser.add_argument("--random_scaling", type=str2bool, nargs='?', const=True, default=True)
         parser.add_argument("--rand_feats", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument("--rand_colors", type=str2bool, nargs='?', const=True, default=False)
+
         parser.add_argument("--shift_coords", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument("--batch_fusion", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument("--room_subnpts", type=int, default=-1)
