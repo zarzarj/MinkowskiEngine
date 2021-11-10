@@ -35,12 +35,15 @@ class ASSANetSeg(LightningModule):
                 if m.bias is not None:
                     nn.init.zeros_(m.bias)
 
-    def forward(self, batch):
+    def forward(self, batch, return_feats=False):
         features = batch['feats']
         xyz = batch['coords']
         l_xyz, l_features = self.encoder(xyz, features)
-        out_f = self.head(self.decoder(l_xyz, l_features))
-        return out_f.transpose(1,2).contiguous().reshape(-1, self.out_channels)
+        out_f = self.decoder(l_xyz, l_features)
+        out = self.head(out_f)
+        if return_feats:
+            return out.transpose(1,2).contiguous().reshape(-1, self.out_channels), None
+        return out.transpose(1,2).contiguous().reshape(-1, self.out_channels)
 
     @staticmethod
     def add_argparse_args(parent_parser):
