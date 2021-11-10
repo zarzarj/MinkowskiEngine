@@ -174,7 +174,7 @@ if __name__ == "__main__":
         callbacks.append(ConfusionMatrixPlotCallback())
     if main_args.log_ious:
         callbacks.append(IoUPlotCallback())
-    callbacks.append(ModelCheckpoint(monitor='val_miou', mode = 'max', save_top_k=1,
+    callbacks.append(ModelCheckpoint(monitor='val_miou', mode = 'max', save_top_k=1, save_last=True,
                                     dirpath=os.path.join(lightning_root_dir, loggers[0].name, "version_"+str(loggers[0].version), 'checkpoints')))
     callbacks.append(LearningRateMonitor(logging_interval='step'))
     # print(callbacks)
@@ -194,7 +194,7 @@ if __name__ == "__main__":
         most_recent_train_version = max([int(x.split(os.sep)[-1].split('_')[-1]) for x in train_versions])
         most_recent_train_logdir = os.path.join(train_dir, f'version_{most_recent_train_version}')
         print(f'Loading saved model in {most_recent_train_logdir}...')
-        ckptdirs = glob.glob(f'{most_recent_train_logdir}/checkpoints/*')
+        ckptdirs = glob.glob(f'{most_recent_train_logdir}/checkpoints/last*')
         if len(ckptdirs) > 0:
             ckpt = ckptdirs[0]
             pl_module = pl_module.load_from_checkpoint(
