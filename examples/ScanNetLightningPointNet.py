@@ -622,7 +622,7 @@ class ScannetDataset():
         # for scene_id in tqdm(self.scene_list):
         for scene_id in self.scene_list:
             scene = self.scene_data[scene_id]
-            semantic = scene[:, 10].astype(np.int32)
+            semantic = scene[:, -1].astype(np.int32)
 
             coordmax = np.max(scene, axis=0)[:3]
             coordmin = np.min(scene, axis=0)[:3]

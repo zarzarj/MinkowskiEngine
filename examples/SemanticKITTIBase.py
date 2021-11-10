@@ -91,11 +91,11 @@ class SemanticKITTIBase():
     def prepare_data(self):
         preprocess_path = os.path.join(self.data_dir, 'preprocessed')
         os.makedirs(preprocess_path, exist_ok=True)
-        train_scans = [glob.glob(os.path.join(self.data_dir, 'dataset', 'sequences', seq, 'velodyne', '*.bin')) for seq in self.train_seqs]
-        train_scans = [room for area_rooms in train_scans for room in area_rooms]
-        val_scans = [glob.glob(os.path.join(self.data_dir, 'dataset', 'sequences', seq, 'velodyne', '*.bin')) for seq in self.val_seqs]
-        val_scans = [room for area_rooms in val_scans for room in area_rooms]
-        scan_splits = {'train': train_scans, 'val': val_scans}
+        train_files = [glob.glob(os.path.join(self.data_dir, 'dataset', 'sequences', seq, 'velodyne', '*.bin')) for seq in self.train_seqs]
+        train_files = [room for area_rooms in train_files for room in area_rooms]
+        val_files = [glob.glob(os.path.join(self.data_dir, 'dataset', 'sequences', seq, 'velodyne', '*.bin')) for seq in self.val_seqs]
+        val_files = [room for area_rooms in val_files for room in area_rooms]
+        scan_splits = {'train': train_scans, 'val': val_files}
         for split, scans in scan_splits.items():
             os.makedirs(os.path.join(preprocess_path, split), exist_ok=True)
             for i, scan in tqdm(enumerate(scans)):

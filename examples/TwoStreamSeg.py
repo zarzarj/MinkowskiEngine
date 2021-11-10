@@ -152,11 +152,11 @@ class TwoStreamSegmentationModule(BaseSegmentationModule):
 
                 gt_total = metrics['train_acc'].total
                 class_union = metrics['train_miou'].union
-                label_weights = gt_total / (class_union * class_union.shape[0])
+                label_weights = gt_total / (class_union * self.num_classes)
             elif self.loss_macc_balance:
                 class_gt_counts = metrics['train_macc'].total
                 # class_pred_counts = metrics['train_macc'].class_pred_total()
-                label_weights = class_gt_counts.sum() / (class_gt_counts * class_gt_counts.shape[0])
+                label_weights = class_gt_counts.sum() / (class_gt_counts * self.num_classes)
                 # label_weights[class_pred_counts == 0] = 0
                 # print(label_weights)
             print("Setting class weights to: ", label_weights)

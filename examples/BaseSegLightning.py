@@ -4,7 +4,7 @@ from torch.optim import SGD, Adam, AdamW
 from torch.optim.lr_scheduler import LambdaLR, StepLR, OneCycleLR
 
 from pytorch_lightning.core import LightningModule
-from torchmetrics import ConfusionMatrix, MetricCollection
+from torchmetrics import ConfusionMatrix, MetricCollection, IoU
 
 from examples.MeanAccuracy import MeanAccuracy
 from examples.Accuracy import Accuracy
@@ -45,9 +45,6 @@ class BaseSegmentationModule(LightningModule):
                     setattr(self, name, value)
                 except:
                     print(name, value)
-        # self.num_classes = num_classes
-        # self.overlap_factor = overlap_factor
-        # self.voxel_size = voxel_size
         self.criterion = nn.CrossEntropyLoss(weight=self.label_weights, ignore_index=-1)
         metrics = MetricCollection({
                                     'acc': Accuracy(dist_sync_on_step=True),
@@ -66,21 +63,11 @@ class BaseSegmentationModule(LightningModule):
                                         })
         self.train_conf_metrics = conf_metrics.clone(prefix='train_')
         self.val_conf_metrics = conf_metrics.clone(prefix='val_')
+        self.train_class_iou = IoU(num_classes=self.num_classes, reduction='none', dist_sync_on_step=True)
+        self.val_class_iou = IoU(num_classes=self.num_classes, reduction='none', dist_sync_on_step=True)
 
     def training_step(self, batch, batch_idx):
-        # print('coords', batch['coords'])
-        # batch['sparse_tensor'] = ME.SparseTensor(
-        #     coordinates=batch["coords"].float(), features=batch["feats"]
-        # )
-        # batch['in_field'] = ME.TensorField(
-        #     features=batch['feats'],
-        #     coordinates=batch['coords'],
-        #     quantization_mode=ME.SparseTensorQuantizationMode.UNWEIGHTED_AVERAGE,
-        #     minkowski_algorithm=ME.MinkowskiAlgorithm.MEMORY_EFFICIENT,
-        # )
-        # batch['sparse_tensor'] = batch['in_field'].sparse()
         logits = self(batch)
-        # target = torch.cat(batch['labels'], dim=0).long()
         target = batch['labels'].long()
         valid_targets = target != -1
         target = target[valid_targets]
@@ -90,37 +77,28 @@ class BaseSegmentationModule(LightningModule):
         else:
             logits = logits[valid_targets]
             preds = logits.detach().argmax(dim=-1)
-        # print(preds, logits)
+
         train_loss = self.criterion(logits, target)
         if type(train_loss) is dict:
             self.log('train_loss', train_loss['loss'], sync_dist=True, prog_bar=True, on_step=False, on_epoch=True)
         else:
             self.log('train_loss', train_loss, sync_dist=True, prog_bar=True, on_step=False, on_epoch=True)
-        # print(self.trainer.optimizers)
-        # if self.trainer.global_step % 40 == 0:
-        #     print("lr", self.trainer.global_step, self.trainer.optimizers[0].param_groups[0]['lr'])
-        
-        # print(len(preds.shape), preds.shape)
-        # print(preds.shape)
         
         self.train_metrics(preds, target)
         self.log_dict(self.train_metrics, sync_dist=True, prog_bar=False, on_step=False, on_epoch=True)
+        self.train_class_iou(preds, target)
+        # self.log_dict(dict(zip(['train_'+l+'_iou' for l in self.trainer.datamodule.class_labels], self.train_class_iou.compute())), sync_dist=True, prog_bar=False, on_step=False, on_epoch=True)
         # self.train_conf_metrics(preds, target)
         # self.log_dict(self.train_conf_metrics, sync_dist=True, prog_bar=False, on_step=False, on_epoch=False)
-
-        # gc.collect()
-        # torch.cuda.empty_cache()
         return train_loss
         
     def validation_step(self, batch, batch_idx):
-        # print(batch['coords'])
         logits = self(batch)
 
         target = batch['labels'].long()
         valid_targets = target != -1
 
         target = target[valid_targets]
-        # print(target.shape, logits.shape)
         if len(logits.shape) == 3:
             logits = logits[:, valid_targets]
             preds = logits.detach().argmax(dim=-1)[0]
@@ -136,10 +114,10 @@ class BaseSegmentationModule(LightningModule):
 
         self.val_metrics(preds, target)
         self.log_dict(self.val_metrics, sync_dist=True, prog_bar=True, on_step=False, on_epoch=True)
+        self.val_class_iou(preds, target)
+        # self.log_dict(dict(zip(['val_'+ l+'_iou' for l in self.trainer.datamodule.class_labels], self.val_class_iou.compute())), sync_dist=True, prog_bar=False, on_step=False, on_epoch=True)
         # self.val_conf_metrics(preds, target)
         # self.log_dict(self.val_conf_metrics, sync_dist=True, prog_bar=False, on_step=False, on_epoch=False)
-        # gc.collect()
-        # torch.cuda.empty_cache()
         return val_loss
         
     def configure_optimizers(self):
@@ -206,9 +184,6 @@ class BaseSegmentationModule(LightningModule):
         for key in conf_matrices:
             new_metrics_dict.pop(key)
         return new_metrics_dict
-
-    #def convert_sync_batchnorm(self):
-    #    self.model = ME.MinkowskiSyncBatchNorm.convert_sync_batchnorm(self.model)
 
     @staticmethod
     def add_argparse_args(parent_parser):

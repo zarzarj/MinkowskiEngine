@@ -20,6 +20,26 @@ from examples.str2bool import str2bool
 
 import wandb
 
+def plot_iou(trainer, pl_module, ious, plot_title):
+    labels = trainer.datamodule.class_labels
+    data = [[label, val] for (label, val) in zip(labels, ious)]
+    for logger in pl_module.logger:
+        if isinstance(logger, TensorBoardLogger):
+            pass
+        elif isinstance(logger, WandbLogger):
+            table = wandb.Table(data=data, columns = ["label", "iou"])
+            logger.experiment.log({plot_title : wandb.plot.bar(table, "label",
+                               "iou", title=plot_title)})
+
+class IoUPlotCallback(Callback):
+    def on_train_epoch_end(self, trainer, pl_module, unused=None):
+        plot_iou(trainer, pl_module, pl_module.train_class_iou.compute(), "train_ious")
+        pl_module.train_class_iou.reset()
+        
+    def on_validation_epoch_end(self, trainer, pl_module):
+        plot_iou(trainer, pl_module, pl_module.val_class_iou.compute(), "val_ious")
+        pl_module.val_conf_metrics.reset()
+
 
 def plot_confusion_matrix(trainer, pl_module, confusion_metric, plot_title):
     conf_mat = confusion_metric.compute().detach().cpu().numpy()
@@ -87,6 +107,7 @@ class MainArgs():
         parser.add_argument("--structure_backbone", type=str, default=None)
         parser.add_argument("--use_wandb", type=str2bool, nargs='?', const=True, default=True)
         parser.add_argument("--log_conf_matrix", type=str2bool, nargs='?', const=True, default=False)
+        parser.add_argument("--log_ious", type=str2bool, nargs='?', const=True, default=True)
         parser.add_argument("--save_feats", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument("--weights", type=str, default=None)
         # parser.add_argument("--use_tb", type=str2bool, nargs='?', const=True, default=False)
@@ -147,6 +168,8 @@ if __name__ == "__main__":
     callbacks = pl_datamodule.callbacks()
     if main_args.log_conf_matrix:
         callbacks.append(ConfusionMatrixPlotCallback())
+    if main_args.log_ious:
+        callbacks.append(IoUPlotCallback())
     callbacks.append(ModelCheckpoint(monitor='val_miou', mode = 'max', save_top_k=1,
                                     dirpath=os.path.join(lightning_root_dir, loggers[0].name, "version_"+str(loggers[0].version), 'checkpoints')))
     callbacks.append(LearningRateMonitor(logging_interval='step'))

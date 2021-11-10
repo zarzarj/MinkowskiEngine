@@ -1,6 +1,7 @@
 from typing import Any, Optional, List, NamedTuple
 from examples.str2bool import str2bool
 from examples.BaseLightningPointNet import BasePointNetLightning, BaseWholeScene, BaseChunked
+from examples.SemanticKITTIBase import SemanticKITTIBase
 
 class SemanticKITTIPointNet(SemanticKITTIBase, BasePointNetLightning):
     def __init__(self, **kwargs):
@@ -10,11 +11,11 @@ class SemanticKITTIPointNet(SemanticKITTIBase, BasePointNetLightning):
     def setup(self, stage: Optional[str] = None):
         SemanticKITTIBase.setup(self, stage)
         if self.use_whole_scene:
-            self.train_dataset = ScannetWholeScene(phase="train", scene_list=self.train_scans, **self.kwargs)
-            self.val_dataset = ScannetWholeScene(phase="val", scene_list=self.val_scans, **self.kwargs)
+            self.train_dataset = SemanticKITTIWholeScene(phase="train", scene_list=self.train_files, **self.kwargs)
+            self.val_dataset = SemanticKITTIWholeScene(phase="val", scene_list=self.val_files, **self.kwargs)
         else:
-            self.train_dataset = ScannetChunked(phase="train", scene_list=self.train_scans, **self.kwargs)
-            self.val_dataset = ScannetChunked(phase="val", scene_list=self.val_scans, **self.kwargs)
+            self.train_dataset = SemanticKITTIChunked(phase="train", scene_list=self.train_files, **self.kwargs)
+            self.val_dataset = SemanticKITTIChunked(phase="val", scene_list=self.val_files, **self.kwargs)
         # self.val_dataset.generate_chunks()
 
     @staticmethod
