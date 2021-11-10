@@ -110,7 +110,7 @@ class MainArgs():
         parser.add_argument("--structure_backbone", type=str, default=None)
         parser.add_argument("--use_wandb", type=str2bool, nargs='?', const=True, default=True)
         parser.add_argument("--log_conf_matrix", type=str2bool, nargs='?', const=True, default=False)
-        parser.add_argument("--log_ious", type=str2bool, nargs='?', const=True, default=True)
+        parser.add_argument("--log_ious", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument("--save_feats", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument("--weights", type=str, default=None)
         # parser.add_argument("--use_tb", type=str2bool, nargs='?', const=True, default=False)
@@ -177,6 +177,7 @@ if __name__ == "__main__":
     callbacks.append(ModelCheckpoint(monitor='val_miou', mode = 'max', save_top_k=1,
                                     dirpath=os.path.join(lightning_root_dir, loggers[0].name, "version_"+str(loggers[0].version), 'checkpoints')))
     callbacks.append(LearningRateMonitor(logging_interval='step'))
+    print(callbacks)
 
     
     train_dir = os.path.join(lightning_root_dir, 'lightning_logs')

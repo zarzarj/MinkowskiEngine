@@ -18,9 +18,11 @@ from pytorch_lightning.callbacks import Callback
 
 class ChunkGeneratorCallback(Callback):
     def on_train_epoch_start(self, trainer, pl_module):
+        # print("TRAIN GEN CHUNKS")
         trainer.datamodule.train_dataset.generate_chunks()
         
     def on_validation_epoch_start(self, trainer, pl_module):
+        # print("VAL GEN CHUNKS")
         trainer.datamodule.val_dataset.generate_chunks()
 
 class BasePointNetLightning(LightningDataModule):
@@ -35,21 +37,22 @@ class BasePointNetLightning(LightningDataModule):
         
     
     def train_dataloader(self):
-        collate_fn = build_collate_fn(dense_input=self.dense_input, return_idx=self.return_point_idx)
+        # collate_fn = build_collate_fn(dense_input=self.dense_input, return_idx=self.return_point_idx)
         train_dataloader = DataLoader(self.train_dataset, batch_size=self.batch_size,
-                                      collate_fn=collate_fn, num_workers=self.num_workers,
+                                      collate_fn=self.train_dataset.collate_fn, num_workers=self.num_workers,
                                       pin_memory=True, shuffle=True)
+        # print(self.train_dataset)
         return train_dataloader
 
     def val_dataloader(self):
-        collate_fn = build_collate_fn(dense_input=self.dense_input, return_idx=self.return_point_idx)
+        # collate_fn = build_collate_fn(dense_input=self.dense_input, return_idx=self.return_point_idx)
         if self.val_split == 'train':
             val_dataset = self.train_dataset
         else:
             val_dataset = self.val_dataset
-            
+        # print(val_dataset)
         val_dataloader = DataLoader(val_dataset, batch_size=self.val_batch_size,
-                                      collate_fn=collate_fn, num_workers=self.num_workers,
+                                      collate_fn=val_dataset.collate_fn, num_workers=self.num_workers,
                                       pin_memory=True, shuffle=False)
         return val_dataloader
 
@@ -57,6 +60,7 @@ class BasePointNetLightning(LightningDataModule):
         if self.use_whole_scene:
             return []
         else:
+            # print("Chunk Callback")
             return [ChunkGeneratorCallback()]
 
     @staticmethod
@@ -72,9 +76,7 @@ class BasePointNetLightning(LightningDataModule):
         parser.add_argument("--min_npoints", type=int, default=8192)
         
         parser.add_argument("--random_feats", type=str2bool, nargs='?', const=True, default=False)
-
-        parser.add_argument("--overlap_factor", type=int, default=2)
-        parser.add_argument("--voxel_size", type=float, default=.25)
+        parser.add_argument("--voxel_size", type=float, default=.02)
 
         parser.add_argument("--dense_input", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument("--use_whole_scene", type=str2bool, nargs='?', const=True, default=False)
@@ -155,9 +157,8 @@ class BaseWholeScene(BasePointNet):
     def __getitem__(self, index):
         start = time.time()
         in_dict = self.scene_list[index]
-        in_dict = self.process_input(in_dict)
+        # in_dict = self.process_input(in_dict)
         fetch_time = time.time() - start
-
         return in_dict
 
     def __len__(self):
@@ -179,8 +180,7 @@ class BaseChunked(BasePointNet):
         # load chunks
         scene_id = self.scene_list[index]
         in_dict = self.chunk_data[scene_id]
-        in_dict = self.process_input(in_dict)
-        # unpack
+        # print(in_dict)
         fetch_time = time.time() - start
 
         return in_dict
@@ -191,7 +191,7 @@ class BaseChunked(BasePointNet):
         """
         # print("generate new chunks for {}...".format(self.phase))
         # for scene_id in tqdm(self.scene_list):
-        for scene_id in self.scene_list:
+        for scene_id in tqdm(self.scene_list):
             scene_data = self.load_sample(scene_id)
 
             coordmax = scene_data['pts'].max(axis=0)[0]
@@ -239,37 +239,3 @@ class BaseChunked(BasePointNet):
 
     def __len__(self):
         return len(self.scene_list)
-
-def build_collate_fn(dense_input=False, return_idx=False):
-    def collate_fn(self, data):
-        '''
-        for ScannetDataset: collate_fn=collate_random
-
-        return: 
-            coords               # torch.FloatTensor(B, N, 3)
-            feats                # torch.FloatTensor(B, N, 3)
-            semantic_segs        # torch.FloatTensor(B, N)
-            sample_weights       # torch.FloatTensor(B, N)
-            fetch_time           # float
-        '''
-
-        batch_size = len(data)
-        batch_idx = torch.cat([torch.ones(data[i]['pts'].shape[0], 1) * i for i in range(batch_size)], axis=0)
-        out_dict = {}
-        for batch_idx, batch in enumerate(data):
-            batch['batch_idx'] = batch_idx
-            batch = self.process_input(batch)
-            for k, v in batch.items():
-                if batch_idx == 0:
-                    out_dict[k] = [v]
-                else:
-                    out_dict[k].append(v)
-
-        for k, v in out_dict.items():
-            if np.all([isinstance(it, torch.Tensor) for it in v]):
-                out_dict[k] = torch.cat(v, axis=0)
-                
-        return out_dict
-    return collate_fn
-
-

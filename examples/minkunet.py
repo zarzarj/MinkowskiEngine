@@ -191,26 +191,31 @@ class MinkUNetBase(ResNetBase):
         # print(in_dict['feats'].shape)
         x = in_field.sparse()
         out = self.conv0p1s1(x)
+        # print(out.coordinates.shape)
         out = self.bn0(out)
         out_p1 = self.relu(out)
 
         out = self.conv1p1s2(out_p1)
+        # print(out.coordinates.shape)
         out = self.bn1(out)
         out = self.relu(out)
         out_b1p2 = self.block1(out)
 
         out = self.conv2p2s2(out_b1p2)
+        # print(out.coordinates.shape)
         out = self.bn2(out)
         out = self.relu(out)
         out_b2p4 = self.block2(out)
 
         out = self.conv3p4s2(out_b2p4)
+        # print(out.coordinates.shape)
         out = self.bn3(out)
         out = self.relu(out)
         out_b3p8 = self.block3(out)
 
         # tensor_stride=16
         out = self.conv4p8s2(out_b3p8)
+        # print(out.coordinates.shape)
         out = self.bn4(out)
         out = self.relu(out)
         out = self.block4(out)

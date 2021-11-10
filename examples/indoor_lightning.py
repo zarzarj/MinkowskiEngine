@@ -107,7 +107,7 @@ class MainArgs():
         parser.add_argument("--backbone", type=str, default='examples.minkunet.MinkUNet34C')
         parser.add_argument("--use_wandb", type=str2bool, nargs='?', const=True, default=True)
         parser.add_argument("--log_conf_matrix", type=str2bool, nargs='?', const=True, default=False)
-        parser.add_argument("--log_ious", type=str2bool, nargs='?', const=True, default=True)
+        parser.add_argument("--log_ious", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument("--save_feats", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument("--weights", type=str, default=None)
         # parser.add_argument("--use_tb", type=str2bool, nargs='?', const=True, default=False)
