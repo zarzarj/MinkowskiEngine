@@ -102,7 +102,7 @@ class MainArgs():
     def add_argparse_args(parent_parser):
         parser = parent_parser.add_argument_group("MinkSegModel")
         parser.add_argument("--exp_name", type=str, default='default')
-        parser.add_argument('--run_mode', type=str, default='train', choices=['train','validate','test'])
+        parser.add_argument('--run_mode', type=str, default='train', choices=['train','validate','test', 'visualize'])
         parser.add_argument('--seed', type=int, default=42)
         parser.add_argument("--pl_module", type=str, default='examples.TwoStreamSeg.TwoStreamSegmentationModule')
         parser.add_argument("--pl_datamodule", type=str, default='examples.ScanNetLightningPrecomputed.ScanNetPrecomputed')
@@ -120,6 +120,35 @@ def get_obj_from_str(string):
     # From https://github.com/CompVis/taming-transformers
     module, cls = string.rsplit(".", 1)
     return getattr(importlib.import_module(module, package=None), cls)
+
+def visualize(pl_module, pl_datamodule):
+    from examples.utils import save_pc
+    pl_datamodule.prepare_data()
+    pl_datamodule.setup(stage="validate")
+    dataloader = pl_datamodule.val_dataloader()
+    data = iter(dataloader).next()
+    pl_module = pl_module.cuda()
+    data['coords'] = data['coords'].cuda()
+    data['feats'] = data['feats'].cuda()
+    # data['coords'] = data['coords'].cuda()
+    # print(data)
+    # optimizer = pl_module.optimizer
+    out = pl_module(data)
+    # print(out.shape)
+    if len(out.shape) == 3:
+        out = out[0]
+
+    gt = data['labels']
+    preds = out.argmax(axis=1)
+    preds[gt == -1] = -1
+
+    # print(preds, preds.shape)
+    colors = [pl_datamodule.color_map[p] for p in preds.cpu().numpy()]
+    save_pc(data['pts'], colors, 'vis.ply')
+    colors = [pl_datamodule.color_map[p] for p in gt.cpu().numpy()]
+    save_pc(data['pts'], colors, 'vis_gt.ply')
+    # print(out)
+    pl_datamodule.teardown(stage="validate")
 
 if __name__ == "__main__":
     
@@ -221,3 +250,7 @@ if __name__ == "__main__":
         pl_trainer.validate(pl_module, pl_datamodule)
     elif main_args.run_mode == 'test':
         pl_trainer.test(pl_module, pl_datamodule)
+    elif main_args.run_mode == 'visualize':
+        visualize(pl_module, pl_datamodule)
+
+
