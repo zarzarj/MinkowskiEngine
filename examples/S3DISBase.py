@@ -128,7 +128,7 @@ class S3DISBase(BaseDataset):
         return out_feats
 
     def load_sample(self, idx):
-        room_data = torch.load(idx)
+        room_data = torch.load(idx).float()
         out_dict = {'pts': room_data[:, :3],  # include xyz by default
                     'labels': room_data[:, -1],
                     'scene_name': idx.split('/')[-1],
