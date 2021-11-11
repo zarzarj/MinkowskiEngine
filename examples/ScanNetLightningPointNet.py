@@ -727,7 +727,7 @@ def build_collate_fn(dense_input=False, return_idx=False):
             feats = point_set[:, :, 3:].contiguous().transpose(1,2) #B, C, N
 
         # pack
-        batch = {'coords': coords,
+        batch = {'pts': coords,
                  'feats': feats,
                  'labels': semantic_seg.reshape(-1).long(),
         }

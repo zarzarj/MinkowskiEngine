@@ -37,10 +37,11 @@ class ASSANetSeg(LightningModule):
 
     def forward(self, batch, return_feats=False):
         features = batch['feats']
-        xyz = batch['coords']
+        xyz = batch['pts']
         l_xyz, l_features = self.encoder(xyz, features)
         out_f = self.decoder(l_xyz, l_features)
         out = self.head(out_f)
+        # print(out.shape)
         if return_feats:
             return out.transpose(1,2).contiguous().reshape(-1, self.out_channels), None
         return out.transpose(1,2).contiguous().reshape(-1, self.out_channels)

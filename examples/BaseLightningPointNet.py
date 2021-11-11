@@ -21,9 +21,9 @@ class ChunkGeneratorCallback(Callback):
         # print("TRAIN GEN CHUNKS")
         trainer.datamodule.train_dataset.generate_chunks()
         
-    def on_validation_epoch_start(self, trainer, pl_module):
-        # print("VAL GEN CHUNKS")
-        trainer.datamodule.val_dataset.generate_chunks()
+    # def on_validation_epoch_start(self, trainer, pl_module):
+    #     # print("VAL GEN CHUNKS")
+    #     trainer.datamodule.val_dataset.generate_chunks()
 
 class BasePointNetLightning(LightningDataModule):
     def __init__(self, **kwargs):
@@ -34,6 +34,18 @@ class BasePointNetLightning(LightningDataModule):
         self.seg_feat_channels = None
         self.kwargs = kwargs
         self.labelweights=None
+
+    def setup(self, stage: Optional[str] = None):
+        if self.use_whole_scene:
+            self.train_dataset = self.whole_scene_dataset(phase="train", scene_list=self.train_files, **self.kwargs)
+        else:
+            self.train_dataset = self.chunked_scene_dataset(phase="train", scene_list=self.train_files, **self.kwargs)
+            # self.val_dataset = S3DISChunked(phase="val", scene_list=self.val_files, **self.kwargs)
+        val_kwargs = copy.deepcopy(self.kwargs)
+        val_kwargs['max_npoints'] = -1
+        val_kwargs['min_npoints'] = -1
+        self.val_dataset = self.whole_scene_dataset(phase="val", scene_list=self.val_files, **val_kwargs)
+        # self.val_dataset.generate_chunks()
         
     
     def train_dataloader(self):
@@ -69,19 +81,15 @@ class BasePointNetLightning(LightningDataModule):
         parser.add_argument("--num_classes", type=int, default=20)
         parser.add_argument("--data_dir", type=str, default=None)
         parser.add_argument("--batch_size", type=int, default=6)
-        parser.add_argument("--val_batch_size", type=int, default=6)
+        parser.add_argument("--val_batch_size", type=int, default=1)
         parser.add_argument("--test_batch_size", type=int, default=6)
         parser.add_argument("--num_workers", type=int, default=5)
         parser.add_argument("--max_npoints", type=int, default=8192)
         parser.add_argument("--min_npoints", type=int, default=8192)
         
-        parser.add_argument("--random_feats", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument("--voxel_size", type=float, default=.02)
-
-        parser.add_argument("--dense_input", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument("--use_whole_scene", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument("--return_point_idx", type=str2bool, nargs='?', const=True, default=False)
-        parser.add_argument("--use_orig_pcs", type=str2bool, nargs='?', const=True, default=False)
 
         parser.add_argument("--val_split", type=str, default='val')
         return parent_parser
@@ -111,35 +119,33 @@ class BaseWholeScene(BasePointNet):
         self._load_scene_file()
 
     def _load_scene_file(self):
-        self.scene_points_list = []
-        if self.return_point_idx:
-            self.point_idx_list = []
-            self.scene_id_list = []
+        self.scene_pillar_list = []
 
         for scene_id in tqdm(self.scene_list):
             scene_data = self.load_sample(scene_id)
 
-            coordmax = scene_data['pts'].max(axis=0)
-            coordmin = scene_data['pts'].min(axis=0)
+            coordmax = scene_data['pts'].max(axis=0)[0]
+            coordmin = scene_data['pts'].min(axis=0)[0]
             xlength = 1.0
             ylength = 1.0
             nsubvolume_x = torch.ceil((coordmax[0]-coordmin[0])/xlength).int()
             nsubvolume_y = torch.ceil((coordmax[1]-coordmin[1])/ylength).int()
+            # print(nsubvolume_x)
             for i in range(nsubvolume_x):
                 for j in range(nsubvolume_y):
-                    curmin = coordmin+[i*xlength, j*ylength, 0]
-                    curmax = coordmin+[(i+1)*xlength, (j+1)*ylength, coordmax[2]-coordmin[2]]
+                    curmin = coordmin+torch.tensor([i*xlength, j*ylength, 0])
+                    curmax = coordmin+torch.tensor([(i+1)*xlength, (j+1)*ylength, coordmax[2]-coordmin[2]])
                     mask = torch.sum((scene_data['pts']>=(curmin))*(scene_data['pts']<=(curmax)), axis=1)==3
                     cur_pillar_dict = index_dict(scene_data, mask)
                     
                     cur_seg = cur_pillar_dict['labels'].int()
-                    if cur_point_set.shape[0] == 0 or torch.all(cur_seg == -1):
+                    if cur_seg.shape[0] == 0 or torch.all(cur_seg == -1):
                         continue
 
                     if self.return_point_idx:
                         cur_pillar_dict['point_idx'] = torch.arange(scene_data.shape[0])[mask]
                     
-                    cur_num_pts = len(cur_point_set)
+                    cur_num_pts = len(cur_seg)
                     if cur_num_pts > self.max_npoints and self.max_npoints > 0:
                         choice = torch.randperm(cur_num_pts)[:self.max_npoints]
                     elif cur_num_pts < self.min_npoints and self.min_npoints > 0:
@@ -152,17 +158,17 @@ class BaseWholeScene(BasePointNet):
                     cur_pillar_dict = index_dict(cur_pillar_dict, choice)
                     #assert(not np.all(cur_point_set[:,-1] == 156))
                     # assert(not torch.all(cur_point_set[:,-1] == -1))
-                    self.scene_list.append(cur_pillar_dict)
+                    self.scene_pillar_list.append(cur_pillar_dict)
 
     def __getitem__(self, index):
         start = time.time()
-        in_dict = self.scene_list[index]
+        in_dict = self.scene_pillar_list[index]
         # in_dict = self.process_input(in_dict)
         fetch_time = time.time() - start
         return in_dict
 
     def __len__(self):
-        return len(self.scene_list)
+        return len(self.scene_pillar_list)
 
 class BaseChunked(BasePointNet):
     def __init__(self, **kwargs):
@@ -219,7 +225,7 @@ class BaseChunked(BasePointNet):
                 vidx = torch.ceil((cur_chunk_dict['pts']-curmin)/(curmax-curmin)*torch.tensor([31.0,31.0,62.0]))
                 vidx = torch.unique(vidx[:,0]*31.0*62.0+vidx[:,1]*62.0+vidx[:,2])
                 # print(vidx)
-                isvalid = torch.sum(cur_chunk_dict['labels']>0)/cur_num_pts>=0.7 and len(vidx)/31.0/31.0/62.0>=0.02
+                isvalid = torch.sum(cur_chunk_dict['labels']>=0)/cur_num_pts>=0.7 and len(vidx)/31.0/31.0/62.0>=0.02
 
                 if isvalid:
                     break

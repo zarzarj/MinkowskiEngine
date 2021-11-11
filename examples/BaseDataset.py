@@ -89,7 +89,14 @@ class BaseDataset():
 
         for k, v in out_dict.items():
             if np.all([isinstance(it, torch.Tensor) for it in v]):
-                out_dict[k] = torch.cat(v, axis=0)
+                if self.dense_input and k != 'labels':
+                    # print(v[0].shape)
+                    out_dict[k] = torch.stack(v, axis=0)
+                    # print(out_dict[k].shape)
+                    if k == 'feats':
+                        out_dict[k] = out_dict[k].transpose(1,2).contiguous()
+                else:
+                    out_dict[k] = torch.cat(v, axis=0)
                 # print(k, out_dict[k].shape)
         # print(out_dict)
         # for k, v in 
@@ -108,4 +115,5 @@ class BaseDataset():
         parser.add_argument("--shift_coords", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument("--point_dropout", type=str2bool, nargs='?', const=True, default=True)
         parser.add_argument("--batch_fusion", type=str2bool, nargs='?', const=True, default=False)
+        parser.add_argument("--dense_input", type=str2bool, nargs='?', const=True, default=False)
         return parent_parser

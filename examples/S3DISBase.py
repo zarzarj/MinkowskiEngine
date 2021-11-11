@@ -120,6 +120,8 @@ class S3DISBase(BaseDataset):
         if self.use_colors:
             feats.append(in_dict['colors'])
         out_feats = torch.cat(feats, dim=-1).float()
+        if len(feats) == 0:
+            feats.append(torch.ones((in_dict['pts'].shape[0], 1)))
         if self.random_feats:
             out_feats = torch.rand_like(out_feats) - 0.5
 
@@ -135,8 +137,8 @@ class S3DISBase(BaseDataset):
         if self.use_colors:
             out_dict['colors'] = room_data[:, 3:6]
 
-        if self.load_graph:
-            out_dict['adj'] = torch.load(os.path.join('/',*idx.split('/')[:-1], 'adjs', idx.split('/')[-1] + '_adj.pt'))
+        # if self.load_graph:
+        #     out_dict['adj'] = torch.load(os.path.join('/',*idx.split('/')[:-1], 'adjs', idx.split('/')[-1] + '_adj.pt'))
 
         return out_dict
 
@@ -146,6 +148,6 @@ class S3DISBase(BaseDataset):
         parser = parent_parser.add_argument_group("S3DISBase")
         parser.add_argument("--preprocess_max_num_pts", type=int, default=500000)
         parser.add_argument("--use_colors", type=str2bool, nargs='?', const=True, default=True)
-        parser.add_argument("--load_graph", type=str2bool, nargs='?', const=True, default=False)
+        parser.add_argument("--random_feats", type=str2bool, nargs='?', const=True, default=False)
         # parser.add_argument("--use_augmentation", type=str2bool, nargs='?', const=True, default=True)
         return parent_parser

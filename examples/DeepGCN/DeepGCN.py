@@ -51,9 +51,9 @@ class DenseDeepGCN(torch.nn.Module):
                                 torch.nn.Dropout(p=self.dropout),
                                 BasicConv([256, out_channels], None, None, bias)])
 
-    def forward(self, batch):
+    def forward(self, batch, return_feats=False):
         # print(batch['coords'].shape, batch['feats'].shape)
-        inputs = torch.cat([batch['coords'].transpose(1,2), batch['feats']], axis=1).unsqueeze(-1)
+        inputs = torch.cat([batch['pts'].transpose(1,2), batch['feats']], axis=1).unsqueeze(-1)
         feats = [self.head(inputs, self.knn(inputs[:, 0:3]))]
         for i in range(self.n_blocks-1):
             feats.append(self.backbone[i](feats[-1]))
@@ -63,6 +63,8 @@ class DenseDeepGCN(torch.nn.Module):
         fusion = torch.repeat_interleave(fusion, repeats=feats.shape[2], dim=2)
         out = self.prediction(torch.cat((fusion, feats), dim=1)).squeeze(-1)
         # print(out.shape)
+        if return_feats:
+            return out.transpose(1,2).contiguous().reshape(-1, self.out_channels), None
         return out.transpose(1,2).contiguous().reshape(-1, self.out_channels)
 
     def convert_sync_batchnorm(self):

@@ -113,6 +113,7 @@ class BaseSegmentationModule(LightningModule):
 
     def training_step(self, batch, batch_idx):
         logits = self(batch)
+        # print(logits.shape)
         target = batch['labels'].long()
         valid_targets = target != -1
         target = target[valid_targets]
@@ -140,11 +141,13 @@ class BaseSegmentationModule(LightningModule):
         
     def validation_step(self, batch, batch_idx):
         logits = self(batch)
+        # print(logits.shape)
 
         target = batch['labels'].long()
         valid_targets = target != -1
 
         target = target[valid_targets]
+        # print(logits.shape)
         if len(logits.shape) == 3:
             logits = logits[:, valid_targets]
             preds = logits.detach().argmax(dim=-1)[0]

@@ -7,16 +7,12 @@ class S3DISPointNet(S3DISBase, BasePointNetLightning):
     def __init__(self, **kwargs):
         BasePointNetLightning.__init__(self, **kwargs)
         S3DISBase.__init__(self, **kwargs)
+        self.whole_scene_dataset = S3DISWholeScene
+        self.chunked_scene_dataset = S3DISChunked
 
     def setup(self, stage: Optional[str] = None):
         S3DISBase.setup(self, stage)
-        if self.use_whole_scene:
-            self.train_dataset = S3DISWholeScene(phase="train", scene_list=self.train_files, **self.kwargs)
-            self.val_dataset = S3DISWholeScene(phase="val", scene_list=self.val_files, **self.kwargs)
-        else:
-            self.train_dataset = S3DISChunked(phase="train", scene_list=self.train_files, **self.kwargs)
-            self.val_dataset = S3DISChunked(phase="val", scene_list=self.val_files, **self.kwargs)
-        # self.val_dataset.generate_chunks()
+        BasePointNetLightning.setup(self, stage)
 
     @staticmethod
     def add_argparse_args(parent_parser):
