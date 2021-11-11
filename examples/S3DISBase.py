@@ -149,5 +149,6 @@ class S3DISBase(BaseDataset):
         parser.add_argument("--preprocess_max_num_pts", type=int, default=500000)
         parser.add_argument("--use_colors", type=str2bool, nargs='?', const=True, default=True)
         parser.add_argument("--random_feats", type=str2bool, nargs='?', const=True, default=False)
+        parser.add_argument("--num_classes", type=int, default=13)
         # parser.add_argument("--use_augmentation", type=str2bool, nargs='?', const=True, default=True)
         return parent_parser

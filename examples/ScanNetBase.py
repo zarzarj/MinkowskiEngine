@@ -95,6 +95,7 @@ class ScanNetBase(BaseDataset):
             self.test_files = [file[:-5] for file in self.test_files]
 
     def load_sample(self, idx):
+        idx = idx.split('/')[-1].split('.')[0]
         if self.use_orig_pcs:
             scene_data = torch.from_numpy(np.load(os.path.join(self.data_dir, 'scans_processed_full_normals', idx + '.npy')))
             labels = scene_data[:, 9].long()
@@ -137,4 +138,5 @@ class ScanNetBase(BaseDataset):
         parser.add_argument("--use_normals", type=str2bool, nargs='?', const=True, default=True)
         parser.add_argument("--use_orig_pcs", type=str2bool, nargs='?', const=True, default=True)
         parser.add_argument("--random_feats", type=str2bool, nargs='?', const=True, default=False)
+        parser.add_argument("--num_classes", type=int, default=20)
         return parent_parser

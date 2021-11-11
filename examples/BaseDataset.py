@@ -74,38 +74,17 @@ class BaseDataset():
         print("Setting aug multiplier to: ", m)
         self.augment = self.create_augs(m)
 
-    def collate_fn(self, data):
-        batch_size = len(data)
-        # batch_idx = torch.cat([torch.ones(data[i]['pts'].shape[0], 1) * i for i in range(batch_size)], axis=0)
-        out_dict = {}
-        for batch_idx, batch in enumerate(data):
-            batch['batch_idx'] = batch_idx
-            batch = self.process_input(batch)
-            for k, v in batch.items():
-                if batch_idx == 0:
-                    out_dict[k] = [v]
-                else:
-                    out_dict[k].append(v)
-
-        for k, v in out_dict.items():
-            if np.all([isinstance(it, torch.Tensor) for it in v]):
-                if self.dense_input and k != 'labels':
-                    # print(v[0].shape)
-                    out_dict[k] = torch.stack(v, axis=0)
-                    # print(out_dict[k].shape)
-                    if k == 'feats':
-                        out_dict[k] = out_dict[k].transpose(1,2).contiguous()
-                else:
-                    out_dict[k] = torch.cat(v, axis=0)
-                # print(k, out_dict[k].shape)
-        # print(out_dict)
-        # for k, v in 
-        # assert(True == False)
-        return out_dict
+    # def __getitem__(self, index):
+    #     start = time.time()
+    #     print(index)
+    #     in_dict = self.load_sample(index)
+    #     fetch_time = time.time() - start
+    #     return in_dict
 
     @staticmethod
     def add_argparse_args(parent_parser):
         parser = parent_parser.add_argument_group("BaseDataset")
+        parser.add_argument("--data_dir", type=str, default=None)
         parser.add_argument("--use_augmentation", type=str2bool, nargs='?', const=True, default=True)
         parser.add_argument("--to_hsv", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument("--pos_jitter", type=str2bool, nargs='?', const=True, default=False)
@@ -116,4 +95,5 @@ class BaseDataset():
         parser.add_argument("--point_dropout", type=str2bool, nargs='?', const=True, default=True)
         parser.add_argument("--batch_fusion", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument("--dense_input", type=str2bool, nargs='?', const=True, default=False)
+        parser.add_argument("--voxel_size", type=float, default=0.02)
         return parent_parser

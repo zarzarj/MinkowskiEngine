@@ -75,11 +75,14 @@ class BasePointNetLightning(LightningDataModule):
             # print("Chunk Callback")
             return [ChunkGeneratorCallback()]
 
+
+
+    
+
     @staticmethod
     def add_argparse_args(parent_parser):
         parser = parent_parser.add_argument_group("BasePointNetLightning")
-        parser.add_argument("--num_classes", type=int, default=20)
-        parser.add_argument("--data_dir", type=str, default=None)
+        # parser.add_argument("--num_classes", type=int, default=20)
         parser.add_argument("--batch_size", type=int, default=6)
         parser.add_argument("--val_batch_size", type=int, default=1)
         parser.add_argument("--test_batch_size", type=int, default=6)
@@ -87,7 +90,7 @@ class BasePointNetLightning(LightningDataModule):
         parser.add_argument("--max_npoints", type=int, default=8192)
         parser.add_argument("--min_npoints", type=int, default=8192)
         
-        parser.add_argument("--voxel_size", type=float, default=.02)
+        # parser.add_argument("--voxel_size", type=float, default=.02)
         parser.add_argument("--use_whole_scene", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument("--return_point_idx", type=str2bool, nargs='?', const=True, default=False)
 
@@ -107,6 +110,35 @@ class BasePointNet():
             if name != "self":
                 setattr(self, name, value)
         assert self.phase in ["train", "val", "test"]
+
+    def collate_fn(self, data):
+        batch_size = len(data)
+        # batch_idx = torch.cat([torch.ones(data[i]['pts'].shape[0], 1) * i for i in range(batch_size)], axis=0)
+        out_dict = {}
+        for batch_idx, batch in enumerate(data):
+            batch['batch_idx'] = batch_idx
+            batch = self.process_input(batch)
+            for k, v in batch.items():
+                if batch_idx == 0:
+                    out_dict[k] = [v]
+                else:
+                    out_dict[k].append(v)
+
+        for k, v in out_dict.items():
+            if np.all([isinstance(it, torch.Tensor) for it in v]):
+                if self.dense_input and k != 'labels':
+                    # print(v[0].shape)
+                    out_dict[k] = torch.stack(v, axis=0)
+                    # print(out_dict[k].shape)
+                    if k == 'feats':
+                        out_dict[k] = out_dict[k].transpose(1,2).contiguous()
+                else:
+                    out_dict[k] = torch.cat(v, axis=0)
+                # print(k, out_dict[k].shape)
+        # print(out_dict)
+        # for k, v in 
+        # assert(True == False)
+        return out_dict
 
 class BaseWholeScene(BasePointNet):
     def __init__(self, **kwargs):

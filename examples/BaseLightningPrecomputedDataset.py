@@ -18,6 +18,9 @@ from examples.str2bool import str2bool
 from examples.utils import interpolate_grid_feats, get_embedder, gather_nd, sparse_collate, save_pc
 import MinkowskiEngine as ME
 
+# class SimpleDataset(torch.utils.data.Dataset):
+
+
 class BasePrecomputed(LightningDataModule):
     def __init__(self, **kwargs):
         super().__init__()
@@ -25,185 +28,60 @@ class BasePrecomputed(LightningDataModule):
             if name != "self":
                 # print(name, value)
                 setattr(self, name, value)
-
-        self.feat_channels = 3 * int(self.use_colors) + 3 * int(self.use_normals)
-        if self.use_color_embedding:
-            self.embedder, embed_dims = get_embedder()
-            self.feat_channels += embed_dims
-        self.labelweights = None
-        self.cache = {}
-        
-        if self.use_augmentation:
-            self.augment = self.create_augs()
-        if self.to_hsv:
-            self.color_transform = t.RGBtoHSV()
-
+        self.seg_feat_channels = None
+        self.kwargs = kwargs
+        self.labelweights=None
 
     def train_dataloader(self):
-        train_dataloader = DataLoader(self.train_files, collate_fn=self.convert_batch,
+        train_dataloader = DataLoader(self.train_files, collate_fn=self.collate_fn,
                           batch_size=self.batch_size, shuffle=True,
                           num_workers=self.num_workers, pin_memory=True)
         return train_dataloader
 
     def val_dataloader(self):
-        val_dataloader = DataLoader(self.val_files, collate_fn=self.convert_batch,
+        val_dataloader = DataLoader(self.val_files, collate_fn=self.collate_fn,
                           batch_size=self.val_batch_size, shuffle=False,
                           num_workers=self.num_workers, pin_memory=True)
         return val_dataloader
 
     def test_dataloader(self):  # Test best validation model once again.
-        return DataLoader(self.test_files, collate_fn=self.convert_batch,
+        return DataLoader(self.test_files, collate_fn=self.collate_fn,
                           batch_size=self.test_batch_size, shuffle=False,
                           num_workers=self.num_workers, pin_memory=True)
 
-    def convert_batch(self, idxs):
-        in_dict = self.load_scan_files(idxs)
-        for k, v in in_dict.items():
-            # print(v)
-            if np.all([isinstance(it, torch.Tensor) for it in v]):
-                if 'adjacency_' in k:
-                    num_pts = [0, 0]
-                    for i, adj in enumerate(v):
-                        adj[0] += num_pts[0]
-                        down_factor = int(k.split('_')[1])
-
-                        num_pts[0] += in_dict['adjacency_' + str(int(down_factor/2)) + '_num_pts'][i]
-                        adj[1] += num_pts[1]
-                        num_pts[1] += in_dict[k + '_num_pts'][i]
-                        # print(num_pts)
-                    in_dict[k] = torch.cat(v, axis=1)
-                elif 'adjacency' in k:
-                    num_pts = 0
-                    for i, adj in enumerate(v):
-                        adj += num_pts
-                        num_pts += in_dict['num_pts'][i]
-                    in_dict[k] = torch.cat(v, axis=1)
-                else:
-                    in_dict[k] = torch.cat(v, axis=0)
-        return in_dict
-
-    def load_scan_files(self, idxs):
+    def collate_fn(self, data):
+        data = [self.load_sample(i) for i in data]
+        batch_size = len(data)
         out_dict = {}
-        for batch_idx, scene in enumerate(idxs):
-            if self.in_memory and scene in self.cache:
-                in_dict = copy.deepcopy(self.cache[scene])
-            else:
-                in_dict = self.load_sample(scene)
-                if self.in_memory:
-                    self.cache[scene] = copy.deepcopy(in_dict)
-            in_dict['batch_idx'] = batch_idx
-            in_dict = self.process_input(in_dict)
-            for k, v in in_dict.items():
+        for batch_idx, batch in enumerate(data):
+            batch['batch_idx'] = batch_idx
+            batch = self.process_input(batch)
+            for k, v in batch.items():
                 if batch_idx == 0:
                     out_dict[k] = [v]
                 else:
                     out_dict[k].append(v)
+
+        for k, v in out_dict.items():
+            if np.all([isinstance(it, torch.Tensor) for it in v]):
+                if self.dense_input and k != 'labels':
+                    # print(v[0].shape)
+                    out_dict[k] = torch.stack(v, axis=0)
+                    # print(out_dict[k].shape)
+                    if k == 'feats':
+                        out_dict[k] = out_dict[k].transpose(1,2).contiguous()
+                else:
+                    out_dict[k] = torch.cat(v, axis=0)
         return out_dict
-
-    def process_input(self, in_dict):
-        if self.to_hsv:
-            in_dict = self.color_transform(in_dict)
-        if self.use_augmentation and self.trainer.training:
-            in_dict = self.augment(in_dict)
-        in_dict['num_pts'] = in_dict['pts'].shape[0]
-        in_dict['coords'] = in_dict['pts'] / self.voxel_size
-        if self.shift_coords and self.trainer.training:
-            in_dict['coords'] += (torch.rand(3) * 100).type_as(in_dict['coords'])
-        if self.batch_fusion and self.trainer.training:
-            in_dict['batch_idx'] = int(in_dict['batch_idx'] / 2)
-        # if self.room_subnpts > 0:
-
-        # else:
-        in_dict['coords'] = torch.cat([torch.ones(in_dict['coords'].shape[0], 1).long()*in_dict['batch_idx'], in_dict['coords']], axis=-1)
-
-        if 'colors' in in_dict:
-            in_dict['colors'] = (in_dict['colors'] / 255.) - 0.5
-            if self.rand_colors:
-                in_dict['colors'] = torch.rand_like(in_dict['colors']) - 0.5
-        in_dict['feats'] = self.get_features(in_dict)
-        return in_dict
-
-    def get_features(self, in_dict):
-        feats = []
-        if self.use_colors:
-            feats.append(in_dict['colors'])
-        if self.use_color_embedding:
-            feats.append(self.embedder(in_dict['colors']))
-        if self.use_normals:
-            feats.append(in_dict['normals'])
-        if len(feats) == 0:
-            feats.append(torch.ones((in_dict['pts'].shape[0], 1)))
-        out_feats = torch.cat(feats, dim=-1).float()
-        if self.rand_feats:
-            out_feats = torch.rand_like(out_feats) - 0.5
-
-        return out_feats
-
-    def create_augs(self, m=1.0):
-        transformations = []
-        if self.point_dropout and not self.load_graph and not self.precompute_adjs:
-            transformations = [t.RandomDropout(0.2 * m)]
-        if self.color_aug:
-            transformations.extend([
-                                  t.ChromaticAutoContrast(),
-                                  t.ChromaticTranslation(0.1 * m),
-                                  t.ChromaticJitter(0.05 * m),
-                                  ])
-        if self.structure_aug:
-            transformations.extend([
-                                  t.ElasticDistortion(0.2 * m, 0.4 * m),
-                                  t.ElasticDistortion(0.8 * m, 1.6 * m),
-                                  t.RandomRotation(([-np.pi/64 * m, np.pi/64 * m], [-np.pi/64 * m, np.pi/64 * m], [-np.pi, np.pi])),
-                                  t.RandomHorizontalFlip('z'),
-                                ])
-            if self.random_scaling:
-                transformations.append(t.RandomScaling(0.9 * m, 1.1 * m))
-            if self.pos_jitter:
-                transformations.append(t.PositionJitter(0.005 * m))
-        return t.Compose(transformations)
-
-    def update_aug(self, m=1.0):
-        print("Setting aug multiplier to: ", m)
-        self.augment = self.create_augs(m)
 
     def callbacks(self):
         return []
 
     @staticmethod
     def add_argparse_args(parent_parser):
-        parser = parent_parser.add_argument_group("ScanNet")
-        parser.add_argument("--data_dir", type=str, default=None)
+        parser = parent_parser.add_argument_group("BasePrecomputed")
         parser.add_argument("--batch_size", type=int, default=6)
         parser.add_argument("--val_batch_size", type=int, default=6)
         parser.add_argument("--test_batch_size", type=int, default=6)
-
         parser.add_argument("--num_workers", type=int, default=0)
-        parser.add_argument("--in_memory", type=str2bool, nargs='?', const=True, default=True)
-
-        parser.add_argument("--structure_feats", type=str, default=None) #"feats_mink"
-        parser.add_argument("--color_feats", type=str, default=None) #"feats_pointnet"
-        parser.add_argument("--use_colors", type=str2bool, nargs='?', const=True, default=True)
-        parser.add_argument("--use_color_embedding", type=str2bool, nargs='?', const=True, default=False)
-        parser.add_argument("--use_normals", type=str2bool, nargs='?', const=True, default=False)
-        parser.add_argument("--load_graph", type=str2bool, nargs='?', const=True, default=False)
-        parser.add_argument("--precompute_adjs", type=str2bool, nargs='?', const=True, default=False)
-
-        parser.add_argument("--use_orig_pcs", type=str2bool, nargs='?', const=True, default=False)
-
-        parser.add_argument("--use_augmentation", type=str2bool, nargs='?', const=True, default=False)
-        parser.add_argument("--to_hsv", type=str2bool, nargs='?', const=True, default=False)
-        parser.add_argument("--pos_jitter", type=str2bool, nargs='?', const=True, default=False)
-        parser.add_argument("--color_aug", type=str2bool, nargs='?', const=True, default=True)
-        parser.add_argument("--structure_aug", type=str2bool, nargs='?', const=True, default=True)
-        parser.add_argument("--point_dropout", type=str2bool, nargs='?', const=True, default=True)
-        parser.add_argument("--random_scaling", type=str2bool, nargs='?', const=True, default=True)
-        parser.add_argument("--rand_feats", type=str2bool, nargs='?', const=True, default=False)
-        parser.add_argument("--rand_colors", type=str2bool, nargs='?', const=True, default=False)
-
-        parser.add_argument("--shift_coords", type=str2bool, nargs='?', const=True, default=False)
-        parser.add_argument("--batch_fusion", type=str2bool, nargs='?', const=True, default=False)
-        parser.add_argument("--room_subnpts", type=int, default=-1)
-        # parser.add_argument("--elastic_distortion", type=str2bool, nargs='?', const=True, default=False)
-
-        parser.add_argument("--voxel_size", type=float, default=0.02)
         return parent_parser
