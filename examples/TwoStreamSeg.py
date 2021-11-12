@@ -4,7 +4,7 @@ import torch.nn as nn
 from examples.BaseSegLightning import BaseSegmentationModule
 from examples.str2bool import str2bool
 
-from examples.utils import interpolate_grid_feats, interpolate_sparsegrid_feats
+from examples.utils import interpolate_grid_feats, interpolate_sparsegrid_feats, save_pc
 import numpy as np
 from examples.basic_blocks import MLP, norm_layer
 
@@ -71,6 +71,9 @@ class TwoStreamSegmentationModule(BaseSegmentationModule):
                            dt=self.aug_policy_frequency)
 
     def forward(self, in_dict):
+        print(in_dict['pts'].shape)
+        save_pc(in_dict['pts'].cpu().numpy(), (in_dict['colors'].cpu().numpy()+0.5)*255, 'test.ply')
+        assert(True == False)
         if self.use_color_feats:
             if self.color_backbone_class is not None:
                 color_logits, color_feats = self.color_backbone(in_dict, return_feats=True)

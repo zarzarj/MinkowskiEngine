@@ -197,8 +197,11 @@ class BaseWholeScene(BasePointNet):
                         choice = torch.arange(cur_num_pts)
 
                     cur_pillar_dict = index_dict(cur_pillar_dict, choice)
+                    cur_pillar_dict['pts'][:,:2] -= (curmin[:2] + curmax[:2])/2
+                    cur_pillar_dict['pts'][:,2] -= cur_pillar_dict['pts'][:,2].min()
                     #assert(not np.all(cur_point_set[:,-1] == 156))
                     # assert(not torch.all(cur_point_set[:,-1] == -1))
+                    # cur_pillar_dict['pts'] -= cur_pillar_dict['pts'][:,:2]
                     self.scene_pillar_list.append(cur_pillar_dict)
 
     def __getitem__(self, index):
@@ -286,6 +289,8 @@ class BaseChunked(BasePointNet):
                 choice = torch.arange(cur_num_pts)
             # print(choice.shape)
             cur_chunk_dict = index_dict(cur_chunk_dict, choice)
+            cur_chunk_dict['pts'][:,:2] -= curcenter[:2]
+            cur_chunk_dict['pts'][:,2] -= cur_chunk_dict['pts'][:,2].min()
             self.chunk_data[scene_id] = cur_chunk_dict
 
     def __len__(self):
