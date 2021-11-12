@@ -21,9 +21,9 @@ class ChunkGeneratorCallback(Callback):
         # print("TRAIN GEN CHUNKS")
         trainer.datamodule.train_dataset.generate_chunks()
         
-    # def on_validation_epoch_start(self, trainer, pl_module):
-    #     # print("VAL GEN CHUNKS")
-    #     trainer.datamodule.val_dataset.generate_chunks()
+    def on_validation_epoch_start(self, trainer, pl_module):
+        # print("VAL GEN CHUNKS")
+        trainer.datamodule.val_dataset.generate_chunks()
 
 class BasePointNetLightning(LightningDataModule):
     def __init__(self, **kwargs):
