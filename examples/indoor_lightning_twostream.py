@@ -124,6 +124,7 @@ def get_obj_from_str(string):
 def visualize(pl_module, pl_datamodule):
     from examples.utils import save_pc
     import torch
+    # pl_datamodule.__init__()
     pl_datamodule.prepare_data()
     pl_datamodule.setup(stage="validate")
     dataloader = pl_datamodule.val_dataloader()
@@ -167,14 +168,29 @@ def visualize(pl_module, pl_datamodule):
     rand_pt_idx = 198832
     rand_pt_class = pl_datamodule.class_labels[data['labels'][rand_pt_idx]]
     print(rand_pt_class, rand_pt_idx, iou, miou)
-    pt_out = out[rand_pt_idx, data['labels'][rand_pt_idx]]
+
+    # Compute grad with respect to correct class
+    correct_label = data['labels'][rand_pt_idx]
+    pt_out = out[rand_pt_idx, correct_label]
     pt_out.backward(retain_graph=True)
-    import pdb; pdb.set_trace()
-    grad = (data['feats'].grad / data['feats'].grad.max()) * 255.
+    # import pdb; pdb.set_trace()
+    grad = data['feats'].grad
+    grad = ((grad + grad.min()) / (grad.max() + grad.min())) * 255.
     save_pc(data['pts'][rand_pt_idx].reshape(-1,3), np.zeros((1,3)), 'vis_grad_pt_' + rand_pt_class + '_' + str(rand_pt_idx) + '.ply')
     save_pc(data['pts'], grad[:,:3].cpu().numpy(), 'vis_grad_colors_' + rand_pt_class + '_' + str(rand_pt_idx) + '.ply')
     # save_pc(data['pts'], grad[:,3:6].cpu().numpy(), 'vis_grad_normals_' + rand_pt_class + '_' + str(rand_pt_idx) + '.ply')
     # print(out)
+
+    #Grad with respect to incorrect classes
+    pt_out = torch.sum(out[rand_pt_idx, :correct_label]) + torch.sum(out[rand_pt_idx, correct_label+1:])
+    data['feats'].grad = torch.zeros_like(data['feats'].grad)
+    pt_out.backward(retain_graph=True)
+    grad = -data['feats'].grad
+    grad = ((grad + grad.min()) / (grad.max() + grad.min())) * 255.
+    # save_pc(data['pts'][rand_pt_idx].reshape(-1,3), np.zeros((1,3)), 'vis_neggrad_pt_' + rand_pt_class + '_' + str(rand_pt_idx) + '.ply')
+    save_pc(data['pts'], grad[:,:3].cpu().numpy(), 'vis_neg_grad_colors_' + rand_pt_class + '_' + str(rand_pt_idx) + '.ply')
+    # save_pc(data['pts'], grad[:,3:6].cpu().numpy(), 'vis_neg_grad_normals_' + rand_pt_class + '_' + str(rand_pt_idx) + '.ply')
+
     pl_datamodule.teardown(stage="validate")
 
 if __name__ == "__main__":

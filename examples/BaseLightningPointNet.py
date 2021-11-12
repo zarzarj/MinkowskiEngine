@@ -43,13 +43,15 @@ class BasePointNetLightning(LightningDataModule):
         # print(self.kwargs)
         if self.use_whole_scene:
             self.train_dataset = self.whole_scene_dataset(phase="train", scene_list=self.train_files, **self.kwargs)
+            self.val_dataset = self.whole_scene_dataset(phase="val", scene_list=self.val_files, **self.kwargs)
         else:
             self.train_dataset = self.chunked_scene_dataset(phase="train", scene_list=self.train_files, **self.kwargs)
+            self.val_dataset = self.chunked_scene_dataset(phase="val", scene_list=self.val_files, **self.kwargs)
             # self.val_dataset = S3DISChunked(phase="val", scene_list=self.val_files, **self.kwargs)
-        val_kwargs = copy.deepcopy(self.kwargs)
-        val_kwargs['max_npoints'] = -1
-        val_kwargs['min_npoints'] = -1
-        self.val_dataset = self.whole_scene_dataset(phase="val", scene_list=self.val_files, **val_kwargs)
+        # val_kwargs = copy.deepcopy(self.kwargs)
+        # val_kwargs['max_npoints'] = -1
+        # val_kwargs['min_npoints'] = -1
+        # self.val_dataset = self.whole_scene_dataset(phase="val", scene_list=self.val_files, **val_kwargs)
         # self.val_dataset.generate_chunks()
         
     
@@ -165,8 +167,8 @@ class BaseWholeScene(BasePointNet):
 
             coordmax = scene_data['pts'].max(axis=0)[0]
             coordmin = scene_data['pts'].min(axis=0)[0]
-            xlength = 1.0
-            ylength = 1.0
+            xlength = 1.5
+            ylength = 1.5
             nsubvolume_x = torch.ceil((coordmax[0]-coordmin[0])/xlength).int()
             nsubvolume_y = torch.ceil((coordmax[1]-coordmin[1])/ylength).int()
             # print(nsubvolume_x)

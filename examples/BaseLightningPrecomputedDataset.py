@@ -55,7 +55,10 @@ class BasePrecomputed(LightningDataModule):
         out_dict = {}
         for batch_idx, batch in enumerate(data):
             batch['batch_idx'] = batch_idx
-            batch = self.process_input(batch, training=self.trainer.training)
+            if self.trainer is None:
+                batch = self.process_input(batch, training=False)
+            else:
+                batch = self.process_input(batch, training=self.trainer.training)
             for k, v in batch.items():
                 if batch_idx == 0:
                     out_dict[k] = [v]

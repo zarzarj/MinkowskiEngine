@@ -122,9 +122,9 @@ class S3DISBase(BaseDataset):
         feats = []
         if self.use_colors:
             feats.append(in_dict['colors'])
-        out_feats = torch.cat(feats, dim=-1).float()
         if len(feats) == 0:
             feats.append(torch.ones((in_dict['pts'].shape[0], 1)))
+        out_feats = torch.cat(feats, dim=-1).float()
         if self.random_feats:
             out_feats = torch.rand_like(out_feats) - 0.5
 
