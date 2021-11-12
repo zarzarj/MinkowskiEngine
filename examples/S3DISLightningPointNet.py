@@ -7,6 +7,7 @@ class S3DISPointNet(S3DISBase, BasePointNetLightning):
     def __init__(self, **kwargs):
         BasePointNetLightning.__init__(self, **kwargs)
         S3DISBase.__init__(self, **kwargs)
+        self.kwargs = copy.deepcopy(kwargs)
         self.whole_scene_dataset = S3DISWholeScene
         self.chunked_scene_dataset = S3DISChunked
 

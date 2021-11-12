@@ -123,6 +123,7 @@ def get_obj_from_str(string):
 
 def visualize(pl_module, pl_datamodule):
     from examples.utils import save_pc
+    import torch
     pl_datamodule.prepare_data()
     pl_datamodule.setup(stage="validate")
     dataloader = pl_datamodule.val_dataloader()
@@ -130,23 +131,49 @@ def visualize(pl_module, pl_datamodule):
     pl_module = pl_module.cuda()
     data['coords'] = data['coords'].cuda()
     data['feats'] = data['feats'].cuda()
-    # data['coords'] = data['coords'].cuda()
-    # print(data)
-    # optimizer = pl_module.optimizer
+    data['feats'][:,:3] = torch.rand_like(data['feats'][:,:3]) - 0.5
+    # data['feats'][:,3:6] = (torch.rand_like(data['feats'][:,3:6]) * 2) - 1
+    # print(data['feats'].min(axis=0), data['feats'].max(axis=0))
+    data['feats'] = torch.rand_like(data['feats'])
+
+    data['feats'].requires_grad_()
     out = pl_module(data)
-    # print(out.shape)
     if len(out.shape) == 3:
         out = out[0]
+    indices = torch.arange(out.shape[0])
 
-    gt = data['labels']
-    preds = out.argmax(axis=1)
-    preds[gt == -1] = -1
+    valid_targets = data['labels'] != -1
+    
+    preds = out.argmax(axis=-1)
+    valid_preds = preds[valid_targets]
+    preds[~valid_targets] = -1
 
     # print(preds, preds.shape)
+    # import pdb; pdb.set_trace()
     colors = [pl_datamodule.color_map[p] for p in preds.cpu().numpy()]
     save_pc(data['pts'], colors, 'vis.ply')
-    colors = [pl_datamodule.color_map[p] for p in gt.cpu().numpy()]
+    colors = [pl_datamodule.color_map[p] for p in data['labels'].cpu().numpy()]
     save_pc(data['pts'], colors, 'vis_gt.ply')
+
+    
+    targets = data['labels'].cuda().long()[valid_targets]
+    pl_module.val_class_iou(valid_preds, targets)
+    iou = pl_module.val_class_iou.compute().cpu().numpy()
+    iou = np.array([io for i, io in enumerate(iou) if np.sum(data['labels'].cpu().numpy() == i) > 0])
+    miou = iou.mean()
+
+    valid_indices = valid_targets[indices]
+    # rand_pt_idx = torch.randint(valid_indices.shape[0], (1,)).item()
+    rand_pt_idx = 198832
+    rand_pt_class = pl_datamodule.class_labels[data['labels'][rand_pt_idx]]
+    print(rand_pt_class, rand_pt_idx, iou, miou)
+    pt_out = out[rand_pt_idx, data['labels'][rand_pt_idx]]
+    pt_out.backward(retain_graph=True)
+    import pdb; pdb.set_trace()
+    grad = (data['feats'].grad / data['feats'].grad.max()) * 255.
+    save_pc(data['pts'][rand_pt_idx].reshape(-1,3), np.zeros((1,3)), 'vis_grad_pt_' + rand_pt_class + '_' + str(rand_pt_idx) + '.ply')
+    save_pc(data['pts'], grad[:,:3].cpu().numpy(), 'vis_grad_colors_' + rand_pt_class + '_' + str(rand_pt_idx) + '.ply')
+    # save_pc(data['pts'], grad[:,3:6].cpu().numpy(), 'vis_grad_normals_' + rand_pt_class + '_' + str(rand_pt_idx) + '.ply')
     # print(out)
     pl_datamodule.teardown(stage="validate")
 

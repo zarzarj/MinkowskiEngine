@@ -28,14 +28,17 @@ class ChunkGeneratorCallback(Callback):
 class BasePointNetLightning(LightningDataModule):
     def __init__(self, **kwargs):
         super().__init__()
+        # print(kwargs)
         for name, value in kwargs.items():
             if name != "self":
-                setattr(self, name, value)  
+                setattr(self, name, value)
         self.seg_feat_channels = None
-        self.kwargs = kwargs
+        # self.kwargs = copy.deepcopy(kwargs)
+        # print(self.kwargs)
         self.labelweights=None
 
     def setup(self, stage: Optional[str] = None):
+        # print(self.kwargs)
         if self.use_whole_scene:
             self.train_dataset = self.whole_scene_dataset(phase="train", scene_list=self.train_files, **self.kwargs)
         else:
@@ -143,6 +146,7 @@ class BasePointNet():
 class BaseWholeScene(BasePointNet):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+        # print(kwargs)
         for name, value in kwargs.items():
             if name != "self":
                 setattr(self, name, value)

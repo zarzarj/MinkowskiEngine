@@ -10,10 +10,12 @@ from examples.str2bool import str2bool
 
 class ScanNetBase(BaseDataset):
     def __init__(self, **kwargs):
+        # print(kwargs)
         super().__init__(**kwargs)
         for name, value in kwargs.items():
             if name != "self":
                 setattr(self, name, value)
+        # print(kwargs, self.use_orig_pcs)
         self.feat_channels = 3 * int(self.use_colors)  + 3 * int(self.use_normals)
         self.scans_dir = os.path.join(self.data_dir, 'scans')
         self.scans_test_dir = os.path.join(self.data_dir, 'scans_test')

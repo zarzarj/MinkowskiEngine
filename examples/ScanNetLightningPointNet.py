@@ -17,11 +17,14 @@ from examples.ScanNetBase import ScanNetBase
 class ScanNetPointNet(ScanNetBase, BasePointNetLightning):
     def __init__(self, **kwargs):
         BasePointNetLightning.__init__(self, **kwargs)
+        # print(self.kwargs)
         ScanNetBase.__init__(self, **kwargs)
+        self.kwargs = copy.deepcopy(kwargs)
         self.whole_scene_dataset = ScanNetWholeScene
         self.chunked_scene_dataset = ScanNetChunked
 
     def setup(self, stage: Optional[str] = None):
+        # print(self.kwargs)
         ScanNetBase.setup(self, stage)
         BasePointNetLightning.setup(self, stage)
         
@@ -43,6 +46,7 @@ class ScanNetPointNet(ScanNetBase, BasePointNetLightning):
 
 class ScanNetWholeScene(ScanNetBase, BaseWholeScene):
     def __init__(self, **kwargs):
+        # print(kwargs)
         BaseWholeScene.__init__(self, **kwargs)
         ScanNetBase.__init__(self, **kwargs)
 

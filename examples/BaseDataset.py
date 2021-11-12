@@ -78,7 +78,7 @@ class BaseDataset():
             in_dict = self.augment(in_dict)
         in_dict['num_pts'] = in_dict['pts'].shape[0]
         in_dict['coords'] = in_dict['pts'] / self.voxel_size
-        if self.shift_coords and training:
+        if self.shift_coords and self.trainer.training:
             in_dict['coords'] += (torch.rand(3) * 100).type_as(in_dict['coords'])
         if self.batch_fusion and self.trainer.training:
             in_dict['batch_idx'] = int(in_dict['batch_idx'] / 2)
