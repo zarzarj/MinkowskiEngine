@@ -201,7 +201,7 @@ class BaseWholeScene(BasePointNet):
 
     def __getitem__(self, index):
         start = time.time()
-        in_dict = self.scene_pillar_list[index]
+        in_dict = copy.deepcopy(self.scene_pillar_list[index])
         # in_dict = self.process_input(in_dict)
         fetch_time = time.time() - start
         return in_dict
@@ -226,7 +226,7 @@ class BaseChunked(BasePointNet):
 
         # load chunks
         scene_id = self.scene_list[index]
-        in_dict = self.chunk_data[scene_id]
+        in_dict = copy.deepcopy(self.chunk_data[scene_id])
         # print(in_dict['pts'].shape)
         # print(in_dict)
         fetch_time = time.time() - start
