@@ -27,6 +27,7 @@ class ChunkGeneratorCallback(Callback):
 
 class BasePointNetLightning(LightningDataModule):
     def __init__(self, **kwargs):
+        # print("BasePointNetLightning init")
         super().__init__()
         # print(kwargs)
         for name, value in kwargs.items():
@@ -36,6 +37,7 @@ class BasePointNetLightning(LightningDataModule):
         # self.kwargs = copy.deepcopy(kwargs)
         # print(self.kwargs)
         self.labelweights=None
+        # print("BasePointNetLightning init done")
 
     def setup(self, stage: Optional[str] = None):
         # print(self.kwargs)
@@ -78,10 +80,6 @@ class BasePointNetLightning(LightningDataModule):
             # print("Chunk Callback")
             return [ChunkGeneratorCallback()]
 
-
-
-    
-
     @staticmethod
     def add_argparse_args(parent_parser):
         parser = parent_parser.add_argument_group("BasePointNetLightning")
@@ -109,10 +107,12 @@ def index_dict(in_dict, idx):
 
 class BasePointNet():
     def __init__(self, **kwargs):
+        # print("BasePointNet init")
         for name, value in kwargs.items():
             if name != "self":
                 setattr(self, name, value)
         assert self.phase in ["train", "val", "test"]
+        # print("BasePointNet init done")
 
     def collate_fn(self, data):
         batch_size = len(data)
@@ -120,7 +120,7 @@ class BasePointNet():
         out_dict = {}
         for batch_idx, batch in enumerate(data):
             batch['batch_idx'] = batch_idx
-            batch = self.process_input(batch)
+            batch = self.process_input(batch, training=self.phase == 'train')
             for k, v in batch.items():
                 if batch_idx == 0:
                     out_dict[k] = [v]
@@ -130,7 +130,8 @@ class BasePointNet():
         for k, v in out_dict.items():
             if np.all([isinstance(it, torch.Tensor) for it in v]):
                 if self.dense_input and k != 'labels':
-                    # print(v[0].shape)
+                    # print(k, v[0].shape)
+                    # print(v.)
                     out_dict[k] = torch.stack(v, axis=0)
                     # print(out_dict[k].shape)
                     if k == 'feats':
@@ -145,6 +146,7 @@ class BasePointNet():
 
 class BaseWholeScene(BasePointNet):
     def __init__(self, **kwargs):
+        # print("BaseWholeScene init")
         super().__init__(**kwargs)
         # print(kwargs)
         for name, value in kwargs.items():
@@ -153,6 +155,7 @@ class BaseWholeScene(BasePointNet):
         assert self.phase in ["train", "val", "test"]
 
         self._load_scene_file()
+        # print("BaseWholeScene init done")
 
     def _load_scene_file(self):
         self.scene_pillar_list = []
@@ -208,12 +211,14 @@ class BaseWholeScene(BasePointNet):
 
 class BaseChunked(BasePointNet):
     def __init__(self, **kwargs):
+        # print("BaseChunked init")
         super().__init__(**kwargs)
         for name, value in kwargs.items():
             if name != "self":
                 setattr(self, name, value)
         assert self.phase in ["train", "val", "test"]
         self.chunk_data = {} # init in generate_chunks()
+        # print("BaseChunked init done")
 
     # @background()
     def __getitem__(self, index):
@@ -222,6 +227,7 @@ class BaseChunked(BasePointNet):
         # load chunks
         scene_id = self.scene_list[index]
         in_dict = self.chunk_data[scene_id]
+        # print(in_dict['pts'].shape)
         # print(in_dict)
         fetch_time = time.time() - start
 
@@ -276,6 +282,7 @@ class BaseChunked(BasePointNet):
                 choice = torch.cat([torch.arange(cur_num_pts), choice])
             else:
                 choice = torch.arange(cur_num_pts)
+            # print(choice.shape)
             cur_chunk_dict = index_dict(cur_chunk_dict, choice)
             self.chunk_data[scene_id] = cur_chunk_dict
 

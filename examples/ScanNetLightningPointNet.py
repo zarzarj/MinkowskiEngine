@@ -16,12 +16,14 @@ from examples.ScanNetBase import ScanNetBase
 
 class ScanNetPointNet(ScanNetBase, BasePointNetLightning):
     def __init__(self, **kwargs):
+        # print("ScanNetPointNet init")
         BasePointNetLightning.__init__(self, **kwargs)
         # print(self.kwargs)
         ScanNetBase.__init__(self, **kwargs)
         self.kwargs = copy.deepcopy(kwargs)
         self.whole_scene_dataset = ScanNetWholeScene
         self.chunked_scene_dataset = ScanNetChunked
+        # print("ScanNetPointNet init done")
 
     def setup(self, stage: Optional[str] = None):
         # print(self.kwargs)
@@ -46,11 +48,14 @@ class ScanNetPointNet(ScanNetBase, BasePointNetLightning):
 
 class ScanNetWholeScene(ScanNetBase, BaseWholeScene):
     def __init__(self, **kwargs):
-        # print(kwargs)
+        # print("ScanNetWholeScene init")
         BaseWholeScene.__init__(self, **kwargs)
         ScanNetBase.__init__(self, **kwargs)
+        # print("ScanNetWholeScene init done")
 
 class ScanNetChunked(ScanNetBase, BaseChunked):
     def __init__(self, **kwargs):
+        # print("ScanNetChunked init")
         BaseChunked.__init__(self, **kwargs)
         ScanNetBase.__init__(self, **kwargs)
+        # print("ScanNetChunked init done")

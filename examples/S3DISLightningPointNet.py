@@ -25,6 +25,7 @@ class S3DISPointNet(S3DISBase, BasePointNetLightning):
 
 class S3DISWholeScene(S3DISBase, BaseWholeScene):
     def __init__(self, **kwargs):
+        # print("S3DISBase init")
         BaseWholeScene.__init__(self, **kwargs)
         S3DISBase.__init__(self, **kwargs)
 

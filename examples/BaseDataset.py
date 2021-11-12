@@ -17,9 +17,10 @@ from tqdm import tqdm
 from pytorch_lightning.callbacks import Callback
 import examples.transforms_dict as t
 
-class BaseDataset():
+class BaseDataset(object):
     def __init__(self, **kwargs):
-        super().__init__()
+        # print("Base Dataset init")
+        # super().__init__()
         for name, value in kwargs.items():
             if name != "self":
                 setattr(self, name, value)  
@@ -70,17 +71,19 @@ class BaseDataset():
             # 40: (100., 85., 144.),
             -1: (255., 0., 0.),
         }
+        # print("Base Dataset init done")
 
     def process_input(self, in_dict, training=False):
+        # print(training)
         if self.to_hsv:
             in_dict = self.color_transform(in_dict)
         if self.use_augmentation and training:
             in_dict = self.augment(in_dict)
         in_dict['num_pts'] = in_dict['pts'].shape[0]
         in_dict['coords'] = in_dict['pts'] / self.voxel_size
-        if self.shift_coords and self.trainer.training:
+        if self.shift_coords and training:
             in_dict['coords'] += (torch.rand(3) * 100).type_as(in_dict['coords'])
-        if self.batch_fusion and self.trainer.training:
+        if self.batch_fusion and training:
             in_dict['batch_idx'] = int(in_dict['batch_idx'] / 2)
 
         in_dict['coords'] = torch.cat([torch.ones(in_dict['coords'].shape[0], 1).long()*in_dict['batch_idx'], in_dict['coords']], axis=-1)

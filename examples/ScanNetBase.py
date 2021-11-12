@@ -10,6 +10,7 @@ from examples.str2bool import str2bool
 
 class ScanNetBase(BaseDataset):
     def __init__(self, **kwargs):
+        # print("ScanNetBase init")
         # print(kwargs)
         super().__init__(**kwargs)
         for name, value in kwargs.items():
@@ -41,6 +42,8 @@ class ScanNetBase(BaseDataset):
                 n_used += 1
         self.label_map[-1] = -1
         self.NUM_LABELS -= len(self.IGNORE_LABELS)
+        # print("ScanNetBase init done")
+
 
 
     def setup(self, stage: Optional[str] = None):
