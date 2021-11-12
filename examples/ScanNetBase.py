@@ -18,6 +18,8 @@ class ScanNetBase(BaseDataset):
                 setattr(self, name, value)
         # print(kwargs, self.use_orig_pcs)
         self.feat_channels = 3 * int(self.use_colors)  + 3 * int(self.use_normals)
+        if self.feat_channels == 0:
+            self.feat_channels = 1
         self.scans_dir = os.path.join(self.data_dir, 'scans')
         self.scans_test_dir = os.path.join(self.data_dir, 'scans_test')
 

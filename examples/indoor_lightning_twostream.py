@@ -131,7 +131,7 @@ def visualize(pl_module, pl_datamodule):
     pl_module = pl_module.cuda()
     data['coords'] = data['coords'].cuda()
     data['feats'] = data['feats'].cuda()
-    data['feats'][:,:3] = torch.rand_like(data['feats'][:,:3]) - 0.5
+    # data['feats'][:,:3] = torch.rand_like(data['feats'][:,:3]) - 0.5
     # data['feats'][:,3:6] = (torch.rand_like(data['feats'][:,3:6]) * 2) - 1
     # print(data['feats'].min(axis=0), data['feats'].max(axis=0))
     data['feats'] = torch.rand_like(data['feats'])

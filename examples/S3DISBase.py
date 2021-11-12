@@ -15,6 +15,8 @@ class S3DISBase(BaseDataset):
             if name != "self":
                 setattr(self, name, value)
         self.feat_channels = 3 * int(self.use_colors) 
+        if self.feat_channels == 0:
+            self.feat_channels = 1
         self.train_areas = ['Area_1', 'Area_2', 'Area_3', 'Area_4', 'Area_6']
         self.val_areas = ['Area_5']
         self.label_to_names = {0: 'ceiling',

@@ -162,6 +162,9 @@ class TwoStreamSegmentationModule(BaseSegmentationModule):
             print("Setting class weights to: ", label_weights)
             criterion = nn.CrossEntropyLoss(weight=label_weights, ignore_index=-1)
             self.criterion = MultiStreamLoss(criterion, self.loss_weights)
+
+        if self.print_ious:
+            print(self.val_class_iou.compute())
     
 
     @staticmethod
@@ -186,6 +189,7 @@ class TwoStreamSegmentationModule(BaseSegmentationModule):
         parser.add_argument("--loss_miou_balance", type=str2bool, nargs='?', const=True, default=True)
         parser.add_argument("--loss_macc_balance", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument("--loss_balance_val", type=str2bool, nargs='?', const=True, default=False)
+        parser.add_argument("--print_ious", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument("--min_balance_epoch", type=int, default=20)
 
         return parent_parser
