@@ -61,6 +61,8 @@ class TwoStreamSegmentationModule(BaseSegmentationModule):
 
         self.loss_weights = torch.tensor(self.loss_weights, requires_grad=False)
         # self.base_criterion = 
+        if self.miou_loss:
+            self.criterion = mIoULoss(self.num_classes)
         self.criterion = MultiStreamLoss(self.criterion, self.loss_weights)
         if self.gradient_blend_frequency != -1:
             self.last_val_loss = torch.zeros_like(self.loss_weights)
@@ -147,8 +149,6 @@ class TwoStreamSegmentationModule(BaseSegmentationModule):
 
             # label_weights = torch.ones(self.num_classes, device=self.device)
             if self.loss_miou_balance:
-                # class_ious = metrics['train_miou'].class_ious().detach()
-                # label_weights *= torch.nn.functional.softmin(class_ious)
 
                 gt_total = metrics['train_acc'].total
                 class_union = metrics['train_miou'].union
@@ -191,6 +191,7 @@ class TwoStreamSegmentationModule(BaseSegmentationModule):
         parser.add_argument("--loss_balance_val", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument("--print_ious", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument("--min_balance_epoch", type=int, default=20)
+        parser.add_argument("--miou_loss", type=str2bool, nargs='?', const=True, default=False)
 
         return parent_parser
 
@@ -225,3 +226,49 @@ class PID(object):
         self.error[0] = e
         self.output += self.A0 * self.error[0] + self.A1 * self.error[1] + self.A2 * self.error[2]
         return self.output
+
+def to_one_hot(tensor, nClasses, requires_grad=False):
+
+    n = tensor.shape[0]
+    one_hot = torch.zeros_like(tensor, requires_grad=requires_grad).unsqueeze(-1).repeat(1, nClasses)
+    one_hot[torch.arange(n),tensor] = 1
+
+    return one_hot
+
+class mIoULoss(nn.Module):
+    def __init__(self, n_classes=2, weights=None):
+        super(mIoULoss, self).__init__()
+        self.classes = n_classes
+        # self.weights=weights
+        # self.weights = torch.tensor(weight * weight, requires_grad=True)
+
+    def forward(self, inputs, target, is_target_variable=False):
+        # inputs => N x Classes
+        # target => N 
+        # target_oneHot => N x Classes
+
+        N = inputs.shape[0]
+        # print(inputs.shape, target.shape)
+        target_onehot = to_one_hot(target, self.classes).float()
+        # print(target_onehot, target_onehot.shape, target)
+        # assert(torch.all(target_onehot.sum(axis=-1) == 1))
+
+        # predicted probabilities for each pixel along channel
+        inputs = nn.functional.softmax(inputs, dim=-1)
+
+        # Numerator Product
+        inter = inputs * target_onehot
+        ## Sum over all pixels N x C x H x W => N x C
+        inter = inter.sum(axis=0)
+
+        # Denominator
+        union = inputs + target_onehot - (inputs * target_onehot)
+        ## Sum over all pixels N x C x H x W => N x C
+        union = union.sum(axis=0)
+
+        # loss = (self.weights * inter) / (self.weights * union + 1e-8)
+        # if self.weights is not None:
+        loss = -torch.mean(inter / (union + 1e-8))
+
+        ## Return average loss over classes and batch
+        return loss
