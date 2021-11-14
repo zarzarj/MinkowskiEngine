@@ -63,6 +63,8 @@ class TwoStreamSegmentationModule(BaseSegmentationModule):
         # self.base_criterion = 
         if self.miou_loss:
             self.criterion = mIoULoss(self.num_classes)
+        if self.focal_loss:
+            self.criterion = FocalLoss(gamma=3/4)
         self.criterion = MultiStreamLoss(self.criterion, self.loss_weights)
         if self.gradient_blend_frequency != -1:
             self.last_val_loss = torch.zeros_like(self.loss_weights)
@@ -72,7 +74,7 @@ class TwoStreamSegmentationModule(BaseSegmentationModule):
             self.pid = PID(self.aug_policy_kp, self.aug_policy_ki, self.aug_policy_kd,
                            dt=self.aug_policy_frequency)
 
-    def forward(self, in_dict):
+    def forward(self, in_dict, return_feats=False):
         if self.use_color_feats:
             if self.color_backbone_class is not None:
                 color_logits, color_feats = self.color_backbone(in_dict, return_feats=True)
@@ -81,9 +83,11 @@ class TwoStreamSegmentationModule(BaseSegmentationModule):
         if self.use_structure_feats:
             if self.structure_backbone_class is not None:
                 structure_logits, structure_feats = self.structure_backbone(in_dict, return_feats=True)
+                # structure_logits, structure_feats, in_field = self.structure_backbone(in_dict, return_feats=True)
             else:
                 structure_feats = in_dict['structure_feats']
 
+        
         logits = []
         if self.use_fused_feats:
             fused_feats = []
@@ -98,6 +102,8 @@ class TwoStreamSegmentationModule(BaseSegmentationModule):
         if self.use_structure_feats and self.structure_backbone_class is not None:
             logits.append(structure_logits)
         # print(logits)
+        if return_feats:
+            return torch.stack(logits), structure_feats, in_field
         return torch.stack(logits)
 
     def convert_sync_batchnorm(self):
@@ -192,7 +198,7 @@ class TwoStreamSegmentationModule(BaseSegmentationModule):
         parser.add_argument("--print_ious", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument("--min_balance_epoch", type=int, default=20)
         parser.add_argument("--miou_loss", type=str2bool, nargs='?', const=True, default=False)
-
+        parser.add_argument("--focal_loss", type=str2bool, nargs='?', const=True, default=False)
         return parent_parser
 
 
@@ -272,3 +278,27 @@ class mIoULoss(nn.Module):
 
         ## Return average loss over classes and batch
         return loss
+
+class FocalLoss(nn.Module):
+    def __init__(self, gamma=0, alpha=None, size_average=True):
+        super(FocalLoss, self).__init__()
+        self.gamma = gamma
+        self.alpha = alpha
+        if isinstance(alpha,(float,int)): self.alpha = torch.Tensor([alpha,1-alpha])
+        if isinstance(alpha,list): self.alpha = torch.Tensor(alpha)
+        self.size_average = size_average
+
+    def forward(self, input, target):
+        target = target.view(-1,1)
+        logpt = torch.nn.functional.log_softmax(input, dim=-1)
+        logpt = logpt.gather(1,target)
+        logpt = logpt.view(-1)
+        pt = logpt.exp()
+
+        if self.alpha is not None:
+            at = self.alpha.gather(0,target.view(-1))
+            logpt *= at
+
+        loss = -1 * (1-pt)**self.gamma * logpt
+        if self.size_average: return loss.mean()
+        else: return loss.sum()

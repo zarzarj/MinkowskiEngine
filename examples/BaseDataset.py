@@ -117,9 +117,24 @@ class BaseDataset(object):
                 transformations.append(t.PositionJitter(0.005 * m))
         return t.Compose(transformations)
 
+
+
     def update_aug(self, m=1.0):
         print("Setting aug multiplier to: ", m)
         self.augment = self.create_augs(m)
+
+    def save_predictions(self, batch):
+        for i, scene in enumerate(batch['scene_name']):
+            if self.dense_input:
+                pass
+            else:
+                
+                valid_pts = batch['labels'] != -1
+                batch_idx = (batch['coords'][valid_pts,0] == i)
+                torch.save(batch['pts'][valid_pts][batch_idx], os.path.join(self.data_dir, 'results', scene +'_pts.pt'))
+                torch.save(batch['preds'][batch_idx], os.path.join(self.data_dir, 'results', scene +'_preds.pt'))
+                torch.save(batch['logits'][batch_idx], os.path.join(self.data_dir, 'results', scene +'_logits.pt'))
+                torch.save(batch['labels'][valid_pts][batch_idx], os.path.join(self.data_dir, 'gt', scene +'_gt.pt'))
 
     # def __getitem__(self, index):
     #     start = time.time()
@@ -143,4 +158,5 @@ class BaseDataset(object):
         parser.add_argument("--batch_fusion", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument("--dense_input", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument("--voxel_size", type=float, default=0.02)
+        parser.add_argument("--save_preds", type=str2bool, nargs='?', const=True, default=False)
         return parent_parser

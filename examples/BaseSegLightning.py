@@ -122,6 +122,10 @@ class BaseSegmentationModule(LightningModule):
         self.log_dict(self.val_metrics, sync_dist=True, prog_bar=True, on_step=False, on_epoch=True)
         self.val_class_iou(preds, target)
         self.val_class_acc(preds, target)
+        if self.trainer.datamodule.save_preds:
+            batch['preds'] = preds
+            batch['logits'] = logits[0].detach()
+            self.trainer.datamodule.save_predictions(batch)
         # self.log_dict(dict(zip(['val_'+ l+'_iou' for l in self.trainer.datamodule.class_labels], self.val_class_iou.compute())), sync_dist=True, prog_bar=False, on_step=False, on_epoch=True)
         # self.val_conf_metrics(preds, target)
         # self.log_dict(self.val_conf_metrics, sync_dist=True, prog_bar=False, on_step=False, on_epoch=False)
@@ -217,4 +221,5 @@ class BaseSegmentationModule(LightningModule):
         parser.add_argument('--exp_step_size', type=float, default=445)
 
         parser.add_argument("--split_wd", type=str2bool, nargs='?', const=True, default=False)
+        
         return parent_parser

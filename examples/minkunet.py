@@ -264,7 +264,7 @@ class MinkUNetBase(ResNetBase):
         # feats = out.F
         # feats = torch.cat(feats, axis=0)
         if return_feats:
-            # return feats, out_feats.F
+            # return feats, out_feats, in_field
             return feats, out_feats.slice(in_field).F
         return feats
 

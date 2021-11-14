@@ -122,69 +122,69 @@ def get_obj_from_str(string):
     module, cls = string.rsplit(".", 1)
     return getattr(importlib.import_module(module, package=None), cls)
 
-class GuidedBackprop():
-    """
-       Produces gradients generated with guided back propagation from the given image
-    """
-    def __init__(self, model):
-        self.model = model
-        self.gradients = None
-        self.forward_relu_outputs = []
-        # Put model in evaluation mode
-        self.model.eval()
-        self.update_relus()
-        self.hook_layers()
+# class GuidedBackprop():
+#     """
+#        Produces gradients generated with guided back propagation from the given image
+#     """
+#     def __init__(self, model):
+#         self.model = model
+#         self.gradients = None
+#         self.forward_relu_outputs = []
+#         # Put model in evaluation mode
+#         self.model.eval()
+#         self.update_relus()
+#         self.hook_layers()
 
-    def hook_layers(self):
-        def hook_function(module, grad_in, grad_out):
-            self.gradients = grad_in[0]
-        # Register hook to the first layer
-        first_layer = list(self.model.features._modules.items())[0][1]
-        first_layer.register_backward_hook(hook_function)
+#     def hook_layers(self):
+#         def hook_function(module, grad_in, grad_out):
+#             self.gradients = grad_in[0]
+#         # Register hook to the first layer
+#         first_layer = list(self.model.features._modules.items())[0][1]
+#         first_layer.register_backward_hook(hook_function)
 
-    def update_relus(self):
-        """
-            Updates relu activation functions so that
-                1- stores output in forward pass
-                2- imputes zero for gradient values that are less than zero
-        """
-        def relu_backward_hook_function(module, grad_in, grad_out):
-            """
-            If there is a negative gradient, change it to zero
-            """
-            # Get last forward output
-            corresponding_forward_output = self.forward_relu_outputs[-1]
-            corresponding_forward_output[corresponding_forward_output > 0] = 1
-            modified_grad_out = corresponding_forward_output * torch.clamp(grad_in[0], min=0.0)
-            del self.forward_relu_outputs[-1]  # Remove last forward output
-            return (modified_grad_out,)
+#     def update_relus(self):
+#         """
+#             Updates relu activation functions so that
+#                 1- stores output in forward pass
+#                 2- imputes zero for gradient values that are less than zero
+#         """
+#         def relu_backward_hook_function(module, grad_in, grad_out):
+#             """
+#             If there is a negative gradient, change it to zero
+#             """
+#             # Get last forward output
+#             corresponding_forward_output = self.forward_relu_outputs[-1]
+#             corresponding_forward_output[corresponding_forward_output > 0] = 1
+#             modified_grad_out = corresponding_forward_output * torch.clamp(grad_in[0], min=0.0)
+#             del self.forward_relu_outputs[-1]  # Remove last forward output
+#             return (modified_grad_out,)
 
-        def relu_forward_hook_function(module, ten_in, ten_out):
-            """
-            Store results of forward pass
-            """
-            self.forward_relu_outputs.append(ten_out)
+#         def relu_forward_hook_function(module, ten_in, ten_out):
+#             """
+#             Store results of forward pass
+#             """
+#             self.forward_relu_outputs.append(ten_out)
 
-        # Loop through layers, hook up ReLUs
-        for pos, module in self.model.features._modules.items():
-            if isinstance(module, ME.MinkowskiReLU):
-                module.register_backward_hook(relu_backward_hook_function)
-                module.register_forward_hook(relu_forward_hook_function)
+#         # Loop through layers, hook up ReLUs
+#         for pos, module in self.model.features._modules.items():
+#             if isinstance(module, ME.MinkowskiReLU):
+#                 module.register_backward_hook(relu_backward_hook_function)
+#                 module.register_forward_hook(relu_forward_hook_function)
 
-    def generate_gradients(self, input_image, target_class):
-        # Forward pass
-        model_output = self.model(input_image)
-        # Zero gradients
-        self.model.zero_grad()
-        # Target for backprop
-        one_hot_output = torch.FloatTensor(1, model_output.size()[-1]).zero_()
-        one_hot_output[0][target_class] = 1
-        # Backward pass
-        model_output.backward(gradient=one_hot_output)
-        # Convert Pytorch variable to numpy array
-        # [0] to get rid of the first channel (1,3,224,224)
-        gradients_as_arr = self.gradients.data.numpy()[0]
-        return gradients_as_arr
+#     def generate_gradients(self, input_image, target_class):
+#         # Forward pass
+#         model_output = self.model(input_image)
+#         # Zero gradients
+#         self.model.zero_grad()
+#         # Target for backprop
+#         one_hot_output = torch.FloatTensor(1, model_output.size()[-1]).zero_()
+#         one_hot_output[0][target_class] = 1
+#         # Backward pass
+#         model_output.backward(gradient=one_hot_output)
+#         # Convert Pytorch variable to numpy array
+#         # [0] to get rid of the first channel (1,3,224,224)
+#         gradients_as_arr = self.gradients.data.numpy()[0]
+#         return gradients_as_arr
 
 def visualize(pl_module, pl_datamodule):
     from examples.utils import save_pc
@@ -203,23 +203,31 @@ def visualize(pl_module, pl_datamodule):
     # data['feats'] = torch.rand_like(data['feats'])
 
     data['feats'].requires_grad_()
-    out = pl_module(data)
+    out, out_f, in_field = pl_module(data, return_feats=True)
+    out_f.F.retain_grad()
+    # out_f.retain_grad()
+    # out_f.requires_grad_()
     if len(out.shape) == 3:
         out = out[0]
     indices = torch.arange(out.shape[0])
 
     valid_targets = data['labels'] != -1
+    not_valid_targets = data['labels'] == -1
     
     preds = out.argmax(axis=-1)
     valid_preds = preds[valid_targets]
-    preds[~valid_targets] = -1
+    preds[not_valid_targets] = -1
 
     # print(preds, preds.shape)
     # import pdb; pdb.set_trace()
-    colors = [pl_datamodule.color_map[p] for p in preds.cpu().numpy()]
+    colors = np.array([pl_datamodule.color_map[p] for p in preds.cpu().numpy()])
     save_pc(data['pts'], colors, 'vis.ply')
+    error_idx = (preds.cpu().numpy() != data['labels'].cpu().numpy()).astype(bool)
+
+    save_pc(data['pts'].cpu().numpy()[error_idx], colors[error_idx], 'vis_errors.ply')
     colors = [pl_datamodule.color_map[p] for p in data['labels'].cpu().numpy()]
     save_pc(data['pts'], colors, 'vis_gt.ply')
+    save_pc(data['pts'], (data['colors'] + 0.5) * 255., 'vis_colors.ply')
 
     
     targets = data['labels'].cuda().long()[valid_targets]
@@ -229,34 +237,46 @@ def visualize(pl_module, pl_datamodule):
     miou = iou.mean()
 
     valid_indices = valid_targets[indices]
-    # rand_pt_idx = torch.randint(valid_indices.shape[0], (1,)).item()
-    rand_pt_idx = 198832
-    rand_pt_class = pl_datamodule.class_labels[data['labels'][rand_pt_idx]]
+    # while(True):
+    #     rand_pt_idx = torch.randint(valid_indices.shape[0], (1,)).item()
+    #     rand_pt_label = data['labels'][rand_pt_idx].cpu()
+    #     rand_pt_class = pl_datamodule.class_labels[rand_pt_label]
+    #     rand_pt_pred = out[rand_pt_idx].argmax().cpu()
+    #     if rand_pt_label == rand_pt_pred and rand_pt_class == 'chair':
+    #         break
+    rand_pt_idx = 136374
+    rand_pt_label = data['labels'][rand_pt_idx]
+    rand_pt_class = pl_datamodule.class_labels[rand_pt_label]
     print(rand_pt_class, rand_pt_idx, iou, miou)
 
     # Compute grad with respect to correct class
-    correct_label = data['labels'][rand_pt_idx] 
-    # pt_out = out[rand_pt_idx, correct_label] - (torch.sum(out[rand_pt_idx, :correct_label]) + torch.sum(out[rand_pt_idx, correct_label+1:]))
+    correct_label = data['labels'][rand_pt_idx]
+    non_gt_logits = torch.cat([out[rand_pt_idx, :correct_label], out[rand_pt_idx, correct_label+1:]], axis=-1)
+    # print(out[rand_pt_idx], non_gt_logits, correct_label)
+    # print(non_gt_logits.shape)
+    # pt_out = out[rand_pt_idx, correct_label] - torch.max(non_gt_logits)
     # pt_out.backward(retain_graph=True)
-    one_hot_output = torch.FloatTensor(out.size()[-1]).zero_().cuda()
-    one_hot_output[correct_label] = 1
-    out[rand_pt_idx].backward(retain_graph=True, gradient=one_hot_output)
+    pt_out = out[rand_pt_idx, correct_label]
+    pt_out.backward(retain_graph=True)
+    # one_hot_output = torch.FloatTensor(out.size()[-1]).zero_().cuda()
+    # one_hot_output[correct_label] = 1
+    # out[rand_pt_idx].backward(retain_graph=True, gradient=one_hot_output)
     
-    grad = torch.abs(data['feats'].grad)
-    grad = grad / grad.max() * 255.
+    # grad = torch.abs(data['feats'].grad)
+    # grad = grad / grad.max() * 255.
 
-    # import pdb; pdb.set_trace()
-    alpha = 10
-    save_pc(data['pts'][rand_pt_idx].reshape(-1,3), np.zeros((1,3)), 'vis_grad_pt_' + rand_pt_class + '_' + str(rand_pt_idx) + '.ply')
-    pts_idx = grad[:,:3].norm(dim=-1) > alpha
-    save_pc(data['pts'][pts_idx], grad[pts_idx,:3].cpu().numpy(), 'vis_grad_colors_' + rand_pt_class + '_' + str(rand_pt_idx) + '.ply')
-    pts_idx = grad[:,3:6].norm(dim=-1) > alpha
-    save_pc(data['pts'][pts_idx], grad[pts_idx,3:6].cpu().numpy(), 'vis_grad_normals_' + rand_pt_class + '_' + str(rand_pt_idx) + '.ply')
+    # # import pdb; pdb.set_trace()
+    # alpha = 10
+    # save_pc(data['pts'][rand_pt_idx].reshape(-1,3), np.zeros((1,3)), 'vis_grad_pt_' + rand_pt_class + '_' + str(rand_pt_idx) + '.ply')
+    # pts_idx = grad[:,:3].norm(dim=-1) > alpha
+    # save_pc(data['pts'][pts_idx], grad[pts_idx,:3].cpu().numpy(), 'vis_grad_colors_' + rand_pt_class + '_' + str(rand_pt_idx) + '.ply')
+    # pts_idx = grad[:,3:6].norm(dim=-1) > alpha
+    # save_pc(data['pts'][pts_idx], grad[pts_idx,3:6].cpu().numpy(), 'vis_grad_normals_' + rand_pt_class + '_' + str(rand_pt_idx) + '.ply')
 
-    grad = data['feats'].grad
-    color_grad_norm = grad[:,:3].norm(dim=-1).mean()
-    normals_grad_norm = grad[:,3:6].norm(dim=-1).mean()
-    print(color_grad_norm, normals_grad_norm)
+    # grad = data['feats'].grad
+    # color_grad_norm = grad[:,:3].norm(dim=-1).mean()
+    # normals_grad_norm = grad[:,3:6].norm(dim=-1).mean()
+    # print(color_grad_norm, normals_grad_norm)
 
     # GBP = GuidedBackprop(pretrained_model)
     # guided_grads = GBP.generate_gradients(prep_img, target_class)
@@ -274,6 +294,31 @@ def visualize(pl_module, pl_datamodule):
     # pts_idx = grad[:,3:6].norm(dim=-1) > alpha
     # save_pc(data['pts'][pts_idx], grad[pts_idx,3:6].cpu().numpy(), 'vis_neg_grad_normals_' + rand_pt_class + '_' + str(rand_pt_idx) + '.ply')
     # import pdb; pdb.set_trace()
+
+
+    #####
+    #CAM
+    # import pdb; pdb.set_trace()
+    # import copy
+    A = out_f.slice(in_field).F
+    out_f._F = out_f.F.grad
+    out_f = out_f.slice(in_field).F
+    cam_alphas = torch.mean(out_f, axis=0)
+    # print(cam_alphas.shape)
+
+    heatmap = torch.nn.functional.relu(torch.sum(cam_alphas * A, axis=-1)).detach()
+    # heatmap = heatmap / heatmap.max() * 255.
+    # print(heatmap.shape)
+    # save_pc(data['pts'].cpu().numpy(), heatmap.cpu().numpy(), 'vis_cam_heatmap_' + rand_pt_class + '_' + str(rand_pt_idx) + '.ply')
+    import matplotlib
+    heatmap = heatmap / heatmap.max()
+    np.save('heatmap.npy', heatmap.cpu().numpy())
+    np.save('pts.npy', data['pts'].cpu().numpy())
+    cmap = matplotlib.cm.get_cmap('plasma')
+    # import pdb; pdb.set_trace()
+    save_pc(data['pts'].cpu().numpy(), cmap(heatmap.cpu().numpy())[:,:3] * 255., 'vis_cam_heatmap_' + rand_pt_class + '_' + str(rand_pt_idx) + '.ply')
+
+
     pl_datamodule.teardown(stage="validate")
 
 if __name__ == "__main__":
