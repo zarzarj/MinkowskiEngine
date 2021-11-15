@@ -59,7 +59,7 @@ class TwoStreamSegmentationModule(BaseSegmentationModule):
                              nn.Conv1d(self.mlp_channels[-1], self.num_classes, kernel_size=1, bias=True)]
             self.seg_head = nn.Sequential(*seg_head_list)
 
-        self.loss_weights = torch.tensor(self.loss_weights, requires_grad=False)
+        # self.loss_weights = torch.tensor(self.loss_weights, requires_grad=False)
         # self.base_criterion = 
         if self.miou_loss:
             self.criterion = mIoULoss(self.num_classes)
@@ -206,11 +206,14 @@ class MultiStreamLoss(torch.nn.Module):
     def __init__(self, loss_fn, loss_weights):
         super().__init__()
         self.loss_fn = loss_fn
-        self.loss_weights = loss_weights
+        self.loss_weights = torch.tensor(loss_weights, requires_grad=False)
+        # self.loss_weights.requires_grad_(False)
+
 
     def forward(self, multi_logits, targets):
         loss = 0
         losses = []
+        # print(self.loss_weights)
         # print(multi_logits.shape, targets.shape)
         for i, logits in enumerate(multi_logits):
             # print(logits.shape, targets.shape)
