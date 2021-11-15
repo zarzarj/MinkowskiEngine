@@ -400,6 +400,7 @@ if __name__ == "__main__":
             pl_module = pl_module.load_from_checkpoint(
                         checkpoint_path=ckpt,
                         hparams_file=f'{most_recent_train_logdir}/hparams.yaml',
+                        strict=False,
                         **pl_module_args)
             print(f'Restored {ckpt}')
             resume_from_checkpoint = ckpt
