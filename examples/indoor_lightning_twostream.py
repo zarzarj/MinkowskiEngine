@@ -384,7 +384,7 @@ if __name__ == "__main__":
     train_versions = glob.glob(os.path.join(train_dir, '*'))
     resume_from_checkpoint = None
     if main_args.weights is not None:
-        import pdb; pdb.set_trace()
+        # import pdb; pdb.set_trace()
         pl_module = pl_module.load_from_checkpoint(
                         checkpoint_path=main_args.weights,
                         # strict=False,
