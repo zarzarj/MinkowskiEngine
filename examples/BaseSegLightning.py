@@ -45,6 +45,8 @@ class BaseSegmentationModule(LightningModule):
                     setattr(self, name, value)
                 except:
                     print(name, value)
+        if self.label_weights is None:
+            self.label_weights = torch.ones(self.num_classes)
         self.criterion = nn.CrossEntropyLoss(weight=self.label_weights, ignore_index=-1)
         metrics = MetricCollection({
                                     'acc': Accuracy(dist_sync_on_step=True),
