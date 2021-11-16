@@ -73,7 +73,7 @@ class TwoStreamSegmentationModule(BaseSegmentationModule):
         if self.aug_policy_frequency != -1 and self.aug_policy_PID:
             self.pid = PID(self.aug_policy_kp, self.aug_policy_ki, self.aug_policy_kd,
                            dt=self.aug_policy_frequency)
-        
+
 
     def forward(self, in_dict, return_feats=False):
         if self.use_color_feats:
@@ -87,7 +87,6 @@ class TwoStreamSegmentationModule(BaseSegmentationModule):
                 # structure_logits, structure_feats, in_field = self.structure_backbone(in_dict, return_feats=True)
             else:
                 structure_feats = in_dict['structure_feats']
-
         
         logits = []
         if self.use_fused_feats:

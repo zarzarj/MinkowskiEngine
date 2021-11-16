@@ -74,7 +74,10 @@ class BasePrecomputed(LightningDataModule):
                     if k == 'feats':
                         out_dict[k] = out_dict[k].transpose(1,2).contiguous()
                 else:
-                    out_dict[k] = torch.cat(v, axis=0)
+                    out_dict[k] = torch.cat(v, axis=0).contiguous()
+            elif k == 'batch_idx' or k == 'num_pts':
+                out_dict[k] = torch.tensor(v)
+
         return out_dict
 
     def callbacks(self):

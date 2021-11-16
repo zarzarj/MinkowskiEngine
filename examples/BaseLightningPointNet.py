@@ -140,7 +140,10 @@ class BasePointNet():
                         out_dict[k] = out_dict[k].transpose(1,2).contiguous()
                 else:
                     out_dict[k] = torch.cat(v, axis=0)
-                # print(k, out_dict[k].shape)
+                    # print(k, out_dict[k].shape)
+            elif k == 'batch_idx' or k == 'num_pts':
+                out_dict[k] = torch.tensor(v)
+                
         # print(out_dict)
         # for k, v in 
         # assert(True == False)
