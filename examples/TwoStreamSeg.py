@@ -21,6 +21,8 @@ def get_obj_from_str(string):
 
 class TwoStreamSegmentationModule(BaseSegmentationModule):
     def __init__(self, **kwargs):
+        if kwargs['unknown_class']:
+            kwargs['num_classes'] += 1
         super().__init__(**kwargs)
         self.loss_weights = []
         if self.use_fused_feats:
@@ -65,6 +67,10 @@ class TwoStreamSegmentationModule(BaseSegmentationModule):
             self.criterion = mIoULoss(self.num_classes)
         if self.focal_loss:
             self.criterion = FocalLoss(gamma=3/4)
+        if self.neg_cross_entropy:
+            self.criterion = CrossEntropyLoss_Neg(self.num_classes)
+        if self.unknown_class:
+            self.criterion = CrossEntropyLoss_Neg_Unknown(self.num_classes)
         self.criterion = MultiStreamLoss(self.criterion, self.loss_weights)
         if self.gradient_blend_frequency != -1:
             self.last_val_loss = torch.zeros_like(self.loss_weights)
@@ -199,6 +205,8 @@ class TwoStreamSegmentationModule(BaseSegmentationModule):
         parser.add_argument("--min_balance_epoch", type=int, default=20)
         parser.add_argument("--miou_loss", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument("--focal_loss", type=str2bool, nargs='?', const=True, default=False)
+        parser.add_argument("--unknown_class", type=str2bool, nargs='?', const=True, default=False)
+        parser.add_argument("--neg_cross_entropy", type=str2bool, nargs='?', const=True, default=False)
         return parent_parser
 
 
@@ -237,11 +245,9 @@ class PID(object):
         return self.output
 
 def to_one_hot(tensor, nClasses, requires_grad=False):
-
     n = tensor.shape[0]
     one_hot = torch.zeros_like(tensor, requires_grad=requires_grad).unsqueeze(-1).repeat(1, nClasses)
     one_hot[torch.arange(n),tensor] = 1
-
     return one_hot
 
 class mIoULoss(nn.Module):
@@ -305,3 +311,43 @@ class FocalLoss(nn.Module):
         loss = -1 * (1-pt)**self.gamma * logpt
         if self.size_average: return loss.mean()
         else: return loss.sum()
+
+class CrossEntropyLoss_Neg(nn.Module):
+    def __init__(self, num_classes=20, size_average=True):
+        super(CrossEntropyLoss_Neg, self).__init__()
+        self.num_classes = 20
+        self.size_average = size_average
+
+    def forward(self, inputs, target):
+        target_onehot = to_one_hot(target, self.num_classes).float()
+        target_onehot -= 0.01
+        target_onehot[torch.arange(inputs.shape[0]), target] += self.num_classes * 0.01
+        # target_onehot = torch.cat([target_onehot, 0.5 * torch.ones_like(target, dtype=torch.float32).unsqueeze(-1)], axis=-1)
+
+        inputs = nn.functional.softmax(inputs, dim=-1)
+
+        loss = - (target_onehot * (inputs+1e-15).log()).sum(axis=-1)
+
+        if self.size_average: return loss.mean()
+        else: return loss.sum()
+
+class CrossEntropyLoss_Neg_Unknown(nn.Module):
+    def __init__(self, num_classes=20, size_average=True):
+        super(CrossEntropyLoss_Neg_Unknown, self).__init__()
+        self.num_classes = 20
+        self.size_average = size_average
+
+    def forward(self, inputs, target):
+        target_onehot = to_one_hot(target, self.num_classes).float()
+        target_onehot -= 0.01
+        # target_onehot[torch.arange(input.shape[0]), target] -= 0.04
+        target_onehot[torch.arange(inputs.shape[0]), target] += self.num_classes * 0.01 - 0.05
+        target_onehot = torch.cat([target_onehot, 0.05 * torch.ones_like(target, dtype=torch.float32).unsqueeze(-1)], axis=-1)
+
+        inputs = nn.functional.softmax(inputs, dim=-1)
+
+        loss = - (target_onehot * (inputs+1e-15).log()).sum(axis=-1)
+
+        if self.size_average: return loss.mean()
+        else: return loss.sum()
+
