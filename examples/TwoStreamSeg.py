@@ -70,7 +70,10 @@ class TwoStreamSegmentationModule(BaseSegmentationModule):
         if self.neg_cross_entropy:
             self.criterion = CrossEntropyLoss_Neg(self.num_classes)
         if self.unknown_class:
-            self.criterion = CrossEntropyLoss_Neg_Unknown(self.num_classes)
+            if self.neg_cross_entropy:
+                self.criterion = CrossEntropyLoss_Neg_Unknown(self.num_classes)
+            else:
+                self.criterion = CrossEntropyLoss_Unknown(self.num_classes)
         self.criterion = MultiStreamLoss(self.criterion, self.loss_weights)
         if self.gradient_blend_frequency != -1:
             self.last_val_loss = torch.zeros_like(self.loss_weights)
@@ -313,10 +316,11 @@ class FocalLoss(nn.Module):
         else: return loss.sum()
 
 class CrossEntropyLoss_Neg(nn.Module):
-    def __init__(self, num_classes=20, size_average=True):
+    def __init__(self, num_classes=20, size_average=True, weights=None):
         super(CrossEntropyLoss_Neg, self).__init__()
         self.num_classes = 20
         self.size_average = size_average
+        self.weights = weights
 
     def forward(self, inputs, target):
         target_onehot = to_one_hot(target, self.num_classes).float()
@@ -325,17 +329,19 @@ class CrossEntropyLoss_Neg(nn.Module):
         # target_onehot = torch.cat([target_onehot, 0.5 * torch.ones_like(target, dtype=torch.float32).unsqueeze(-1)], axis=-1)
 
         inputs = nn.functional.softmax(inputs, dim=-1)
-
+        if self.weights is not None:
+            target_onehot *= self.weights
         loss = - (target_onehot * (inputs+1e-15).log()).sum(axis=-1)
 
         if self.size_average: return loss.mean()
         else: return loss.sum()
 
 class CrossEntropyLoss_Neg_Unknown(nn.Module):
-    def __init__(self, num_classes=20, size_average=True):
+    def __init__(self, num_classes=20, size_average=True, weights=None):
         super(CrossEntropyLoss_Neg_Unknown, self).__init__()
         self.num_classes = 20
         self.size_average = size_average
+        self.weights = weights
 
     def forward(self, inputs, target):
         target_onehot = to_one_hot(target, self.num_classes).float()
@@ -346,8 +352,33 @@ class CrossEntropyLoss_Neg_Unknown(nn.Module):
 
         inputs = nn.functional.softmax(inputs, dim=-1)
 
+        if self.weights is not None:
+            target_onehot *= self.weights
+
         loss = - (target_onehot * (inputs+1e-15).log()).sum(axis=-1)
 
         if self.size_average: return loss.mean()
         else: return loss.sum()
 
+class CrossEntropyLoss_Unknown(nn.Module):
+    def __init__(self, num_classes=20, size_average=True, weights=None):
+        super(CrossEntropyLoss_Unknown, self).__init__()
+        self.num_classes = 20
+        self.size_average = size_average
+        self.weights = weights
+
+    def forward(self, inputs, target):
+        target_onehot = to_one_hot(target, self.num_classes).float()
+        # target_onehot -= 0.01
+        target_onehot[torch.arange(inputs.shape[0]), target] -= 0.05
+        target_onehot = torch.cat([target_onehot, 0.05 * torch.ones_like(target, dtype=torch.float32).unsqueeze(-1)], axis=-1)
+
+        inputs = nn.functional.softmax(inputs, dim=-1)
+
+        if self.weights is not None:
+            target_onehot *= self.weights
+            
+        loss = - (target_onehot * (inputs+1e-15).log()).sum(axis=-1)
+
+        if self.size_average: return loss.mean()
+        else: return loss.sum()
