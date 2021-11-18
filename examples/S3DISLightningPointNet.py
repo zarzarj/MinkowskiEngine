@@ -2,6 +2,7 @@ from typing import Any, Optional, List, NamedTuple
 from examples.str2bool import str2bool
 from examples.BaseLightningPointNet import BasePointNetLightning, BaseWholeScene, BaseChunked
 from examples.S3DISBase import S3DISBase
+import copy
 
 class S3DISPointNet(S3DISBase, BasePointNetLightning):
     def __init__(self, **kwargs):

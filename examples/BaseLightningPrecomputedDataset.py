@@ -68,7 +68,7 @@ class BasePrecomputed(LightningDataModule):
         for k, v in out_dict.items():
             if np.all([isinstance(it, torch.Tensor) for it in v]):
                 if self.dense_input and k != 'labels':
-                    # print(v[0].shape)
+                    # print(k, v[0].shape)
                     out_dict[k] = torch.stack(v, axis=0)
                     # print(out_dict[k].shape)
                     if k == 'feats':
