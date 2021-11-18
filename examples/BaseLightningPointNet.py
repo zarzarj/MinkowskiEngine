@@ -160,6 +160,7 @@ class BaseWholeScene(BasePointNet):
         assert self.phase in ["train", "val", "test"]
 
         self._load_scene_file()
+        # print(self.scene_pillar_list, len(self.scene_pillar_list))
         # print("BaseWholeScene init done")
 
     def _load_scene_file(self):
@@ -254,7 +255,7 @@ class BaseChunked(BasePointNet):
             coordmin = scene_data['pts'].min(axis=0)[0]
             semantic = scene_data['labels'].int()
             
-            for _ in range(5):
+            for _ in range(100):
                 # curcenter = scene[np.random.choice(len(semantic), 1)[0],:3]
                 curcenter = scene_data['pts'][torch.randint(len(semantic), (1,))][0]
                 half_pillar_dims = torch.tensor([0.75,0.75,1.5])
@@ -275,7 +276,7 @@ class BaseChunked(BasePointNet):
                 vidx = torch.ceil((cur_chunk_dict['pts']-curmin)/(curmax-curmin)*torch.tensor([31.0,31.0,62.0]))
                 vidx = torch.unique(vidx[:,0]*31.0*62.0+vidx[:,1]*62.0+vidx[:,2])
                 # print(vidx)
-                isvalid = torch.sum(cur_chunk_dict['labels']>=0)/cur_num_pts>=0.7 and len(vidx)/31.0/31.0/62.0>=0.02
+                isvalid = torch.sum(cur_chunk_dict['labels']>=0)/cur_num_pts>=0.5 and len(vidx)/31.0/31.0/62.0>=0.02
 
                 if isvalid:
                     break

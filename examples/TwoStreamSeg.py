@@ -62,19 +62,24 @@ class TwoStreamSegmentationModule(BaseSegmentationModule):
             self.seg_head = nn.Sequential(*seg_head_list)
 
         # self.loss_weights = torch.tensor(self.loss_weights, requires_grad=False)
-        # self.base_criterion = 
+        self.base_criterion_class = nn.CrossEntropyLoss
+        self.base_criterion_args = {'weight': self.label_weights}
         if self.miou_loss:
-            self.criterion = mIoULoss(self.num_classes)
+            self.base_criterion_class = mIoULoss
         if self.focal_loss:
-            self.criterion = FocalLoss(gamma=3/4)
+            self.base_criterion_class = FocalLoss
+            self.base_criterion_args = {'gamma': 3/4}
         if self.neg_cross_entropy:
-            self.criterion = CrossEntropyLoss_Neg(self.num_classes)
+            self.base_criterion_class = CrossEntropyLoss_Neg
         if self.unknown_class:
             if self.neg_cross_entropy:
-                self.criterion = CrossEntropyLoss_Neg_Unknown(self.num_classes)
+                self.base_criterion_class = CrossEntropyLoss_Neg_Unknown
             else:
-                self.criterion = CrossEntropyLoss_Unknown(self.num_classes)
-        self.criterion = MultiStreamLoss(self.criterion, self.loss_weights)
+                self.base_criterion_class = CrossEntropyLoss_Unknown
+        # print(self.label_weights.shape, self.base_criterion_args)
+        self.base_criterion = self.base_criterion_class(**self.base_criterion_args)
+        # print(criterion.weight)
+        self.criterion = MultiStreamLoss(self.base_criterion, self.loss_weights)
         if self.gradient_blend_frequency != -1:
             self.last_val_loss = torch.zeros_like(self.loss_weights)
             self.current_val_loss = torch.zeros_like(self.loss_weights)
@@ -84,7 +89,13 @@ class TwoStreamSegmentationModule(BaseSegmentationModule):
                            dt=self.aug_policy_frequency)
 
 
+
+
     def forward(self, in_dict, return_feats=False):
+        # print(in_dict['pts'].shape, in_dict['colors'].shape)
+        # save_pc(in_dict['pts'].cpu().numpy(), 255.*(in_dict['colors']+.5).cpu().numpy(), 'test_pc.ply')
+        # assert(True == False)
+        # print(self.label_weights)
         if self.use_color_feats:
             if self.color_backbone_class is not None:
                 color_logits, color_feats = self.color_backbone(in_dict, return_feats=True)
@@ -167,16 +178,20 @@ class TwoStreamSegmentationModule(BaseSegmentationModule):
 
                 gt_total = metrics['train_acc'].total
                 class_union = metrics['train_miou'].union
-                label_weights = gt_total / (class_union * self.num_classes)
+                self.label_weights = gt_total / (class_union * self.num_classes)
             elif self.loss_macc_balance:
                 class_gt_counts = metrics['train_macc'].total
                 # class_pred_counts = metrics['train_macc'].class_pred_total()
-                label_weights = class_gt_counts.sum() / (class_gt_counts * self.num_classes)
+                self.label_weights = class_gt_counts.sum() / (class_gt_counts * self.num_classes)
                 # label_weights[class_pred_counts == 0] = 0
                 # print(label_weights)
-            print("Setting class weights to: ", label_weights)
-            criterion = nn.CrossEntropyLoss(weight=label_weights, ignore_index=-1)
-            self.criterion = MultiStreamLoss(criterion, self.loss_weights)
+            # print(self.label_weights, torch.isnan(self.label_weights))
+            self.label_weights[torch.isnan(self.label_weights) | torch.isinf(self.label_weights)] = 1
+            print("Setting class weights to: ", self.label_weights)
+            self.base_criterion_args['weight'] = self.label_weights
+            # print(self.base_criterion_args)
+            self.base_criterion = self.base_criterion_class(**self.base_criterion_args)
+            self.criterion = MultiStreamLoss(self.base_criterion, self.loss_weights)
 
         if self.print_ious:
             print(self.val_class_iou.compute())
@@ -201,7 +216,7 @@ class TwoStreamSegmentationModule(BaseSegmentationModule):
         parser.add_argument("--aug_policy_ki", type=float, default=0.0)
         parser.add_argument("--aug_policy_kd", type=float, default=0.0)
         parser.add_argument("--miou_balance_frequency", type=int, default=-1)
-        parser.add_argument("--loss_miou_balance", type=str2bool, nargs='?', const=True, default=True)
+        parser.add_argument("--loss_miou_balance", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument("--loss_macc_balance", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument("--loss_balance_val", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument("--print_ious", type=str2bool, nargs='?', const=True, default=False)
@@ -254,9 +269,9 @@ def to_one_hot(tensor, nClasses, requires_grad=False):
     return one_hot
 
 class mIoULoss(nn.Module):
-    def __init__(self, n_classes=2, weights=None):
+    def __init__(self, weight=None):
         super(mIoULoss, self).__init__()
-        self.classes = n_classes
+        # self.classes = n_classes
         # self.weights=weights
         # self.weights = torch.tensor(weight * weight, requires_grad=True)
 
@@ -264,10 +279,10 @@ class mIoULoss(nn.Module):
         # inputs => N x Classes
         # target => N 
         # target_oneHot => N x Classes
-
+        num_classes = inputs.shape[1]
         N = inputs.shape[0]
         # print(inputs.shape, target.shape)
-        target_onehot = to_one_hot(target, self.classes).float()
+        target_onehot = to_one_hot(target, num_classes).float()
         # print(target_onehot, target_onehot.shape, target)
         # assert(torch.all(target_onehot.sum(axis=-1) == 1))
 
@@ -316,44 +331,49 @@ class FocalLoss(nn.Module):
         else: return loss.sum()
 
 class CrossEntropyLoss_Neg(nn.Module):
-    def __init__(self, num_classes=20, size_average=True, weights=None):
+    def __init__(self, size_average=True, weight=None):
         super(CrossEntropyLoss_Neg, self).__init__()
-        self.num_classes = 20
+        # self.num_classes = 20
         self.size_average = size_average
-        self.weights = weights
+        self.weight = weight
 
     def forward(self, inputs, target):
-        target_onehot = to_one_hot(target, self.num_classes).float()
+        num_classes = inputs.shape[1]
+
+        target_onehot = to_one_hot(target, num_classes).float()
         target_onehot -= 0.01
-        target_onehot[torch.arange(inputs.shape[0]), target] += self.num_classes * 0.01
+        target_onehot[torch.arange(inputs.shape[0]), target] += num_classes * 0.01
         # target_onehot = torch.cat([target_onehot, 0.5 * torch.ones_like(target, dtype=torch.float32).unsqueeze(-1)], axis=-1)
 
         inputs = nn.functional.softmax(inputs, dim=-1)
-        if self.weights is not None:
-            target_onehot *= self.weights
+        if self.weight is not None:
+            target_onehot *= self.weight.type_as(target_onehot)
         loss = - (target_onehot * (inputs+1e-15).log()).sum(axis=-1)
 
         if self.size_average: return loss.mean()
         else: return loss.sum()
 
 class CrossEntropyLoss_Neg_Unknown(nn.Module):
-    def __init__(self, num_classes=20, size_average=True, weights=None):
+    def __init__(self, size_average=True, weight=None):
         super(CrossEntropyLoss_Neg_Unknown, self).__init__()
-        self.num_classes = 20
+        # self.num_classes = 20
         self.size_average = size_average
-        self.weights = weights
+        self.weight = weight
 
     def forward(self, inputs, target):
-        target_onehot = to_one_hot(target, self.num_classes).float()
+        num_classes = inputs.shape[1]
+
+        target_onehot = to_one_hot(target, num_classes).float()
         target_onehot -= 0.01
         # target_onehot[torch.arange(input.shape[0]), target] -= 0.04
-        target_onehot[torch.arange(inputs.shape[0]), target] += self.num_classes * 0.01 - 0.05
-        target_onehot = torch.cat([target_onehot, 0.05 * torch.ones_like(target, dtype=torch.float32).unsqueeze(-1)], axis=-1)
+        target_onehot[torch.arange(inputs.shape[0]), target] += num_classes * 0.01 - 0.05
+        target_onehot[:,-1] = 0.05
+        # target_onehot = torch.cat([target_onehot, 0.05 * torch.ones_like(target, dtype=torch.float32).unsqueeze(-1)], axis=-1)
 
         inputs = nn.functional.softmax(inputs, dim=-1)
 
-        if self.weights is not None:
-            target_onehot *= self.weights
+        if self.weight is not None:
+            target_onehot *= self.weight.type_as(target_onehot)
 
         loss = - (target_onehot * (inputs+1e-15).log()).sum(axis=-1)
 
@@ -361,22 +381,27 @@ class CrossEntropyLoss_Neg_Unknown(nn.Module):
         else: return loss.sum()
 
 class CrossEntropyLoss_Unknown(nn.Module):
-    def __init__(self, num_classes=20, size_average=True, weights=None):
+    def __init__(self, size_average=True, weight=None):
         super(CrossEntropyLoss_Unknown, self).__init__()
-        self.num_classes = 20
+        # self.num_classes = 20
         self.size_average = size_average
-        self.weights = weights
+        self.weight = weight
+        # print(self.weight)
 
     def forward(self, inputs, target):
-        target_onehot = to_one_hot(target, self.num_classes).float()
+        num_classes = inputs.shape[1]
+
+        target_onehot = to_one_hot(target, num_classes).float()
         # target_onehot -= 0.01
         target_onehot[torch.arange(inputs.shape[0]), target] -= 0.05
-        target_onehot = torch.cat([target_onehot, 0.05 * torch.ones_like(target, dtype=torch.float32).unsqueeze(-1)], axis=-1)
+        target_onehot[:,-1] = 0.05
+        # target_onehot = torch.cat([target_onehot, 0.05 * torch.ones_like(target, dtype=torch.float32).unsqueeze(-1)], axis=-1)
 
         inputs = nn.functional.softmax(inputs, dim=-1)
 
-        if self.weights is not None:
-            target_onehot *= self.weights
+        if self.weight is not None:
+            # print(self.device)
+            target_onehot *= self.weight.type_as(target_onehot)
             
         loss = - (target_onehot * (inputs+1e-15).log()).sum(axis=-1)
 
