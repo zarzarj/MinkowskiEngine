@@ -164,7 +164,7 @@ class PointTransformerSeg(nn.Module):
 
     def forward(self, batch, return_feats=False):
         # p0, x0, o0 = pxo  # (n, 3), (n, c), (b)
-        p0, x0, o0 = batch['coords'][:,1:].contiguous(), batch['feats'], batch['num_pts'].int()
+        p0, x0, o0 = batch['pts'], batch['feats'], batch['num_pts'].int()
         # print(p0, p0.shape, x0, x0.shape, o0.shape, o0)
         # x0 = p0 if self.c == 3 else torch.cat((p0, x0), 1)
         p1, x1, o1 = self.enc1([p0, x0, o0])

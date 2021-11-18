@@ -206,6 +206,7 @@ class BaseWholeScene(BasePointNet):
                     #assert(not np.all(cur_point_set[:,-1] == 156))
                     # assert(not torch.all(cur_point_set[:,-1] == -1))
                     # cur_pillar_dict['pts'] -= cur_pillar_dict['pts'][:,:2]
+                    # assert(cur_pillar_dict['pts'].shape[0] != 0 and not torch.all(cur_pillar_dict['labels'] == -1))
                     self.scene_pillar_list.append(cur_pillar_dict)
 
     def __getitem__(self, index):
