@@ -24,7 +24,8 @@ class TwoStreamSegmentationModule(BaseSegmentationModule):
         # if kwargs['unknown_class']:
         #     kwargs['num_classes'] += 1
         super().__init__(**kwargs)
-        self.num_classes+=1
+        if self.unknown_class:
+            self.num_classes+=1
         self.loss_weights = []
         if self.use_fused_feats:
             self.loss_weights.append(1)
@@ -181,11 +182,12 @@ class TwoStreamSegmentationModule(BaseSegmentationModule):
 
                 gt_total = metrics['train_acc'].total
                 class_union = metrics['train_miou'].union
-                self.label_weights = gt_total / (class_union * self.num_classes)
+                self.label_weights[:gt_total.shape[0]] = gt_total / (class_union * self.num_classes)
             elif self.loss_macc_balance:
                 class_gt_counts = metrics['train_macc'].total
+                # print(class_gt_counts.shape)
                 # class_pred_counts = metrics['train_macc'].class_pred_total()
-                self.label_weights = class_gt_counts.sum() / (class_gt_counts * self.num_classes)
+                self.label_weights[:class_gt_counts.shape[0]] = class_gt_counts.sum() / (class_gt_counts * self.num_classes)
                 # label_weights[class_pred_counts == 0] = 0
                 # print(label_weights)
             # print(self.label_weights, torch.isnan(self.label_weights))
