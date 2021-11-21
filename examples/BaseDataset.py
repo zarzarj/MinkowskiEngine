@@ -90,9 +90,8 @@ class BaseDataset(object):
         else:
             in_dict['coords'] /= self.voxel_size
 
-
         # print(in_dict['coords'].shape)
-        if self.max_num_voxels != -1 and in_dict['coords'].shape[0] > self.max_num_voxels:
+        if self.max_num_voxels != -1 and in_dict['coords'].shape[0] > self.max_num_voxels and training:
             init_idx = np.random.randint(in_dict['coords'].shape[0])
             crop_idx = torch.argsort(torch.sum(torch.square(in_dict['coords'] - in_dict['coords'][init_idx]), 1))[:self.max_num_voxels]
             in_dict = index_dict(in_dict, crop_idx)
@@ -102,6 +101,10 @@ class BaseDataset(object):
 
         if self.shift_coords and training:
             in_dict['coords'] += (torch.rand(3) * 100).type_as(in_dict['coords'])
+
+        if self.shuffle_index:
+            rand_idx = torch.randperm(in_dict['pts'].shape[0])
+            in_dict = index_dict(in_dict, rand_idx)
 
         if self.batch_fusion and training:
             in_dict['batch_idx'] = int(in_dict['batch_idx'] / 2)
@@ -114,6 +117,8 @@ class BaseDataset(object):
                 in_dict['colors'] = torch.rand_like(in_dict['colors']) - 0.5
         in_dict['feats'] = self.get_features(in_dict)
         in_dict['num_pts'] = in_dict['pts'].shape[0]
+
+
         return in_dict
 
     def create_augs(self, m=1.0):
@@ -182,4 +187,5 @@ class BaseDataset(object):
         parser.add_argument("--voxelize", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument("--max_num_voxels", type=int, default=-1)
         parser.add_argument("--save_preds", type=str2bool, nargs='?', const=True, default=False)
+        parser.add_argument("--shuffle_index", type=str2bool, nargs='?', const=True, default=False)
         return parent_parser
