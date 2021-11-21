@@ -388,7 +388,7 @@ if __name__ == "__main__":
         # import pdb; pdb.set_trace()
         pl_module = pl_module.load_from_checkpoint(
                         checkpoint_path=main_args.weights,
-                        # strict=False,
+                        strict=False,
                         **pl_module_args)
         print(f'Restored {main_args.weights}')
         resume_from_checkpoint = None

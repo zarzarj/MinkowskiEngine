@@ -91,13 +91,13 @@ class BaseSegmentationModule(LightningModule):
         
         self.train_metrics(preds, target)
         self.log_dict(self.train_metrics, sync_dist=True, prog_bar=False, on_step=False, on_epoch=True)
-        try:
-            if self.unknown_class:
-                valid_pred_idx = preds != self.num_classes - 1
-                preds = preds[valid_pred_idx]
-                target = target[valid_pred_idx]
-        except:
-            pass
+        # try:
+        #     if self.unknown_class:
+        #         valid_pred_idx = preds != self.num_classes - 1
+        #         preds = preds[valid_pred_idx]
+        #         target = target[valid_pred_idx]
+        # except:
+        #     pass
         # print(preds.shape, target.shape, preds[valid_pred_idx].max())
         # self.train_class_iou(preds, target)
         # self.train_class_acc(preds, target)
@@ -130,14 +130,13 @@ class BaseSegmentationModule(LightningModule):
 
         self.val_metrics(preds, target)
         self.log_dict(self.val_metrics, sync_dist=True, prog_bar=True, on_step=False, on_epoch=True)
-        valid_pred_idx = preds != self.num_classes
-        try:
-            if self.unknown_class:
-                valid_pred_idx = preds != self.num_classes - 1
-                preds = preds[valid_pred_idx]
-                target = target[valid_pred_idx]
-        except:
-            pass
+        # try:
+        #     if self.unknown_class:
+        #         valid_pred_idx = preds != self.num_classes - 1
+        #         preds = preds[valid_pred_idx]
+        #         target = target[valid_pred_idx]
+        # except:
+        #     pass
         # print(preds.shape, target.shape, preds[valid_pred_idx].max())
         # self.val_class_iou(preds, target)
         # self.val_class_acc(preds, target)

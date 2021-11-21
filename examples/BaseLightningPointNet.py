@@ -16,6 +16,8 @@ from examples.str2bool import str2bool
 from tqdm import tqdm
 from pytorch_lightning.callbacks import Callback
 
+from examples.utils import index_dict
+
 class ChunkGeneratorCallback(Callback):
     def on_train_epoch_start(self, trainer, pl_module):
         # print("TRAIN GEN CHUNKS")
@@ -100,12 +102,7 @@ class BasePointNetLightning(LightningDataModule):
         parser.add_argument("--val_split", type=str, default='val')
         return parent_parser
 
-def index_dict(in_dict, idx):
-    out_dict = {}
-    for k, v in in_dict.items():
-        if isinstance(v, torch.Tensor):
-            out_dict[k] = copy.deepcopy(v[idx])
-    return out_dict
+
 
 class BasePointNet():
     def __init__(self, **kwargs):
