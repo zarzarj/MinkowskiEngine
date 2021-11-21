@@ -14,7 +14,7 @@ class S3DISBase(BaseDataset):
         for name, value in kwargs.items():
             if name != "self":
                 setattr(self, name, value)
-        self.feat_channels = 3 * int(self.use_colors) 
+        self.feat_channels = 3 * int(self.use_colors) + 3 * int(self.use_xyz) 
         if self.feat_channels == 0:
             self.feat_channels = 1
         self.train_areas = ['Area_1', 'Area_2', 'Area_3', 'Area_4', 'Area_6']
@@ -122,6 +122,8 @@ class S3DISBase(BaseDataset):
         feats = []
         if self.use_colors:
             feats.append(in_dict['colors'])
+        if self.use_xyz:
+            feats.append(in_dict['pts'])
         if len(feats) == 0:
             feats.append(torch.ones((in_dict['pts'].shape[0], 1)))
         out_feats = torch.cat(feats, dim=-1).float()
@@ -151,6 +153,7 @@ class S3DISBase(BaseDataset):
         parser = parent_parser.add_argument_group("S3DISBase")
         parser.add_argument("--preprocess_max_num_pts", type=int, default=500000)
         parser.add_argument("--use_colors", type=str2bool, nargs='?', const=True, default=True)
+        parser.add_argument("--use_xyz", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument("--random_feats", type=str2bool, nargs='?', const=True, default=False)
         parser.add_argument("--num_classes", type=int, default=13)
         # parser.add_argument("--use_augmentation", type=str2bool, nargs='?', const=True, default=True)
