@@ -373,6 +373,6 @@ class CrossEntropyLoss(nn.Module):
         # else:
         inputs_norm = inputs - inputs.max()
         log_loss = nn.functional.softmax(inputs_norm, dim=-1)
-        loss = - (target_onehot * (log_loss+1e-25).log()).sum(axis=-1)
+        loss = - (target_onehot * (log_loss).log()).sum(axis=-1)
         if self.size_average: return loss.mean()
         else: return loss.sum()

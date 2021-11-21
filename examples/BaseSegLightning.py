@@ -99,8 +99,8 @@ class BaseSegmentationModule(LightningModule):
         except:
             pass
         # print(preds.shape, target.shape, preds[valid_pred_idx].max())
-        self.train_class_iou(preds, target)
-        self.train_class_acc(preds, target)
+        # self.train_class_iou(preds, target)
+        # self.train_class_acc(preds, target)
         # self.log_dict(dict(zip(['train_'+l+'_iou' for l in self.trainer.datamodule.class_labels], self.train_class_iou.compute())), sync_dist=True, prog_bar=False, on_step=False, on_epoch=True)
         # self.train_conf_metrics(preds, target)
         # self.log_dict(self.train_conf_metrics, sync_dist=True, prog_bar=False, on_step=False, on_epoch=False)
@@ -139,8 +139,8 @@ class BaseSegmentationModule(LightningModule):
         except:
             pass
         # print(preds.shape, target.shape, preds[valid_pred_idx].max())
-        self.val_class_iou(preds, target)
-        self.val_class_acc(preds, target)
+        # self.val_class_iou(preds, target)
+        # self.val_class_acc(preds, target)
         if self.trainer.datamodule.save_preds:
             batch['preds'] = preds
             batch['logits'] = logits[0].detach()
