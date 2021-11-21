@@ -91,8 +91,16 @@ class BaseSegmentationModule(LightningModule):
         
         self.train_metrics(preds, target)
         self.log_dict(self.train_metrics, sync_dist=True, prog_bar=False, on_step=False, on_epoch=True)
-        # self.train_class_iou(preds, target)
-        # self.train_class_acc(preds, target)
+        try:
+            if self.unknown_class:
+                valid_pred_idx = preds != self.num_classes - 1
+                preds = preds[valid_pred_idx]
+                target = target[valid_pred_idx]
+        except:
+            pass
+        # print(preds.shape, target.shape, preds[valid_pred_idx].max())
+        self.train_class_iou(preds, target)
+        self.train_class_acc(preds, target)
         # self.log_dict(dict(zip(['train_'+l+'_iou' for l in self.trainer.datamodule.class_labels], self.train_class_iou.compute())), sync_dist=True, prog_bar=False, on_step=False, on_epoch=True)
         # self.train_conf_metrics(preds, target)
         # self.log_dict(self.train_conf_metrics, sync_dist=True, prog_bar=False, on_step=False, on_epoch=False)
@@ -122,8 +130,17 @@ class BaseSegmentationModule(LightningModule):
 
         self.val_metrics(preds, target)
         self.log_dict(self.val_metrics, sync_dist=True, prog_bar=True, on_step=False, on_epoch=True)
-        # self.val_class_iou(preds, target)
-        # self.val_class_acc(preds, target)
+        valid_pred_idx = preds != self.num_classes
+        try:
+            if self.unknown_class:
+                valid_pred_idx = preds != self.num_classes - 1
+                preds = preds[valid_pred_idx]
+                target = target[valid_pred_idx]
+        except:
+            pass
+        # print(preds.shape, target.shape, preds[valid_pred_idx].max())
+        self.val_class_iou(preds, target)
+        self.val_class_acc(preds, target)
         if self.trainer.datamodule.save_preds:
             batch['preds'] = preds
             batch['logits'] = logits[0].detach()
