@@ -87,6 +87,7 @@ class BaseDataset(object):
             in_dict['coords'] -= in_dict['coords'].min(axis=0)[0]
             in_dict['unique_idx'] = voxelize(in_dict['coords'].numpy(), voxel_size=self.voxel_size)
             in_dict = index_dict(in_dict, in_dict['unique_idx'])
+            in_dict['coords'] -= in_dict['coords'].min(axis=0)[0]
         else:
             in_dict['coords'] /= self.voxel_size
 
