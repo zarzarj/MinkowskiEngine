@@ -102,7 +102,7 @@ class BaseDataset(object):
         if self.shift_coords and training:
             in_dict['coords'] += (torch.rand(3) * 100).type_as(in_dict['coords'])
 
-        if self.shuffle_index:
+        if self.shuffle_index and training:
             rand_idx = torch.randperm(in_dict['pts'].shape[0])
             in_dict = index_dict(in_dict, rand_idx)
 

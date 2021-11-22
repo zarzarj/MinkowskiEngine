@@ -64,9 +64,13 @@ class TwoStreamSegmentationModule(BaseSegmentationModule):
             self.seg_head = nn.Sequential(*seg_head_list)
 
         # self.loss_weights = torch.tensor(self.loss_weights, requires_grad=False)
-        self.base_criterion_class = CrossEntropyLoss
-        self.base_criterion_args = {'weight': self.label_weights, 'unknown_class': self.unknown_class,
-                                    'neg_cross_entropy': self.neg_cross_entropy, 'unknown_class_p': self.unknown_class_p}
+        if self.unknown_class or self.neg_cross_entropy:
+            self.base_criterion_class = CrossEntropyLoss
+            self.base_criterion_args = {'weight': self.label_weights, 'unknown_class': self.unknown_class,
+                                        'neg_cross_entropy': self.neg_cross_entropy, 'unknown_class_p': self.unknown_class_p}
+        else:
+            self.base_criterion_class = nn.CrossEntropyLoss
+            self.base_criterion_args = {'weight': self.label_weights}
         if self.miou_loss:
             self.base_criterion_class = mIoULoss
         if self.focal_loss:
