@@ -192,7 +192,7 @@ class TwoStreamSegmentationModule(BaseSegmentationModule):
             # print(self.label_weights, torch.isnan(self.label_weights))
             self.label_weights[torch.isnan(self.label_weights) | torch.isinf(self.label_weights)] = 1
             print("Setting class weights to: ", self.label_weights)
-            self.base_criterion_args['weight'] = self.label_weights
+            self.base_criterion_args['weight'] = self.label_weights.to(self.device)
             # print(self.base_criterion_args)
             self.base_criterion = self.base_criterion_class(**self.base_criterion_args)
             self.criterion = MultiStreamLoss(self.base_criterion, self.loss_weights)
